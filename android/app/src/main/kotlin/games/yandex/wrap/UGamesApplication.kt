@@ -4,11 +4,14 @@ import android.app.Application
 import games.yandex.wrap.catalog.CatalogApi
 import games.yandex.wrap.catalog.CatalogRepository
 import games.yandex.wrap.data.AppDatabase
+import games.yandex.wrap.webview.AndroidWebViewCookieStorage
 import games.yandex.wrap.webview.BlockList
 import games.yandex.wrap.webview.InjectedScripts
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.plugins.HttpRedirect
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.plugins.cookies.HttpCookies
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
 
@@ -22,6 +25,12 @@ class UGamesApplication : Application() {
                     isLenient = true
                     coerceInputValues = true
                 })
+            }
+            install(HttpCookies) {
+                storage = AndroidWebViewCookieStorage()
+            }
+            install(HttpRedirect) {
+                checkHttpMethod = false
             }
         }
     }

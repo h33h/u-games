@@ -65,6 +65,7 @@ struct CatalogView: View {
                     ProgressView().tint(.white).padding(16)
                 }
             }
+            .scrollDismissesKeyboard(.immediately)
         }
     }
 }

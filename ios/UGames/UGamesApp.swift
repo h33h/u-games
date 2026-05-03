@@ -1,7 +1,14 @@
 import SwiftUI
+import WebKit
 
 @main
 struct UGamesApp: App {
+    init() {
+        // Bridge WKWebView's cookies into URLSession.shared so catalog HTTP
+        // requests see the same session as the in-app WebView (auth screen).
+        _ = SharedCookieStore.shared
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

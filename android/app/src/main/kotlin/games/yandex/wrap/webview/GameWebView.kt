@@ -1,6 +1,7 @@
 package games.yandex.wrap.webview
 
 import android.annotation.SuppressLint
+import android.graphics.Color
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebSettings
@@ -11,8 +12,6 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.webkit.WebViewCompat
-import androidx.webkit.WebViewFeature
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -28,12 +27,17 @@ fun GameWebView(
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
-            val container = FrameLayout(ctx)
+            val container = FrameLayout(ctx).apply {
+                setBackgroundColor(Color.BLACK)
+            }
             val webView = WebView(ctx)
             webView.layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT,
             )
+            // Black background eliminates the white flash before our PWA-CSS
+            // hides the catalog chrome.
+            webView.setBackgroundColor(Color.BLACK)
             webView.settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
@@ -50,10 +54,10 @@ fun GameWebView(
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
 
-            webView.webViewClient = AdBlockingClient(savedBlockList)
+            webView.webViewClient = AdBlockingClient(savedBlockList, savedScripts)
             webView.webChromeClient = PopupHandler(ctx, container)
 
-            installInjectedScripts(webView, savedScripts)
+            installDocumentStartScripts(webView, savedScripts)
 
             WebView.setWebContentsDebuggingEnabled(true)
             webView.loadUrl(url)
@@ -75,20 +79,4 @@ fun GameWebView(
     DisposableEffect(Unit) {
         onDispose { CookieManager.getInstance().flush() }
     }
-}
-
-private fun installInjectedScripts(webView: WebView, scripts: InjectedScripts) {
-    if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-        return
-    }
-    WebViewCompat.addDocumentStartJavaScript(
-        webView,
-        scripts.mainFrameScript,
-        setOf("https://yandex.com", "https://yandex.ru"),
-    )
-    WebViewCompat.addDocumentStartJavaScript(
-        webView,
-        scripts.sdkStub,
-        setOf("https://*.games.s3.yandex.net"),
-    )
 }

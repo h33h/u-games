@@ -44,6 +44,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -67,6 +69,8 @@ fun CatalogScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val gridState = rememberLazyGridState()
+    val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
 
     LaunchedEffect(gridState) {
         snapshotFlow {
@@ -86,6 +90,18 @@ fun CatalogScreen(
                     && last >= total - 6
                 ) {
                     viewModel.loadMore()
+                }
+            }
+    }
+
+    // Dismiss keyboard once the user starts scrolling the grid.
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.isScrollInProgress }
+            .distinctUntilChanged()
+            .collect { scrolling ->
+                if (scrolling) {
+                    keyboardController?.hide()
+                    focusManager.clearFocus()
                 }
             }
     }

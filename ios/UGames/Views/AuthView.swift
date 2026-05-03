@@ -58,18 +58,28 @@ private struct AuthWebView: UIViewRepresentable {
 
     final class Coordinator: NSObject, WKNavigationDelegate {
         let onSignedIn: () -> Void
+        private var dismissed = false
 
         init(onSignedIn: @escaping () -> Void) {
             self.onSignedIn = onSignedIn
         }
 
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            guard let url = webView.url?.absoluteString else { return }
-            // Auth complete only when we land on /games/
-            if url.hasPrefix("https://yandex.com/games/")
-                || url.hasPrefix("https://yandex.ru/games/") {
+        private func check(_ webView: WKWebView) {
+            guard !dismissed, let url = webView.url?.absoluteString else { return }
+            // Auto-skip webauthn registration (dead end inside WKWebView).
+            if url.contains("/webauthn-reg") || url.contains("/finish?") {
+                let target = URL(string: "https://yandex.com/games/")!
+                webView.load(URLRequest(url: target))
+                return
+            }
+            if url.hasPrefix("https://yandex.com/games/") || url.hasPrefix("https://yandex.ru/games/") {
+                dismissed = true
                 onSignedIn()
             }
         }
+
+        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) { check(webView) }
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { check(webView) }
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { check(webView) }
     }
 }

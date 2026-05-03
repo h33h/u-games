@@ -9,8 +9,8 @@ struct InjectedScripts {
     var mainFrameScript: String {
         let cssLiteral = jsString(pwaModeCss)
         return """
+        window.__yga_pwa_css_payload__=\(cssLiteral);
         \(honestPath);
-        (function(){var s=document.createElement('style');s.textContent=\(cssLiteral);document.documentElement.appendChild(s);})();
         \(pwaModeJs)
         """
     }

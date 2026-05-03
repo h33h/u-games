@@ -61,9 +61,17 @@ fun AuthScreen(onClose: () -> Unit) {
                     webViewClient = object : WebViewClient() {
                         private var dismissed = false
 
-                        private fun checkUrl(url: String?) {
+                        private fun checkUrl(view: WebView?, url: String?) {
                             if (dismissed || url == null) return
                             CookieManager.getInstance().flush()
+                            // Yandex's "Make sign-in easier" webauthn step is a
+                            // dead end inside our WebView (no biometric prompt),
+                            // so jump straight to the retpath that already has
+                            // valid Session_id cookies set.
+                            if (url.contains("/webauthn-reg") || url.contains("/finish?")) {
+                                view?.loadUrl("https://yandex.com/games/")
+                                return
+                            }
                             val isGames = url.startsWith("https://yandex.com/games/")
                                     || url.startsWith("https://yandex.ru/games/")
                             if (isGames) {
@@ -74,17 +82,17 @@ fun AuthScreen(onClose: () -> Unit) {
 
                         override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                             super.onPageStarted(view, url, favicon)
-                            checkUrl(url)
+                            checkUrl(view, url)
                         }
 
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
-                            checkUrl(url)
+                            checkUrl(view, url)
                         }
 
                         override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
                             super.doUpdateVisitedHistory(view, url, isReload)
-                            checkUrl(url)
+                            checkUrl(view, url)
                         }
                     }
                     loadUrl("https://passport.yandex.com/auth?retpath=https%3A%2F%2Fyandex.com%2Fgames%2F")

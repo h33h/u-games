@@ -10,11 +10,11 @@ class InjectedScripts(
 ) {
     val mainFrameScript: String by lazy {
         buildString {
+            append("window.__yga_pwa_css_payload__=")
+            append(jsString(pwaModeCss))
+            append(";\n")
             append(honestPath)
             append(";\n")
-            append("(function(){var s=document.createElement('style');s.textContent=")
-            append(jsString(pwaModeCss))
-            append(";document.documentElement.appendChild(s);})();\n")
             append(pwaModeJs)
         }
     }

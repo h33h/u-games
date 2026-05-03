@@ -1,0 +1,189 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name (used as release name; will be created if absent)'
+        required: true
+        default: 'v0.1.0'
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    name: Android APK (debug-signed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      apk-path: ${{ steps.locate.outputs.path }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+
+      - name: Cache Gradle
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('android/**/*.gradle*', 'android/**/gradle-wrapper.properties', 'android/gradle/libs.versions.toml') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Grant execute permission for gradlew
+        working-directory: android
+        run: chmod +x ./gradlew
+
+      - name: Build release APK (debug-signed)
+        working-directory: android
+        run: ./gradlew :app:assembleRelease --stacktrace
+
+      - id: locate
+        name: Locate APK
+        run: |
+          path=$(find android/app/build/outputs/apk/release -name '*.apk' | head -1)
+          echo "path=$path" >> "$GITHUB_OUTPUT"
+          echo "APK at $path"
+
+      - name: Rename APK
+        id: rename
+        run: |
+          tag="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
+          dest="u-games-${tag}.apk"
+          cp "${{ steps.locate.outputs.path }}" "$dest"
+          echo "name=$dest" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: ${{ steps.rename.outputs.name }}
+          if-no-files-found: error
+
+  ios:
+    name: iOS IPA (unsigned)
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build unsigned .app
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project UGames.xcodeproj \
+            -scheme UGames \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            DEVELOPMENT_TEAM="" \
+            build
+
+      - name: Package unsigned IPA
+        id: ipa
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
+          out_dir=build/Build/Products/Release-iphoneos
+          test -d "$out_dir/UGames.app" || (echo "App bundle missing"; ls -la "$out_dir"; exit 1)
+          rm -rf Payload
+          mkdir Payload
+          cp -R "$out_dir/UGames.app" Payload/
+          ipa_name="u-games-${tag}-unsigned.ipa"
+          zip -qry "$ipa_name" Payload
+          rm -rf Payload
+          ls -lh "$ipa_name"
+          echo "path=ios/$ipa_name" >> "$GITHUB_OUTPUT"
+          echo "name=$ipa_name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa-unsigned
+          path: ${{ steps.ipa.outputs.path }}
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: [android, ios]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Download Android artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+          path: artifacts
+
+      - name: Download iOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ios-ipa-unsigned
+          path: artifacts
+
+      - name: List artifacts
+        run: ls -lh artifacts
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          tag="${GITHUB_REF_NAME:-${{ github.event.inputs.tag }}}"
+          echo "name=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: ${{ steps.tag.outputs.name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            **Unsigned builds — for sideload only.**
+
+            * Android APK is signed with the auto-generated debug keystore so it installs on Android 7.0+ via `adb install` or file-manager. Not suitable for Google Play.
+            * iOS IPA is **unsigned**. To install: re-sign with [AltStore](https://altstore.io/) / [SideStore](https://sidestore.io/) using your free Apple ID (7-day signing) or a paid Apple Developer account (1-year signing). Will not install via TestFlight or App Store directly.
+
+            Three-layer ad protection, full details and tradeoffs in [README](https://github.com/${{ github.repository }}#readme).
+          files: |
+            artifacts/*.apk
+            artifacts/*.ipa

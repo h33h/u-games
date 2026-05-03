@@ -22,6 +22,25 @@ u-games/
 
 Все артефакты в `shared/` копируются в bundle обеих платформ (Android — через `sourceSets.main.assets.srcDirs`, iOS — `Package.swift resources`).
 
+## CI / Релизы
+
+Два GitHub Actions workflow:
+
+- `.github/workflows/android.yml` — на push/PR в `main`, затрагивающие `android/**` или `shared/**`, собирает debug APK и публикует как artifact.
+- `.github/workflows/release.yml` — на push тега `v*` (или ручной запуск через UI):
+  - **ubuntu-latest** собирает **release APK**, подписанный auto-generated debug keystore → пригоден для sideload, **не для Google Play**.
+  - **macos-14** через [XcodeGen](https://github.com/yonaskolb/XcodeGen) генерирует Xcode-проект из `ios/project.yml`, собирает Release-конфиг с `CODE_SIGNING_ALLOWED=NO` и упаковывает результат в **unsigned `.ipa`** (Payload/UGames.app внутри zip).
+  - Создаёт GitHub Release `vX.Y.Z` и прикрепляет оба файла (`u-games-vX.Y.Z.apk` и `u-games-vX.Y.Z-unsigned.ipa`).
+
+Чтобы выпустить релиз:
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+В разделе **Releases** на GitHub появится релиз с APK и IPA.
+
+**Установка unsigned IPA**: реподпись через [AltStore](https://altstore.io/) / [SideStore](https://sidestore.io/) бесплатным Apple ID (7-day signing) или Apple Developer ($99/год, 1 год). Через TestFlight/App Store unsigned IPA не пройдёт.
+
 ## Сборка Android
 
 ### Требования

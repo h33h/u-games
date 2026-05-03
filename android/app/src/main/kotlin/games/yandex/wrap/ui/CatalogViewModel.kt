@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import games.yandex.wrap.catalog.CatalogRepository
 import games.yandex.wrap.catalog.Game
+import games.yandex.wrap.catalog.UserProfile
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,23 +29,24 @@ class CatalogViewModel(private val repository: CatalogRepository) : ViewModel() 
                 _state.update { it.copy(games = cached) }
             }
             refreshFeed()
+            refreshProfile()
         }
     }
 
     fun refreshFeed() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null, mode = Mode.Feed) }
-            val games = runCatching { repository.feedPage(skip = 0, gamesPerPage = pageSize) }
+            val result = runCatching { repository.firstFeedPage(pageSize) }
             _state.update { current ->
-                games.fold(
-                    onSuccess = { fresh ->
+                result.fold(
+                    onSuccess = { page ->
                         current.copy(
-                            games = fresh,
+                            games = page.games,
                             isLoading = false,
                             isLoadingMore = false,
-                            hasMore = fresh.size >= pageSize,
+                            hasMore = page.hasNext && page.nextPageId != null,
+                            nextPageId = page.nextPageId,
                             error = null,
-                            loadedSkip = fresh.size,
                             mode = Mode.Feed,
                         )
                     },
@@ -63,20 +65,20 @@ class CatalogViewModel(private val repository: CatalogRepository) : ViewModel() 
         val current = _state.value
         if (current.mode != Mode.Feed) return
         if (current.isLoading || current.isLoadingMore || !current.hasMore) return
+        val pageId = current.nextPageId ?: return
 
         _state.update { it.copy(isLoadingMore = true) }
         viewModelScope.launch {
-            val skip = _state.value.loadedSkip
-            val result = runCatching { repository.feedPage(skip = skip, gamesPerPage = pageSize) }
+            val result = runCatching { repository.nextFeedPage(pageId, pageSize) }
             _state.update { state ->
                 result.fold(
-                    onSuccess = { more ->
-                        val merged = (state.games + more).distinctBy { it.appId }
+                    onSuccess = { page ->
+                        val merged = (state.games + page.games).distinctBy { it.appId }
                         state.copy(
                             games = merged,
                             isLoadingMore = false,
-                            hasMore = more.size >= pageSize,
-                            loadedSkip = merged.size,
+                            hasMore = page.hasNext && page.nextPageId != null,
+                            nextPageId = page.nextPageId,
                             error = null,
                         )
                     },
@@ -92,7 +94,6 @@ class CatalogViewModel(private val repository: CatalogRepository) : ViewModel() 
         _state.update { it.copy(searchQuery = query) }
         searchDebounceJob?.cancel()
         if (query.isBlank()) {
-            // back to feed mode
             refreshFeed()
             return
         }
@@ -108,6 +109,13 @@ class CatalogViewModel(private val repository: CatalogRepository) : ViewModel() 
         if (q.isBlank()) refreshFeed() else viewModelScope.launch { performSearch(q) }
     }
 
+    fun refreshProfile() {
+        viewModelScope.launch {
+            val profile = runCatching { repository.userProfile() }.getOrDefault(UserProfile(false, "", "", "", false))
+            _state.update { it.copy(profile = profile) }
+        }
+    }
+
     private suspend fun performSearch(query: String) {
         _state.update { it.copy(isLoading = true, error = null, mode = Mode.Search) }
         val result = runCatching { repository.search(query) }
@@ -119,6 +127,7 @@ class CatalogViewModel(private val repository: CatalogRepository) : ViewModel() 
                         isLoading = false,
                         isLoadingMore = false,
                         hasMore = false,
+                        nextPageId = null,
                         error = null,
                         mode = Mode.Search,
                     )
@@ -138,8 +147,9 @@ data class CatalogUiState(
     val isLoading: Boolean = false,
     val isLoadingMore: Boolean = false,
     val hasMore: Boolean = false,
-    val loadedSkip: Int = 0,
+    val nextPageId: String? = null,
     val error: String? = null,
     val searchQuery: String = "",
     val mode: Mode = Mode.Feed,
+    val profile: UserProfile = UserProfile(false, "", "", "", false),
 )

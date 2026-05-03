@@ -65,7 +65,9 @@ private struct AuthWebView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             guard let url = webView.url?.absoluteString else { return }
-            if url.contains("yandex.com") && !url.contains("passport") {
+            // Auth complete only when we land on /games/
+            if url.hasPrefix("https://yandex.com/games/")
+                || url.hasPrefix("https://yandex.ru/games/") {
                 onSignedIn()
             }
         }

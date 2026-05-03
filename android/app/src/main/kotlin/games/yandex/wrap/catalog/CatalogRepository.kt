@@ -12,13 +12,16 @@ class CatalogRepository(
     private val favorites: FavoritesDao,
 ) {
 
-    suspend fun feedPage(skip: Int, gamesPerPage: Int = 24): List<Game> {
-        val games = api.feed(skip = skip, gamesPerPage = gamesPerPage)
-        if (skip == 0 && games.isNotEmpty()) {
-            cache.upsertAll(games.map { it.toEntity() })
+    suspend fun firstFeedPage(gamesPerPage: Int = 24): FeedPage {
+        val page = api.firstFeedPage(gamesPerPage = gamesPerPage)
+        if (page.games.isNotEmpty()) {
+            cache.upsertAll(page.games.map { it.toEntity() })
         }
-        return games
+        return page
     }
+
+    suspend fun nextFeedPage(pageId: String, gamesPerPage: Int = 24): FeedPage =
+        api.nextFeedPage(pageId, gamesPerPage)
 
     suspend fun cachedFeed(limit: Int = 50): List<Game> =
         cache.latest(limit).map { it.toGame() }
@@ -28,6 +31,8 @@ class CatalogRepository(
     suspend fun similar(appId: Long): Result<List<Game>> = runCatching {
         api.similar(appId)
     }
+
+    suspend fun userProfile(): UserProfile = api.userProfile()
 
     fun favorites(): Flow<List<FavoriteEntity>> = favorites.observeAll()
 

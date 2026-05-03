@@ -62,9 +62,14 @@ fun AuthScreen(onClose: () -> Unit) {
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
                             CookieManager.getInstance().flush()
-                            // Successful auth typically lands back on yandex.com (not passport)
-                            if (url != null && url.contains("yandex.com") && !url.contains("passport")) {
-                                onClose()
+                            // Auth complete when we land on /games/ specifically.
+                            // (intermediate steps may bounce through yandex.com itself.)
+                            if (url != null) {
+                                val isGames = url.startsWith("https://yandex.com/games/")
+                                        || url.startsWith("https://yandex.ru/games/")
+                                if (isGames) {
+                                    onClose()
+                                }
                             }
                         }
                     }

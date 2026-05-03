@@ -33,8 +33,8 @@ targets:
       path: UGames/Info.plist
       properties:
         CFBundleDisplayName: U-Games
-        CFBundleShortVersionString: "0.1.1"
-        CFBundleVersion: "2"
+        CFBundleShortVersionString: "0.1.2"
+        CFBundleVersion: "3"
         UIRequiresFullScreen: true
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

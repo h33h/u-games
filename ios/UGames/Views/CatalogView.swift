@@ -16,6 +16,7 @@ struct CatalogView: View {
                         get: { service.searchQuery },
                         set: { service.searchQuery = $0 }
                     ),
+                    profile: service.profile,
                     onSubmit: { service.submitSearch() },
                     onLoginClick: onLoginClick
                 )
@@ -68,8 +69,9 @@ struct CatalogView: View {
     }
 }
 
-private struct CatalogTopBar: View {
+struct CatalogTopBar: View {
     @Binding var query: String
+    let profile: UserProfile
     let onSubmit: () -> Void
     let onLoginClick: () -> Void
 
@@ -96,16 +98,36 @@ private struct CatalogTopBar: View {
             .background(Color(white: 0.1))
             .clipShape(RoundedRectangle(cornerRadius: 12))
 
-            Button(action: onLoginClick) {
+            ProfileButton(profile: profile, onClick: onLoginClick)
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+    }
+}
+
+private struct ProfileButton: View {
+    let profile: UserProfile
+    let onClick: () -> Void
+
+    var body: some View {
+        Button(action: onClick) {
+            if profile.isAuthorized, let url = URL(string: profile.avatarUrl), !profile.avatarUrl.isEmpty {
+                AsyncImage(url: url) { phase in
+                    switch phase {
+                    case .success(let img): img.resizable().scaledToFill()
+                    default: Color(white: 0.2)
+                    }
+                }
+                .frame(width: 36, height: 36)
+                .clipShape(Circle())
+            } else {
                 Image(systemName: "person.crop.circle")
                     .resizable()
                     .frame(width: 32, height: 32)
                     .foregroundColor(.white)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .padding(.bottom, 4)
     }
 }
 

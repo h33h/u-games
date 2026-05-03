@@ -1,6 +1,16 @@
 import Foundation
 import Combine
 
+struct UserProfile: Equatable {
+    var isAuthorized: Bool
+    var displayName: String
+    var login: String
+    var avatarUrl: String
+    var hasYaPlus: Bool
+
+    static let anonymous = UserProfile(isAuthorized: false, displayName: "", login: "", avatarUrl: "", hasYaPlus: false)
+}
+
 @MainActor
 final class CatalogService: ObservableObject {
     @Published private(set) var games: [Game] = []
@@ -8,12 +18,13 @@ final class CatalogService: ObservableObject {
     @Published private(set) var isLoadingMore: Bool = false
     @Published private(set) var hasMore: Bool = false
     @Published private(set) var error: String?
+    @Published private(set) var profile: UserProfile = .anonymous
     @Published var searchQuery: String = "" {
         didSet { onQueryChanged(searchQuery) }
     }
 
     private(set) var mode: Mode = .feed
-    private var loadedSkip: Int = 0
+    private var nextPageId: String?
     private let pageSize: Int = 24
 
     private var searchTask: Task<Void, Never>?
@@ -26,6 +37,7 @@ final class CatalogService: ObservableObject {
     func loadInitial() async {
         if !games.isEmpty { return }
         await refreshFeed()
+        await refreshProfile()
     }
 
     func refreshFeed() async {
@@ -36,29 +48,29 @@ final class CatalogService: ObservableObject {
         error = nil
         defer { isLoading = false }
         do {
-            let fresh = try await fetchFeed(skip: 0)
-            games = fresh
-            hasMore = fresh.count >= pageSize
-            loadedSkip = fresh.count
+            let page = try await fetchFeed(pageId: nil)
+            games = page.games
+            hasMore = page.hasNext && page.nextPageId != nil
+            nextPageId = page.nextPageId
         } catch {
             if games.isEmpty { self.error = error.localizedDescription }
         }
     }
 
     func loadMore() {
-        guard mode == .feed, hasMore, !isLoading, !isLoadingMore else { return }
+        guard mode == .feed, hasMore, !isLoading, !isLoadingMore, let pageId = nextPageId else { return }
         isLoadingMore = true
         loadTask = Task { [weak self] in
             guard let self = self else { return }
             defer { Task { @MainActor in self.isLoadingMore = false } }
             do {
-                let more = try await self.fetchFeed(skip: self.loadedSkip)
+                let page = try await self.fetchFeed(pageId: pageId)
                 let known = Set(self.games.map { $0.appId })
-                let dedup = more.filter { !known.contains($0.appId) }
+                let dedup = page.games.filter { !known.contains($0.appId) }
                 await MainActor.run {
                     self.games.append(contentsOf: dedup)
-                    self.hasMore = more.count >= self.pageSize
-                    self.loadedSkip = self.games.count
+                    self.hasMore = page.hasNext && page.nextPageId != nil
+                    self.nextPageId = page.nextPageId
                 }
             } catch {
                 await MainActor.run { self.error = error.localizedDescription }
@@ -89,6 +101,12 @@ final class CatalogService: ObservableObject {
         }
     }
 
+    func refreshProfile() async {
+        if let p = try? await fetchProfile() {
+            profile = p
+        }
+    }
+
     private func performSearch(_ query: String) async {
         mode = .search
         isLoading = true
@@ -97,13 +115,19 @@ final class CatalogService: ObservableObject {
         do {
             games = try await fetchSearch(query: query)
             hasMore = false
-            loadedSkip = 0
+            nextPageId = nil
         } catch {
             self.error = error.localizedDescription
         }
     }
 
-    private func fetchFeed(skip: Int, gamesPerPage: Int = 24, lang: String = "en") async throws -> [Game] {
+    private struct FeedPage {
+        let games: [Game]
+        let nextPageId: String?
+        let hasNext: Bool
+    }
+
+    private func fetchFeed(pageId: String?, gamesPerPage: Int = 24, lang: String = "en") async throws -> FeedPage {
         var components = URLComponents(string: "https://yandex.com/games/api/catalogue/v2/feed/")!
         var items = [
             URLQueryItem(name: "with_promos", value: "true"),
@@ -115,8 +139,7 @@ final class CatalogService: ObservableObject {
             URLQueryItem(name: "client_width", value: "390"),
             URLQueryItem(name: "client_height", value: "844"),
         ]
-        if skip > 0,
-           let pageId = "gamesSkip=\(skip)".data(using: .utf8)?.base64EncodedString() {
+        if let pageId = pageId {
             items.append(URLQueryItem(name: "page_id", value: pageId))
         }
         components.queryItems = items
@@ -125,8 +148,12 @@ final class CatalogService: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, _) = try await URLSession.shared.data(for: request)
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let feed = root["feed"] as? [[String: Any]] else { return [] }
-        return GameDecoder.flatten(feed)
+              let feed = root["feed"] as? [[String: Any]] else { return FeedPage(games: [], nextPageId: nil, hasNext: false) }
+        let games = GameDecoder.flatten(feed)
+        let pageInfo = root["pageInfo"] as? [String: Any]
+        let next = pageInfo?["nextPageId"] as? String
+        let hasNext = (pageInfo?["hasNextPage"] as? Bool) ?? (next != nil)
+        return FeedPage(games: games, nextPageId: next, hasNext: hasNext)
     }
 
     private func fetchSearch(query: String, lang: String = "en") async throws -> [Game] {
@@ -146,6 +173,31 @@ final class CatalogService: ObservableObject {
               let search = parsed["search"] as? [String: Any],
               let blocks = search["data"] as? [[String: Any]] else { return [] }
         return GameDecoder.flatten(blocks)
+    }
+
+    private func fetchProfile(lang: String = "en") async throws -> UserProfile {
+        var components = URLComponents(string: "https://yandex.com/games/")!
+        components.queryItems = [URLQueryItem(name: "lang", value: lang)]
+        var request = URLRequest(url: components.url!)
+        request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("text/html", forHTTPHeaderField: "Accept")
+        let (data, _) = try await URLSession.shared.data(for: request)
+        guard let html = String(data: data, encoding: .utf8) else { return .anonymous }
+        guard let json = extractAppData(html) else { return .anonymous }
+        guard let parsed = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+              let userData = parsed["userData"] as? [String: Any] else { return .anonymous }
+        let uid = (userData["uid"] as? String) ?? ""
+        guard !uid.isEmpty else { return .anonymous }
+        let avatarsOrigin = (userData["avatarsOrigin"] as? String) ?? "https://avatars.mds.yandex.net"
+        let avatarId = (userData["avatarId"] as? String) ?? "0/0-0"
+        let avatarUrl = avatarId == "0/0-0" ? "" : "\(avatarsOrigin)/get-yapic/\(avatarId)/islands-300"
+        return UserProfile(
+            isAuthorized: true,
+            displayName: (userData["displayName"] as? String) ?? "",
+            login: (userData["login"] as? String) ?? "",
+            avatarUrl: avatarUrl,
+            hasYaPlus: (userData["yaplusEnabled"] as? Bool) ?? false
+        )
     }
 
     private func extractAppData(_ html: String) -> String? {

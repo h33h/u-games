@@ -51,7 +51,10 @@ class MainActivity : ComponentActivity() {
                             blockList = app.blockList,
                             onBack = { route = Route.Catalog },
                         )
-                        Route.Auth -> AuthScreen(onClose = { route = Route.Catalog })
+                        Route.Auth -> AuthScreen(onClose = {
+                            catalogVm.refreshProfile()
+                            route = Route.Catalog
+                        })
                     }
                 }
             }

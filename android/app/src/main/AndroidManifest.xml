@@ -8,15 +8,20 @@
     <application
         android:name=".UGamesApplication"
         android:allowBackup="false"
+        android:appCategory="game"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="false"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
+        android:isGame="true"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.UGames"
         android:usesCleartextTraffic="false"
         tools:targetApi="34">
+
+        <meta-data android:name="android.game_mode_config"
+            android:resource="@xml/game_mode_config" />
 
         <activity
             android:name=".MainActivity"

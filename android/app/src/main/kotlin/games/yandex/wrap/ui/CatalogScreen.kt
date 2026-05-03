@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -40,9 +41,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -55,6 +56,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import games.yandex.wrap.catalog.Game
+import games.yandex.wrap.catalog.UserProfile
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 @Composable
 fun CatalogScreen(
@@ -65,18 +68,26 @@ fun CatalogScreen(
     val state by viewModel.state.collectAsState()
     val gridState = rememberLazyGridState()
 
-    val shouldLoadMore by remember {
-        derivedStateOf {
-            val total = gridState.layoutInfo.totalItemsCount
-            val lastVisible = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            total > 0 && lastVisible >= total - 6
+    LaunchedEffect(gridState) {
+        snapshotFlow {
+            val info = gridState.layoutInfo
+            val total = info.totalItemsCount
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: -1
+            Triple(total, last, info.visibleItemsInfo.size)
         }
-    }
-
-    LaunchedEffect(shouldLoadMore, state.mode, state.hasMore, state.isLoadingMore) {
-        if (shouldLoadMore && state.mode == Mode.Feed && state.hasMore && !state.isLoadingMore) {
-            viewModel.loadMore()
-        }
+            .distinctUntilChanged()
+            .collect { (total, last, _) ->
+                val current = viewModel.state.value
+                if (current.mode == Mode.Feed
+                    && current.hasMore
+                    && !current.isLoadingMore
+                    && !current.isLoading
+                    && total > 0
+                    && last >= total - 6
+                ) {
+                    viewModel.loadMore()
+                }
+            }
     }
 
     Box(modifier = Modifier
@@ -89,6 +100,7 @@ fun CatalogScreen(
         ) {
             CatalogTopBar(
                 query = state.searchQuery,
+                profile = state.profile,
                 onQueryChange = viewModel::onSearchChange,
                 onSubmit = viewModel::submitSearch,
                 onLoginClick = onLoginClick,
@@ -153,6 +165,7 @@ fun CatalogScreen(
 @Composable
 private fun CatalogTopBar(
     query: String,
+    profile: UserProfile,
     onQueryChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onLoginClick: () -> Unit,
@@ -190,12 +203,34 @@ private fun CatalogTopBar(
             shape = RoundedCornerShape(12.dp),
         )
         Spacer(Modifier.size(8.dp))
-        IconButton(onClick = onLoginClick) {
+        ProfileButton(profile = profile, onClick = onLoginClick)
+    }
+}
+
+@Composable
+private fun ProfileButton(profile: UserProfile, onClick: () -> Unit) {
+    if (profile.isAuthorized && profile.avatarUrl.isNotEmpty()) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            AsyncImage(
+                model = profile.avatarUrl,
+                contentDescription = profile.displayName.ifEmpty { profile.login },
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    } else {
+        IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
             Icon(
                 Icons.Default.AccountCircle,
                 contentDescription = "Login",
                 tint = Color.White,
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.size(34.dp),
             )
         }
     }

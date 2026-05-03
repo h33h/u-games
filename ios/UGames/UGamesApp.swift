@@ -37,7 +37,10 @@ struct RootView: View {
                     onBack: { route = .catalog }
                 )
             case .auth:
-                AuthView(onClose: { route = .catalog })
+                AuthView(onClose: {
+                    route = .catalog
+                    Task { await catalogService.refreshProfile() }
+                })
             }
         }
     }

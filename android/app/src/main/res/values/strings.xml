@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">U-Games</string>
+    <string name="catalog_title">Yandex Games</string>
+    <string name="search_hint">Search games</string>
+    <string name="favorites_tab">Favorites</string>
+    <string name="categories_tab">Categories</string>
+    <string name="all_games">All games</string>
+    <string name="error_load">Couldn\'t load catalog</string>
+    <string name="retry">Retry</string>
+    <string name="back">Back</string>
+</resources>

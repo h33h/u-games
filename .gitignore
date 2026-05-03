@@ -1,0 +1,32 @@
+# Build outputs
+android/app/build/
+android/build/
+android/.gradle/
+android/.idea/
+android/captures/
+android/local.properties
+android/.kotlin/
+android/app/release/
+*.apk
+*.aab
+*.iml
+
+# iOS / Swift
+ios/.build/
+ios/build/
+ios/DerivedData/
+ios/*.xcworkspace/xcuserdata/
+ios/*.xcodeproj/xcuserdata/
+ios/*.xcodeproj/project.xcworkspace/xcuserdata/
+ios/Pods/
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
+
+# Misc
+node_modules/
+*.log

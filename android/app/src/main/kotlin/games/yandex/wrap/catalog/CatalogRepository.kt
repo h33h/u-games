@@ -5,7 +5,6 @@ import games.yandex.wrap.data.GameCacheDao
 import games.yandex.wrap.data.GameCacheEntity
 import games.yandex.wrap.data.FavoriteEntity
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
 
 class CatalogRepository(
     private val api: CatalogApi,
@@ -13,17 +12,18 @@ class CatalogRepository(
     private val favorites: FavoritesDao,
 ) {
 
-    fun feed(): Flow<Result<List<Game>>> = flow {
-        val cached = cache.latest(50).map { it.toGame() }
-        if (cached.isNotEmpty()) emit(Result.success(cached))
-        try {
-            val fresh = api.feed()
-            cache.upsertAll(fresh.map { it.toEntity() })
-            emit(Result.success(fresh))
-        } catch (t: Throwable) {
-            if (cached.isEmpty()) emit(Result.failure(t))
+    suspend fun feedPage(skip: Int, gamesPerPage: Int = 24): List<Game> {
+        val games = api.feed(skip = skip, gamesPerPage = gamesPerPage)
+        if (skip == 0 && games.isNotEmpty()) {
+            cache.upsertAll(games.map { it.toEntity() })
         }
+        return games
     }
+
+    suspend fun cachedFeed(limit: Int = 50): List<Game> =
+        cache.latest(limit).map { it.toGame() }
+
+    suspend fun search(query: String): List<Game> = api.search(query = query)
 
     suspend fun similar(appId: Long): Result<List<Game>> = runCatching {
         api.similar(appId)

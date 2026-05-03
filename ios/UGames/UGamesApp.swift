@@ -21,9 +21,13 @@ struct RootView: View {
             Color.black.ignoresSafeArea()
             switch route {
             case .catalog:
-                CatalogView(service: catalogService) { game in
-                    route = .game(appId: game.appId, title: game.title)
-                }
+                CatalogView(
+                    service: catalogService,
+                    onGameClick: { game in
+                        route = .game(appId: game.appId, title: game.title)
+                    },
+                    onLoginClick: { route = .auth }
+                )
             case .game(let appId, let title):
                 GameView(
                     appId: appId,
@@ -32,6 +36,8 @@ struct RootView: View {
                     blockList: blockList,
                     onBack: { route = .catalog }
                 )
+            case .auth:
+                AuthView(onClose: { route = .catalog })
             }
         }
     }
@@ -40,4 +46,5 @@ struct RootView: View {
 enum Route: Equatable {
     case catalog
     case game(appId: Int64, title: String)
+    case auth
 }

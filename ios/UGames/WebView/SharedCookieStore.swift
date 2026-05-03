@@ -31,6 +31,28 @@ final class SharedCookieStore: NSObject, @unchecked Sendable {
             }
         }
     }
+
+    /// Used by "Sign out": drops every Yandex cookie from both stores so the
+    /// next request to `yandex.com/games/` is anonymous again.
+    func clearYandexCookies() async {
+        for cookie in sharedStorage.cookies ?? [] where cookie.domain.contains("yandex") {
+            sharedStorage.deleteCookie(cookie)
+        }
+        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+            webStore.getAllCookies { [weak self] cookies in
+                guard let self = self else { c.resume(); return }
+                let yandexCookies = cookies.filter { $0.domain.contains("yandex") }
+                if yandexCookies.isEmpty { c.resume(); return }
+                var remaining = yandexCookies.count
+                for cookie in yandexCookies {
+                    self.webStore.delete(cookie) {
+                        remaining -= 1
+                        if remaining == 0 { c.resume() }
+                    }
+                }
+            }
+        }
+    }
 }
 
 extension SharedCookieStore: WKHTTPCookieStoreObserver {

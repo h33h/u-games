@@ -66,12 +66,45 @@
   adopt();
   ensureStyleTag();
 
-  // Re-attach if React removes the tag during reconciliation.
+  // Auto-dismiss the .app-drawer "Play now" intermediate sheet. CSS already
+  // hides the visual chrome, but the React state for the drawer stays "open"
+  // and may keep adding/removing siblings. Programmatically clicking the
+  // primary CTA inside the drawer is what actually removes the node.
+  // Locale-agnostic: grab the largest visible <button> inside the drawer
+  // (the CTA is always full-width, ~360px on mobile).
+  function autoDismissDrawer() {
+    var drawer = document.querySelector('.app-drawer');
+    if (!drawer) return;
+    var buttons = drawer.querySelectorAll('button');
+    var best = null;
+    var bestWidth = 0;
+    for (var i = 0; i < buttons.length; i++) {
+      var b = buttons[i];
+      var w = b.offsetWidth || 0;
+      if (w > bestWidth && w >= 200) { best = b; bestWidth = w; }
+    }
+    if (best) { try { best.click(); } catch (_) {} }
+  }
+
+  // Re-attach style + try to auto-dismiss the drawer on every DOM change.
+  // MutationObserver fires very frequently during React boot, so debounce
+  // dismiss attempts via rAF.
+  var dismissPending = false;
+  function scheduleDismiss() {
+    if (dismissPending) return;
+    dismissPending = true;
+    requestAnimationFrame(function () {
+      dismissPending = false;
+      autoDismissDrawer();
+    });
+  }
+
   if (typeof MutationObserver === 'function' && document.documentElement) {
     new MutationObserver(function () {
       ensureStyleTag();
+      scheduleDismiss();
     }).observe(document.documentElement, { childList: true, subtree: true });
   } else {
-    setInterval(ensureStyleTag, 250);
+    setInterval(function () { ensureStyleTag(); autoDismissDrawer(); }, 250);
   }
 })();

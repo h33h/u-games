@@ -30,22 +30,33 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -64,6 +75,7 @@ import games.yandex.wrap.catalog.Game
 import games.yandex.wrap.catalog.UserProfile
 import kotlinx.coroutines.flow.distinctUntilChanged
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CatalogScreen(
     viewModel: CatalogViewModel,
@@ -72,9 +84,12 @@ fun CatalogScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val recent by viewModel.recent.collectAsState()
+    val favorites by viewModel.favorites.collectAsState()
+    val favoriteIds by viewModel.favoriteIds.collectAsState()
     val gridState = rememberLazyGridState()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    var profileSheetVisible by remember { mutableStateOf(false) }
 
     LaunchedEffect(gridState) {
         snapshotFlow {
@@ -123,7 +138,9 @@ fun CatalogScreen(
                 profile = state.profile,
                 onQueryChange = viewModel::onSearchChange,
                 onSubmit = viewModel::submitSearch,
-                onLoginClick = onLoginClick,
+                onProfileClick = {
+                    if (state.profile.isAuthorized) profileSheetVisible = true else onLoginClick()
+                },
             )
 
             when {
@@ -156,21 +173,47 @@ fun CatalogScreen(
                     }
                 }
                 else -> {
+                    val refreshing = state.isLoading && state.games.isNotEmpty()
+                    PullToRefreshBox(
+                        isRefreshing = refreshing,
+                        onRefresh = { viewModel.refreshFeed() },
+                        modifier = Modifier.fillMaxSize(),
+                    ) {
                     LazyVerticalGrid(
                         state = gridState,
-                        columns = GridCells.Fixed(2),
+                        // Adaptive: at least 160dp wide cards. 360dp phones → 2,
+                        // 600dp tablets → 3, 840dp+ landscape → 4-5.
+                        columns = GridCells.Adaptive(minSize = 160.dp),
                         contentPadding = PaddingValues(12.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
+                        if (favorites.isNotEmpty() && state.mode == Mode.Feed) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                HorizontalGameRow(
+                                    title = "Favorites",
+                                    games = favorites,
+                                    onClick = onGameClick,
+                                )
+                            }
+                        }
                         if (recent.isNotEmpty() && state.mode == Mode.Feed) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
-                                RecentRow(games = recent, onClick = onGameClick)
+                                HorizontalGameRow(
+                                    title = "Recently played",
+                                    games = recent,
+                                    onClick = onGameClick,
+                                )
                             }
                         }
                         items(state.games, key = { it.appId }) { game ->
-                            GameCard(game = game, onClick = { onGameClick(game) })
+                            GameCard(
+                                game = game,
+                                isFavorite = favoriteIds.contains(game.appId),
+                                onClick = { onGameClick(game) },
+                                onFavoriteToggle = { viewModel.toggleFavorite(game) },
+                            )
                         }
                         if (state.isLoadingMore) {
                             item(span = { GridItemSpan(maxLineSpan) }) {
@@ -181,8 +224,20 @@ fun CatalogScreen(
                             }
                         }
                     }
+                    }
                 }
             }
+        }
+
+        if (profileSheetVisible) {
+            ProfileSheet(
+                profile = state.profile,
+                onSignOut = {
+                    profileSheetVisible = false
+                    viewModel.signOut()
+                },
+                onDismiss = { profileSheetVisible = false },
+            )
         }
     }
 }
@@ -193,7 +248,7 @@ private fun CatalogTopBar(
     profile: UserProfile,
     onQueryChange: (String) -> Unit,
     onSubmit: () -> Unit,
-    onLoginClick: () -> Unit,
+    onProfileClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -228,7 +283,7 @@ private fun CatalogTopBar(
             shape = RoundedCornerShape(12.dp),
         )
         Spacer(Modifier.size(8.dp))
-        ProfileButton(profile = profile, onClick = onLoginClick)
+        ProfileButton(profile = profile, onClick = onProfileClick)
     }
 }
 
@@ -262,12 +317,12 @@ private fun ProfileButton(profile: UserProfile, onClick: () -> Unit) {
 }
 
 @Composable
-private fun RecentRow(games: List<Game>, onClick: (Game) -> Unit) {
+private fun HorizontalGameRow(title: String, games: List<Game>, onClick: (Game) -> Unit) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
     ) {
         Text(
-            text = "Recently played",
+            text = title,
             color = Color.White,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
@@ -303,7 +358,12 @@ private fun RecentRow(games: List<Game>, onClick: (Game) -> Unit) {
 }
 
 @Composable
-private fun GameCard(game: Game, onClick: () -> Unit) {
+private fun GameCard(
+    game: Game,
+    isFavorite: Boolean,
+    onClick: () -> Unit,
+    onFavoriteToggle: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -312,15 +372,34 @@ private fun GameCard(game: Game, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(8.dp),
     ) {
-        AsyncImage(
-            model = game.coverUrl,
-            contentDescription = game.title,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(8.dp)),
-        )
+        Box(modifier = Modifier.fillMaxWidth()) {
+            AsyncImage(
+                model = game.coverUrl,
+                contentDescription = game.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(8.dp)),
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(6.dp)
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x8C000000))
+                    .clickable(onClick = onFavoriteToggle),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+                    tint = if (isFavorite) Color(0xFFFF4D6A) else Color.White,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
         Spacer(Modifier.height(6.dp))
         Text(
             text = game.title,
@@ -335,6 +414,86 @@ private fun GameCard(game: Game, onClick: () -> Unit) {
                 color = Color(0xFFFFC700),
                 style = MaterialTheme.typography.bodySmall,
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileSheet(
+    profile: UserProfile,
+    onSignOut: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState()
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = Color(0xFF111111),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            if (profile.avatarUrl.isNotEmpty()) {
+                AsyncImage(
+                    model = profile.avatarUrl,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(72.dp).clip(CircleShape),
+                )
+            } else {
+                Icon(
+                    Icons.Default.AccountCircle,
+                    contentDescription = null,
+                    tint = Color(0xFF555555),
+                    modifier = Modifier.size(72.dp),
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                text = profile.displayName.ifEmpty { profile.login },
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            if (profile.login.isNotEmpty() && profile.displayName != profile.login) {
+                Text(
+                    text = profile.login,
+                    color = Color(0xFF888888),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (profile.hasYaPlus) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Yandex Plus",
+                    color = Color(0xFFFFC700),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(Color(0x33FFC700))
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+            Spacer(Modifier.height(24.dp))
+            Button(
+                onClick = onSignOut,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF2A1414),
+                    contentColor = Color(0xFFFF6B6B),
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ExitToApp, contentDescription = null)
+                Spacer(Modifier.size(8.dp))
+                Text("Sign out")
+            }
+            Spacer(Modifier.height(16.dp))
         }
     }
 }

@@ -25,6 +25,12 @@ class CatalogViewModel(private val repository: CatalogRepository) : ViewModel() 
     val recent: StateFlow<List<Game>> = repository.recentGames()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    val favorites: StateFlow<List<Game>> = repository.favoritesAsGames()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val favoriteIds: StateFlow<Set<Long>> = repository.favoriteIds()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
+
     private var searchDebounceJob: Job? = null
 
     init {
@@ -114,16 +120,46 @@ class CatalogViewModel(private val repository: CatalogRepository) : ViewModel() 
         if (q.isBlank()) refreshFeed() else viewModelScope.launch { performSearch(q) }
     }
 
-    fun refreshProfile() {
+    /// Re-fetch the profile up to [attempts] times with growing back-off.
+    /// Reason: just after the auth WebView redirects to /games/, the new
+    /// Session_id cookie has only just landed in WebView's CookieManager.
+    /// AndroidWebViewCookieStorage reads it on demand, but the WebView's own
+    /// flush is asynchronous, so an immediate fetch may still see the
+    /// anonymous session. Retrying gives the cookie flush time to catch up.
+    fun refreshProfile(attempts: Int = 4) {
         viewModelScope.launch {
-            val profile = runCatching { repository.userProfile() }.getOrDefault(UserProfile(false, "", "", "", false))
-            _state.update { it.copy(profile = profile) }
+            val delaysMs = longArrayOf(0, 350, 800, 1600)
+            for (i in 0 until attempts) {
+                val d = delaysMs[i.coerceAtMost(delaysMs.size - 1)]
+                if (d > 0) delay(d)
+                val profile = runCatching { repository.userProfile() }.getOrNull()
+                if (profile != null && profile.isAuthorized) {
+                    _state.update { it.copy(profile = profile) }
+                    return@launch
+                }
+                if (i == attempts - 1 && profile != null) {
+                    _state.update { it.copy(profile = profile) }
+                }
+            }
+        }
+    }
+
+    fun signOut() {
+        viewModelScope.launch {
+            runCatching { repository.clearSession() }
+            _state.update { it.copy(profile = UserProfile(false, "", "", "", false)) }
         }
     }
 
     fun recordGameOpen(game: Game) {
         viewModelScope.launch {
             runCatching { repository.recordOpen(game) }
+        }
+    }
+
+    fun toggleFavorite(game: Game) {
+        viewModelScope.launch {
+            runCatching { repository.toggleFavorite(game) }
         }
     }
 

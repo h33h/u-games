@@ -101,10 +101,40 @@ final class CatalogService: ObservableObject {
         }
     }
 
-    func refreshProfile() async {
-        if let p = try? await fetchProfile() {
-            profile = p
+    /// Re-fetch the profile up to `attempts` times with growing back-off.
+    /// Reason: just after the auth WebView redirects to `/games/`, the new
+    /// `Session_id` cookie has only just landed in WKWebView's cookie store.
+    /// `SharedCookieStore` mirrors it to `URLSession.shared` asynchronously,
+    /// so an immediate fetch may still see the anonymous session and report
+    /// `isAuthorized=false`. Retrying gives the cookie bridge time to catch up.
+    func refreshProfile(attempts: Int = 4) async {
+        let delaysMs: [UInt64] = [0, 350, 800, 1600]
+        for i in 0..<attempts {
+            if delaysMs[min(i, delaysMs.count - 1)] > 0 {
+                try? await Task.sleep(nanoseconds: delaysMs[min(i, delaysMs.count - 1)] * 1_000_000)
+            }
+            if let p = try? await fetchProfile(), p.isAuthorized {
+                profile = p
+                return
+            }
+            // Last attempt: even if anonymous, commit it so the UI reflects the
+            // actual state (e.g. user signed out elsewhere).
+            if i == attempts - 1, let p = try? await fetchProfile() {
+                profile = p
+            }
         }
+    }
+
+    func clearSession() async {
+        let store = HTTPCookieStorage.shared
+        for cookie in store.cookies ?? [] {
+            if cookie.domain.contains("yandex") {
+                store.deleteCookie(cookie)
+            }
+        }
+        // Clear WKWebView cookies too via SharedCookieStore observer side.
+        await SharedCookieStore.shared.clearYandexCookies()
+        profile = .anonymous
     }
 
     private func performSearch(_ query: String) async {
@@ -154,6 +184,33 @@ final class CatalogService: ObservableObject {
         let next = pageInfo?["nextPageId"] as? String
         let hasNext = (pageInfo?["hasNextPage"] as? Bool) ?? (next != nil)
         return FeedPage(games: games, nextPageId: next, hasNext: hasNext)
+    }
+
+    /// Fetch games similar to the given app from Yandex's recommender. Used
+    /// by the (future) game-detail row "More like this". Returns [] on any
+    /// failure — caller decides whether to show the row.
+    func fetchSimilar(appId: Int64, lang: String = "en") async -> [Game] {
+        var components = URLComponents(string: "https://yandex.com/games/api/catalogue/v2/similar_games/")!
+        components.queryItems = [
+            URLQueryItem(name: "app_id", value: String(appId)),
+            URLQueryItem(name: "games_count", value: "16"),
+            URLQueryItem(name: "int", value: "true"),
+            URLQueryItem(name: "lang", value: lang),
+            URLQueryItem(name: "page_type", value: "game"),
+            URLQueryItem(name: "platform", value: "ios"),
+            URLQueryItem(name: "standalone", value: "false"),
+        ]
+        var request = URLRequest(url: components.url!)
+        request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let feed = root["feed"] as? [[String: Any]] else { return [] }
+            return GameDecoder.flatten(feed)
+        } catch {
+            return []
+        }
     }
 
     private func fetchSearch(query: String, lang: String = "en") async throws -> [Game] {

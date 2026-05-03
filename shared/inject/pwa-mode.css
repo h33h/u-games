@@ -28,6 +28,12 @@ header,
 [class*="GameMenu"],
 [class*="StickyBanner"],
 [class*="sticky-banner"],
+[class*="sticky-adv-banner"],
+[id*="yandex-adv-sticky-banner"],
+.app-drawer,
+.app-drawer__bg,
+.app-drawer__curtain,
+.app-drawer__drag-observer,
 [class*="Footer__"] {
   display: none !important;
 }

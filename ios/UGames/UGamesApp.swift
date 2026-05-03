@@ -17,10 +17,34 @@ struct UGamesApp: App {
     }
 }
 
+/// Parse `ugames://app/<id>` deep links. Also tolerates `https://yandex.com/games/app/<id>`
+/// in case Universal Links are added later. Returns the appId or nil.
+func parseDeepLink(_ url: URL) -> Int64? {
+    let scheme = url.scheme?.lowercased() ?? ""
+    let segments = url.pathComponents.filter { $0 != "/" }
+    switch scheme {
+    case "ugames":
+        // ugames://app/<id> → host="app", first path segment is id
+        if url.host == "app" {
+            return segments.first.flatMap { Int64($0) }
+        }
+        return nil
+    case "https", "http":
+        if let host = url.host, (host.hasSuffix("yandex.com") || host.hasSuffix("yandex.ru")),
+           let idx = segments.firstIndex(of: "app"), idx + 1 < segments.count {
+            return Int64(segments[idx + 1])
+        }
+        return nil
+    default:
+        return nil
+    }
+}
+
 struct RootView: View {
     @State private var route: Route = .catalog
     @StateObject private var catalogService = CatalogService()
     @StateObject private var recentStore = RecentGamesStore.shared
+    @StateObject private var favoritesStore = FavoritesStore.shared
     private let injectedScripts = InjectedScripts.load()
     private let blockList = BlockList.load()
 
@@ -32,6 +56,7 @@ struct RootView: View {
                 CatalogView(
                     service: catalogService,
                     recentStore: recentStore,
+                    favoritesStore: favoritesStore,
                     onGameClick: { game in
                         recentStore.record(game)
                         route = .game(appId: game.appId, title: game.title)
@@ -51,6 +76,11 @@ struct RootView: View {
                     route = .catalog
                     Task { await catalogService.refreshProfile() }
                 })
+            }
+        }
+        .onOpenURL { url in
+            if let appId = parseDeepLink(url) {
+                route = .game(appId: appId, title: "")
             }
         }
     }

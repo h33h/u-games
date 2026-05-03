@@ -2,7 +2,7 @@ name: UGames
 options:
   bundleIdPrefix: games.yandex.wrap
   deploymentTarget:
-    iOS: "15.0"
+    iOS: "16.0"
   developmentLanguage: en
   createIntermediateGroups: true
 

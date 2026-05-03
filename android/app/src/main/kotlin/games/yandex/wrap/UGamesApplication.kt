@@ -40,7 +40,7 @@ class UGamesApplication : Application() {
     val catalogApi: CatalogApi by lazy { CatalogApi(httpClient) }
 
     val catalogRepository: CatalogRepository by lazy {
-        CatalogRepository(catalogApi, database.gameCacheDao(), database.favoritesDao())
+        CatalogRepository(catalogApi, database.gameCacheDao(), database.favoritesDao(), database.recentDao())
     }
 
     val injectedScripts: InjectedScripts by lazy { InjectedScripts.load(this) }

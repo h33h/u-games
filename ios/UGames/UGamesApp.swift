@@ -20,6 +20,7 @@ struct UGamesApp: App {
 struct RootView: View {
     @State private var route: Route = .catalog
     @StateObject private var catalogService = CatalogService()
+    @StateObject private var recentStore = RecentGamesStore.shared
     private let injectedScripts = InjectedScripts.load()
     private let blockList = BlockList.load()
 
@@ -30,7 +31,9 @@ struct RootView: View {
             case .catalog:
                 CatalogView(
                     service: catalogService,
+                    recentStore: recentStore,
                     onGameClick: { game in
+                        recentStore.record(game)
                         route = .game(appId: game.appId, title: game.title)
                     },
                     onLoginClick: { route = .auth }

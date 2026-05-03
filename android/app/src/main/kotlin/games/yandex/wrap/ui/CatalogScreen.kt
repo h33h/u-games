@@ -14,9 +14,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items as lazyRowItems
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -68,6 +71,7 @@ fun CatalogScreen(
     onLoginClick: () -> Unit,
 ) {
     val state by viewModel.state.collectAsState()
+    val recent by viewModel.recent.collectAsState()
     val gridState = rememberLazyGridState()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -160,6 +164,11 @@ fun CatalogScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize(),
                     ) {
+                        if (recent.isNotEmpty() && state.mode == Mode.Feed) {
+                            item(span = { GridItemSpan(maxLineSpan) }) {
+                                RecentRow(games = recent, onClick = onGameClick)
+                            }
+                        }
                         items(state.games, key = { it.appId }) { game ->
                             GameCard(game = game, onClick = { onGameClick(game) })
                         }
@@ -248,6 +257,47 @@ private fun ProfileButton(profile: UserProfile, onClick: () -> Unit) {
                 tint = Color.White,
                 modifier = Modifier.size(34.dp),
             )
+        }
+    }
+}
+
+@Composable
+private fun RecentRow(games: List<Game>, onClick: (Game) -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+    ) {
+        Text(
+            text = "Recently played",
+            color = Color.White,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+        )
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            lazyRowItems(games, key = { it.appId }) { game ->
+                Column(
+                    modifier = Modifier
+                        .width(100.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onClick(game) },
+                ) {
+                    AsyncImage(
+                        model = game.iconUrl.ifEmpty { game.coverUrl },
+                        contentDescription = game.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = game.title,
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 2,
+                    )
+                }
+            }
         }
     }
 }

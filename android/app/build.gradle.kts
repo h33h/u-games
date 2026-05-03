@@ -14,8 +14,8 @@ android {
         applicationId = "games.yandex.wrap"
         minSdk = 24
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.1.3"
+        versionCode = 5
+        versionName = "0.1.4"
     }
 
     sourceSets["main"].kotlin.srcDirs("src/main/kotlin")

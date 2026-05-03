@@ -41,7 +41,10 @@ class MainActivity : ComponentActivity() {
                     when (val r = route) {
                         Route.Catalog -> CatalogScreen(
                             viewModel = catalogVm,
-                            onGameClick = { route = Route.Game(it.appId, it.title) },
+                            onGameClick = { game ->
+                                catalogVm.recordGameOpen(game)
+                                route = Route.Game(game.appId, game.title)
+                            },
                             onLoginClick = { route = Route.Auth },
                         )
                         is Route.Game -> GameScreen(

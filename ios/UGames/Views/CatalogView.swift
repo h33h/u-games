@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CatalogView: View {
     @ObservedObject var service: CatalogService
+    @ObservedObject var recentStore: RecentGamesStore
     let onGameClick: (Game) -> Void
     let onLoginClick: () -> Void
 
@@ -48,6 +49,10 @@ struct CatalogView: View {
             Spacer()
         } else {
             ScrollView {
+                if !recentStore.games.isEmpty && service.mode == .feed {
+                    RecentRow(games: recentStore.games, onClick: onGameClick)
+                        .padding(.top, 8)
+                }
                 LazyVGrid(columns: columns, spacing: 12) {
                     ForEach(service.games) { game in
                         GameCard(game: game)
@@ -127,6 +132,43 @@ private struct ProfileButton: View {
                     .resizable()
                     .frame(width: 32, height: 32)
                     .foregroundColor(.white)
+            }
+        }
+    }
+}
+
+private struct RecentRow: View {
+    let games: [Game]
+    let onClick: (Game) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Recently played")
+                .font(.headline.weight(.semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 16)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(games) { game in
+                        VStack(alignment: .leading, spacing: 4) {
+                            AsyncImage(url: URL(string: game.iconUrl.isEmpty ? game.coverUrl : game.iconUrl)) { phase in
+                                switch phase {
+                                case .success(let img): img.resizable().scaledToFill()
+                                default: Color(white: 0.1)
+                                }
+                            }
+                            .frame(width: 100, height: 100)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            Text(game.title)
+                                .foregroundColor(.white)
+                                .font(.caption)
+                                .lineLimit(2)
+                                .frame(width: 100, alignment: .leading)
+                        }
+                        .onTapGesture { onClick(game) }
+                    }
+                }
+                .padding(.horizontal, 16)
             }
         }
     }

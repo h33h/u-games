@@ -8,8 +8,10 @@ import games.yandex.wrap.catalog.UserProfile
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -19,6 +21,9 @@ class CatalogViewModel(private val repository: CatalogRepository) : ViewModel() 
 
     private val _state = MutableStateFlow(CatalogUiState())
     val state: StateFlow<CatalogUiState> = _state.asStateFlow()
+
+    val recent: StateFlow<List<Game>> = repository.recentGames()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private var searchDebounceJob: Job? = null
 
@@ -113,6 +118,12 @@ class CatalogViewModel(private val repository: CatalogRepository) : ViewModel() 
         viewModelScope.launch {
             val profile = runCatching { repository.userProfile() }.getOrDefault(UserProfile(false, "", "", "", false))
             _state.update { it.copy(profile = profile) }
+        }
+    }
+
+    fun recordGameOpen(game: Game) {
+        viewModelScope.launch {
+            runCatching { repository.recordOpen(game) }
         }
     }
 

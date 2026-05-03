@@ -59,18 +59,32 @@ fun AuthScreen(onClose: () -> Unit) {
                     CookieManager.getInstance().setAcceptCookie(true)
                     CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                     webViewClient = object : WebViewClient() {
+                        private var dismissed = false
+
+                        private fun checkUrl(url: String?) {
+                            if (dismissed || url == null) return
+                            CookieManager.getInstance().flush()
+                            val isGames = url.startsWith("https://yandex.com/games/")
+                                    || url.startsWith("https://yandex.ru/games/")
+                            if (isGames) {
+                                dismissed = true
+                                onClose()
+                            }
+                        }
+
+                        override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
+                            super.onPageStarted(view, url, favicon)
+                            checkUrl(url)
+                        }
+
                         override fun onPageFinished(view: WebView?, url: String?) {
                             super.onPageFinished(view, url)
-                            CookieManager.getInstance().flush()
-                            // Auth complete when we land on /games/ specifically.
-                            // (intermediate steps may bounce through yandex.com itself.)
-                            if (url != null) {
-                                val isGames = url.startsWith("https://yandex.com/games/")
-                                        || url.startsWith("https://yandex.ru/games/")
-                                if (isGames) {
-                                    onClose()
-                                }
-                            }
+                            checkUrl(url)
+                        }
+
+                        override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+                            super.doUpdateVisitedHistory(view, url, isReload)
+                            checkUrl(url)
                         }
                     }
                     loadUrl("https://passport.yandex.com/auth?retpath=https%3A%2F%2Fyandex.com%2Fgames%2F")

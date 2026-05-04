@@ -125,9 +125,12 @@ class CatalogViewModel(private val repository: CatalogRepository) : ViewModel() 
     /// Session_id cookie has only just landed in WebView's CookieManager.
     /// AndroidWebViewCookieStorage reads it on demand, but the WebView's own
     /// flush is asynchronous, so an immediate fetch may still see the
-    /// anonymous session. Retrying gives the cookie flush time to catch up.
+    /// anonymous session. We first poll CookieManager for Session_id (max 3s)
+    /// so the retry loop starts from a known-good state, then retry on top
+    /// of that to absorb residual SSR/edge propagation latency.
     fun refreshProfile(attempts: Int = 4) {
         viewModelScope.launch {
+            waitForSessionCookie(timeoutMs = 3000)
             val delaysMs = longArrayOf(0, 350, 800, 1600)
             for (i in 0 until attempts) {
                 val d = delaysMs[i.coerceAtMost(delaysMs.size - 1)]
@@ -141,6 +144,16 @@ class CatalogViewModel(private val repository: CatalogRepository) : ViewModel() 
                     _state.update { it.copy(profile = profile) }
                 }
             }
+        }
+    }
+
+    private suspend fun waitForSessionCookie(timeoutMs: Long) {
+        val cm = android.webkit.CookieManager.getInstance()
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val raw = cm.getCookie("https://yandex.com").orEmpty()
+            if (raw.contains("Session_id=")) return
+            delay(150)
         }
     }
 

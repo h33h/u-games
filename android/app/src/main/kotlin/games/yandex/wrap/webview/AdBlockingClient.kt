@@ -134,7 +134,9 @@ class AdBlockingClient(
             url.startsWith("https://yandex.com/games") || url.startsWith("https://yandex.ru/games") -> {
                 view.evaluateJavascript(scripts.mainFrameScript, null)
             }
-            url.contains(".games.s3.yandex.net/") -> {
+            url.contains(".games.s3.yandex.net/")
+                || url.contains(".cdn.games.yandex.net/")
+                || url.contains(".gamecdn.yandex.net/") -> {
                 view.evaluateJavascript(scripts.sdkStub, null)
             }
         }
@@ -156,6 +158,15 @@ fun installDocumentStartScripts(webView: WebView, scripts: InjectedScripts) {
     WebViewCompat.addDocumentStartJavaScript(
         webView,
         scripts.sdkStub,
-        setOf("https://*.games.s3.yandex.net"),
+        setOf(
+            "https://*.games.s3.yandex.net",
+            // Yandex serves some apps from the CDN edge instead of the legacy
+            // S3 origin (e.g. app-263344). Without these patterns the stub is
+            // never registered for those iframes, the real ysdk.adv.* runs,
+            // our blocklist kills the ad SDK, onClose() never fires, and the
+            // game hangs on its own splash. Match both modern host families.
+            "https://*.cdn.games.yandex.net",
+            "https://*.gamecdn.yandex.net",
+        ),
     )
 }

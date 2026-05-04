@@ -9,7 +9,29 @@
                    │   └── .game-root
                    │       └── iframe#game-frame      ← stretch fullscreen
                    ├── .shortcut                      ← hide
-                   ├── .game-info                     ← hide (description, similar)
+                   ├── .game-info                     ← VISUAL hide only — must
+                   │   │                                stay in layout: the
+                   │   │                                "Play now" CTA we click
+                   │   │                                programmatically lives
+                   │   │                                inside its descendant
+                   │   │                                .app-drawer. Hiding it
+                   │   │                                via display:none zeroes
+                   │   │                                out offsetWidth on the
+                   │   │                                button → the >=200px
+                   │   │                                filter in
+                   │   │                                pwa-mode.js#autoDismissDrawer
+                   │   │                                never matches → click()
+                   │   │                                never fires → game is
+                   │   │                                stuck on the loading
+                   │   │                                screen.
+                   │   └── .app-drawer
+                   │         ├── .app-drawer__bg      ← hide
+                   │         ├── .app-drawer__handle  ← hide
+                   │         └── .app-drawer__drag-observer
+                   │               └── .app-drawer__curtain
+                   │                     └── .app-drawer__content
+                   │                           └── .game-page
+                   │                                 └── button "Play now"
                    ├── .gdpr-overlay                  ← hide
                    └── .play-payments                 ← hide
 
@@ -18,7 +40,6 @@
 .play-game-header,
 header.play-game-header,
 .shortcut,
-.game-info,
 .gdpr-overlay,
 .play-payments,
 [class*="header-wrapper-critical-module__header"],
@@ -30,12 +51,30 @@ header,
 [class*="sticky-banner"],
 [class*="sticky-adv-banner"],
 [id*="yandex-adv-sticky-banner"],
-.app-drawer,
 .app-drawer__bg,
-.app-drawer__curtain,
-.app-drawer__drag-observer,
+.app-drawer__handle,
 [class*="Footer__"] {
   display: none !important;
+}
+
+.game-info {
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
+  overflow: hidden !important;
+}
+
+.app-drawer,
+.app-drawer__drag-observer,
+.app-drawer__curtain,
+.app-drawer__content {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
 }
 
 html,

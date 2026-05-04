@@ -1,12 +1,23 @@
-// Layer 2: SDK stub. Inject in iframe (app-*.games.s3.yandex.net) at documentStart.
+// Layer 2: SDK stub. Inject in iframe (game CDN hosts) at documentStart.
 // Catches direct calls to ysdk.adv.* from inside the game bundle and replies
 // with onClose(false) so the game thinks an ad was attempted but skipped.
 // Wraps real YaGames so non-adv methods (player, storage, getStorage, environment,
 // auth, payments, leaderboards, features.*) keep working unchanged.
+//
+// Yandex serves games from at least two host families:
+//   - app-XXX.games.s3.yandex.net  (legacy S3 origin)
+//   - app-XXX.cdn.games.yandex.net (CDN edge, used by some apps e.g. 263344)
+// If we don't stub on the CDN edge, the real ysdk.adv.showFullscreenAdv runs,
+// our blocklist kills the ad SDK fetch, the onClose callback never fires, and
+// the game hangs on its own splash. Guard matches both host families.
 (function () {
   // Origin guard: only run inside game iframes, no-op on yandex.com itself
   try {
-    if (location.host.indexOf('games.s3.yandex.net') === -1) return;
+    var host = location.host;
+    var inGameFrame = host.indexOf('games.s3.yandex.net') !== -1
+                   || host.indexOf('cdn.games.yandex.net') !== -1
+                   || host.indexOf('gamecdn.yandex.net') !== -1;
+    if (!inGameFrame) return;
   } catch (_) { return; }
 
   if (window.__yga_stub__) return;

@@ -106,8 +106,12 @@ final class CatalogService: ObservableObject {
     /// `Session_id` cookie has only just landed in WKWebView's cookie store.
     /// `SharedCookieStore` mirrors it to `URLSession.shared` asynchronously,
     /// so an immediate fetch may still see the anonymous session and report
-    /// `isAuthorized=false`. Retrying gives the cookie bridge time to catch up.
+    /// `isAuthorized=false`. Force one synchronous WK→shared sync, poll the
+    /// shared store for `Session_id` (max 3s), then retry to absorb residual
+    /// SSR/edge propagation latency.
     func refreshProfile(attempts: Int = 4) async {
+        await SharedCookieStore.shared.syncToShared()
+        await Self.waitForSessionCookie(timeoutSeconds: 3.0)
         let delaysMs: [UInt64] = [0, 350, 800, 1600]
         for i in 0..<attempts {
             if delaysMs[min(i, delaysMs.count - 1)] > 0 {
@@ -122,6 +126,16 @@ final class CatalogService: ObservableObject {
             if i == attempts - 1, let p = try? await fetchProfile() {
                 profile = p
             }
+        }
+    }
+
+    private static func waitForSessionCookie(timeoutSeconds: TimeInterval) async {
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        let yandex = URL(string: "https://yandex.com/")!
+        while Date() < deadline {
+            let cookies = HTTPCookieStorage.shared.cookies(for: yandex) ?? []
+            if cookies.contains(where: { $0.name == "Session_id" }) { return }
+            try? await Task.sleep(nanoseconds: 150_000_000)
         }
     }
 

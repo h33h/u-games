@@ -66,24 +66,81 @@
   adopt();
   ensureStyleTag();
 
+  // Tiny safe wrapper around window.__yga_log (defined natively on iOS).
+  // No-op on Android (handler not registered there).
+  function ylog(tag, msg) {
+    try { if (typeof window.__yga_log === 'function') window.__yga_log(tag, msg); } catch (_) {}
+  }
+
   // Auto-dismiss the .app-drawer "Play now" intermediate sheet. CSS already
   // hides the visual chrome, but the React state for the drawer stays "open"
   // and may keep adding/removing siblings. Programmatically clicking the
   // primary CTA inside the drawer is what actually removes the node.
-  // Locale-agnostic: grab the largest visible <button> inside the drawer
-  // (the CTA is always full-width, ~360px on mobile).
-  function autoDismissDrawer() {
+  //
+  // Why we DELAY the click: production logs from real iPhone runs showed
+  // clicks firing within 37ms of nav commit, and within ~250ms Yandex
+  // redirected to /games/support-redirect → troubleshooting.html with
+  // `Game load time: Invalid Date`. Yandex's frontend appears to treat a
+  // click that lands before its bootstrap finishes as a failure (or
+  // anti-bot signal) and serves a support page instead of starting the
+  // game. A 1500ms delay from first drawer detection lets Yandex finish
+  // wiring up its React state and ad-block sniffer before we trigger the
+  // CTA. The MutationObserver re-fires on every drawer DOM change while
+  // we wait; clearTimeout debounces those into a single deferred click.
+  var loggedDrawerSeen = false;
+  var loggedDrawerClicked = false;
+  var drawerClickTimer = null;
+  var DRAWER_CLICK_DELAY_MS = 1500;
+
+  function performDrawerClick() {
+    drawerClickTimer = null;
     var drawer = document.querySelector('.app-drawer');
-    if (!drawer) return;
+    if (!drawer) {
+      ylog('drawer', 'click skipped (drawer disappeared during wait)');
+      return;
+    }
     var buttons = drawer.querySelectorAll('button');
     var best = null;
     var bestWidth = 0;
+    var summary = [];
     for (var i = 0; i < buttons.length; i++) {
       var b = buttons[i];
       var w = b.offsetWidth || 0;
+      var t = (b.innerText || b.textContent || '').trim().slice(0, 24);
+      if (w > 0) summary.push(t + '=' + w);
       if (w > bestWidth && w >= 200) { best = b; bestWidth = w; }
     }
-    if (best) { try { best.click(); } catch (_) {} }
+    if (best) {
+      if (!loggedDrawerClicked) {
+        loggedDrawerClicked = true;
+        ylog('drawer', 'CLICK target="' + (best.innerText || '').trim().slice(0,30) +
+             '" w=' + bestWidth + ' all=' + summary.join('|'));
+      }
+      try { best.click(); } catch (e) { ylog('drawer', 'click err: ' + e); }
+    } else if (!loggedDrawerClicked && summary.length > 0) {
+      loggedDrawerClicked = true;
+      ylog('drawer', 'NO CTA (>=200px) all=' + summary.join('|'));
+    }
+  }
+
+  function autoDismissDrawer() {
+    var drawer = document.querySelector('.app-drawer');
+    if (!drawer) {
+      // Drawer gone — cancel any pending click and reset for next page.
+      if (drawerClickTimer) { clearTimeout(drawerClickTimer); drawerClickTimer = null; }
+      return;
+    }
+    if (!loggedDrawerSeen) {
+      loggedDrawerSeen = true;
+      ylog('drawer', 'detected, offsetW=' + drawer.offsetWidth +
+           ' offsetH=' + drawer.offsetHeight +
+           ' (deferring click ' + DRAWER_CLICK_DELAY_MS + 'ms)');
+    }
+    if (loggedDrawerClicked) return;
+    // Debounce: each new mutation while we're waiting resets the timer
+    // so we click only once Yandex's drawer DOM has stabilized.
+    if (drawerClickTimer) clearTimeout(drawerClickTimer);
+    drawerClickTimer = setTimeout(performDrawerClick, DRAWER_CLICK_DELAY_MS);
   }
 
   // Re-attach style + try to auto-dismiss the drawer on every DOM change.

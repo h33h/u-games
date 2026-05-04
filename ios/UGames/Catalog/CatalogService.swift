@@ -110,33 +110,47 @@ final class CatalogService: ObservableObject {
     /// shared store for `Session_id` (max 3s), then retry to absorb residual
     /// SSR/edge propagation latency.
     func refreshProfile(attempts: Int = 4) async {
+        Log.write("profile", "refreshProfile begin")
         await SharedCookieStore.shared.syncToShared()
-        await Self.waitForSessionCookie(timeoutSeconds: 3.0)
+        Log.write("profile", "WK->shared sync done")
+        let waited = await Self.waitForSessionCookie(timeoutSeconds: 3.0)
+        Log.write("profile", "Session_id wait: \(waited)")
         let delaysMs: [UInt64] = [0, 350, 800, 1600]
         for i in 0..<attempts {
             if delaysMs[min(i, delaysMs.count - 1)] > 0 {
                 try? await Task.sleep(nanoseconds: delaysMs[min(i, delaysMs.count - 1)] * 1_000_000)
             }
-            if let p = try? await fetchProfile(), p.isAuthorized {
-                profile = p
-                return
-            }
-            // Last attempt: even if anonymous, commit it so the UI reflects the
-            // actual state (e.g. user signed out elsewhere).
-            if i == attempts - 1, let p = try? await fetchProfile() {
-                profile = p
+            do {
+                let p = try await fetchProfile()
+                Log.write("profile", "attempt#\(i+1) -> isAuth=\(p.isAuthorized) login=\(p.login) uid-len=\(p.displayName.count)")
+                if p.isAuthorized {
+                    profile = p
+                    return
+                }
+                if i == attempts - 1 { profile = p }
+            } catch {
+                Log.write("profile", "attempt#\(i+1) FAILED: \(error.localizedDescription)")
             }
         }
+        Log.write("profile", "refreshProfile end (still anonymous)")
     }
 
-    private static func waitForSessionCookie(timeoutSeconds: TimeInterval) async {
+    private static func waitForSessionCookie(timeoutSeconds: TimeInterval) async -> String {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         let yandex = URL(string: "https://yandex.com/")!
+        var ticks = 0
         while Date() < deadline {
             let cookies = HTTPCookieStorage.shared.cookies(for: yandex) ?? []
-            if cookies.contains(where: { $0.name == "Session_id" }) { return }
+            if cookies.contains(where: { $0.name == "Session_id" }) {
+                let names = cookies.map { $0.name }.sorted().joined(separator: ",")
+                return "found after \(ticks*150)ms (cookies=\(cookies.count) names=\(names))"
+            }
             try? await Task.sleep(nanoseconds: 150_000_000)
+            ticks += 1
         }
+        let cookies = HTTPCookieStorage.shared.cookies(for: yandex) ?? []
+        let names = cookies.map { $0.name }.sorted().joined(separator: ",")
+        return "TIMEOUT after \(Int(timeoutSeconds*1000))ms (cookies=\(cookies.count) names=\(names))"
     }
 
     func clearSession() async {
@@ -246,18 +260,76 @@ final class CatalogService: ObservableObject {
         return GameDecoder.flatten(blocks)
     }
 
+    private static var preferredYandexHost: String {
+        let lang = Locale.preferredLanguages.first ?? Locale.current.identifier
+        return lang.hasPrefix("ru") ? "yandex.ru" : "yandex.com"
+    }
+
     private func fetchProfile(lang: String = "en") async throws -> UserProfile {
-        var components = URLComponents(string: "https://yandex.com/games/")!
-        components.queryItems = [URLQueryItem(name: "lang", value: lang)]
-        var request = URLRequest(url: components.url!)
+        // Match the AuthView retpath so the SSR we hit is the same domain
+        // that received Set-Cookie:Session_id during auth — yandex.ru for
+        // Russian users, yandex.com for the rest. Avoids a yandex.com →
+        // yandex.ru geo-redirect that would otherwise drop session context
+        // (Session_id is domain-bound on Yandex's side).
+        let host = Self.preferredYandexHost
+        let preferredLang = host == "yandex.ru" ? "ru" : lang
+        var components = URLComponents(string: "https://\(host)/games/")!
+        components.queryItems = [URLQueryItem(name: "lang", value: preferredLang)]
+        let url = components.url!
+        var request = URLRequest(url: url)
         request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("text/html", forHTTPHeaderField: "Accept")
-        let (data, _) = try await URLSession.shared.data(for: request)
-        guard let html = String(data: data, encoding: .utf8) else { return .anonymous }
-        guard let json = extractAppData(html) else { return .anonymous }
-        guard let parsed = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
-              let userData = parsed["userData"] as? [String: Any] else { return .anonymous }
+
+        // Build a merged Cookie header from EVERY yandex.* cookie. Reason:
+        // PWL passport (the new passwordless login flow) only sets
+        // Session_id on `.yandex.com`. Russian-IP users get geo-redirected
+        // to `yandex.ru`, and URLSession's default cookie store does NOT
+        // carry `.yandex.com` cookies onto the `.yandex.ru` redirect — the
+        // server then sees an anonymous request and the SSR returns
+        // userData.uid="". By bypassing the cookie store and shipping the
+        // full Cookie header manually, we keep the session intact across
+        // the geo-redirect.
+        request.httpShouldHandleCookies = false
+        let allCookies = HTTPCookieStorage.shared.cookies ?? []
+        let yandexCookies = allCookies.filter { $0.domain.contains("yandex") }
+        // Last-seen-wins dedupe (cookies for both .com and .ru domains often
+        // share names; the freshest value is what passport just set).
+        var dedup: [String: HTTPCookie] = [:]
+        for c in yandexCookies { dedup[c.name] = c }
+        let cookieHeader = dedup.values.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
+        if !cookieHeader.isEmpty {
+            request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
+        }
+        let mergedNames = dedup.keys.sorted().joined(separator: ",")
+        Log.write("profile", "fetch begin url=\(url) merged=\(dedup.count)[\(mergedNames)]")
+
+        let delegate = ProfileFetchRedirectDelegate(cookieHeader: cookieHeader)
+        let (data, response) = try await URLSession.shared.data(for: request, delegate: delegate)
+        let http = response as? HTTPURLResponse
+        let finalUrl = (http?.url?.absoluteString) ?? "?"
+        Log.write("profile", "fetch http status=\(http?.statusCode ?? -1) bodyLen=\(data.count) finalUrl=\(finalUrl) hops=\(delegate.redirectCount)")
+        guard let html = String(data: data, encoding: .utf8) else {
+            Log.write("profile", "non-UTF8 body")
+            return .anonymous
+        }
+        guard let json = extractAppData(html) else {
+            let preview = String(html.prefix(200)).replacingOccurrences(of: "\n", with: " ")
+            Log.write("profile", "NO __appData__ found (htmlLen=\(html.count) preview=\(preview))")
+            return .anonymous
+        }
+        guard let parsed = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else {
+            Log.write("profile", "appData not a JSON object")
+            return .anonymous
+        }
+        guard let userData = parsed["userData"] as? [String: Any] else {
+            let topKeys = parsed.keys.sorted().prefix(20).joined(separator: ",")
+            Log.write("profile", "no userData key (topKeys=\(topKeys))")
+            return .anonymous
+        }
         let uid = (userData["uid"] as? String) ?? ""
+        let login = (userData["login"] as? String) ?? ""
+        let authProvider = (userData["authProvider"] as? String) ?? ""
+        Log.write("profile", "userData uid=\(uid.isEmpty ? "<empty>" : uid) login=\(login) authProvider=\(authProvider)")
         guard !uid.isEmpty else { return .anonymous }
         let avatarsOrigin = (userData["avatarsOrigin"] as? String) ?? "https://avatars.mds.yandex.net"
         let avatarId = (userData["avatarId"] as? String) ?? "0/0-0"
@@ -265,7 +337,7 @@ final class CatalogService: ObservableObject {
         return UserProfile(
             isAuthorized: true,
             displayName: (userData["displayName"] as? String) ?? "",
-            login: (userData["login"] as? String) ?? "",
+            login: login,
             avatarUrl: avatarUrl,
             hasYaPlus: (userData["yaplusEnabled"] as? Bool) ?? false
         )
@@ -276,6 +348,33 @@ final class CatalogService: ObservableObject {
         guard let openIdx = html.range(of: ">", range: markerRange.upperBound..<html.endIndex) else { return nil }
         guard let closeIdx = html.range(of: "</script>", range: openIdx.upperBound..<html.endIndex) else { return nil }
         return String(html[openIdx.upperBound..<closeIdx.lowerBound])
+    }
+}
+
+/// Forwards a custom merged Cookie header onto every redirect target so the
+/// authenticated session survives `yandex.com → yandex.ru` geo-redirects.
+/// PWL passport only sets `Session_id` on `.yandex.com`; the default
+/// URLSession cookie store would not attach it to the `.yandex.ru` redirect.
+final class ProfileFetchRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    let cookieHeader: String
+    private(set) var redirectCount: Int = 0
+
+    init(cookieHeader: String) { self.cookieHeader = cookieHeader }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        redirectCount += 1
+        var modified = request
+        modified.httpShouldHandleCookies = false
+        if !cookieHeader.isEmpty {
+            modified.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
+        }
+        completionHandler(modified)
     }
 }
 

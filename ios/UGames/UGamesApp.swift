@@ -61,7 +61,8 @@ struct RootView: View {
                         recentStore.record(game)
                         route = .game(appId: game.appId, title: game.title)
                     },
-                    onLoginClick: { route = .auth }
+                    onLoginClick: { route = .auth },
+                    onLogsRequest: { route = .logs }
                 )
             case .game(let appId, let title):
                 GameView(
@@ -76,6 +77,8 @@ struct RootView: View {
                     route = .catalog
                     Task { await catalogService.refreshProfile() }
                 })
+            case .logs:
+                LogsView(onClose: { route = .catalog })
             }
         }
         .onOpenURL { url in
@@ -90,4 +93,5 @@ enum Route: Equatable {
     case catalog
     case game(appId: Int64, title: String)
     case auth
+    case logs
 }

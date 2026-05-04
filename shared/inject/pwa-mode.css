@@ -57,6 +57,19 @@ header,
   display: none !important;
 }
 
+/* Hide .game-info visually (it covers the description / similar games /
+   drawer chrome) but keep the subtree in layout. The "Play now" button
+   is inside .app-drawer → .app-drawer__curtain → .app-drawer__content
+   → .game-page, all descendants of .game-info. Programmatic click in
+   pwa-mode.js#autoDismissDrawer requires non-zero offsetWidth on the
+   button — display:none anywhere up that chain zeroes it out and the
+   click never fires. We deliberately do NOT force display/visibility/
+   opacity values on the drawer subtree itself, since Yandex's own
+   stylesheet positions .app-drawer__content with flex layout and
+   overriding it has been observed to land programmatic clicks on the
+   wrong target in WKWebView. Letting the natural Yandex CSS take over
+   inside an opacity:0 parent is enough: invisible on screen, fully
+   measurable for the click heuristic. */
 .game-info {
   position: fixed !important;
   inset: 0 !important;
@@ -66,15 +79,6 @@ header,
   pointer-events: none !important;
   z-index: -1 !important;
   overflow: hidden !important;
-}
-
-.app-drawer,
-.app-drawer__drag-observer,
-.app-drawer__curtain,
-.app-drawer__content {
-  display: block !important;
-  visibility: visible !important;
-  opacity: 1 !important;
 }
 
 html,

@@ -37,19 +37,73 @@ private struct AuthWebView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(onSignedIn: onSignedIn) }
 
+    /// Use yandex.ru/passport.yandex.ru for Russian-locale devices. Yandex
+    /// runs separate session realms per TLD: passport.yandex.com only ever
+    /// issues Session_id for `.yandex.com`, and yandex.ru's SSR rejects that
+    /// session when serving userData. For Russian users the auth must go
+    /// through passport.yandex.ru directly so Session_id lands on `.yandex.ru`.
+    static var preferredYandexHost: String {
+        let lang = Locale.preferredLanguages.first ?? Locale.current.identifier
+        return lang.hasPrefix("ru") ? "yandex.ru" : "yandex.com"
+    }
+
+    static var passportHost: String {
+        preferredYandexHost == "yandex.ru" ? "passport.yandex.ru" : "passport.yandex.com"
+    }
+
+    static var passportRetpathEncoded: String {
+        let host = preferredYandexHost
+        return "https%3A%2F%2F\(host)%2Fgames%2F"
+    }
+
+    static var passportAuthURL: URL {
+        URL(string: "https://\(passportHost)/auth?retpath=\(passportRetpathEncoded)")!
+    }
+
+    static var gamesRootURL: URL {
+        URL(string: "https://\(preferredYandexHost)/games/")!
+    }
+
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
+        // Log bridge — same as GameWebView, so passport-side scripts can also
+        // post diagnostic events. Useful to confirm we land on the page we
+        // expect (PWL flow, /finish?, etc.).
+        let logBridge = WKUserScript(
+            source: """
+            (function(){
+              if (window.__yga_log) return;
+              window.__yga_log = function(tag, msg){
+                try {
+                  window.webkit.messageHandlers.ugamesLog.postMessage({
+                    tag: String(tag||'js'),
+                    msg: String(msg==null?'':msg),
+                    host: location.host,
+                    path: location.pathname
+                  });
+                } catch(_){}
+              };
+            })();
+            """,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        )
+        config.userContentController.addUserScript(logBridge)
+        config.userContentController.add(context.coordinator, name: "ugamesLog")
+
         let web = WKWebView(frame: .zero, configuration: config)
         web.navigationDelegate = context.coordinator
         web.allowsBackForwardNavigationGestures = true
         web.backgroundColor = .black
         web.isOpaque = false
-        var request = URLRequest(url: URL(string: "https://passport.yandex.com/auth?retpath=https%3A%2F%2Fyandex.com%2Fgames%2F")!)
+        let retpath = AuthWebView.passportRetpathEncoded
+        var request = URLRequest(url: AuthWebView.passportAuthURL)
         request.setValue(
             "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
             forHTTPHeaderField: "User-Agent"
         )
+        Log.write("auth", "AuthView opened: passportHost=\(AuthWebView.passportHost) retpath=\(retpath) gamesHost=\(AuthWebView.preferredYandexHost)")
         web.load(request)
         context.coordinator.startSessionWatcher(webView: web)
         return web
@@ -57,7 +111,25 @@ private struct AuthWebView: UIViewRepresentable {
 
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
-    final class Coordinator: NSObject, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+
+        func userContentController(_ userContentController: WKUserContentController,
+                                   didReceive message: WKScriptMessage) {
+            guard message.name == "ugamesLog" else { return }
+            let tag: String
+            let msg: String
+            if let dict = message.body as? [String: Any] {
+                tag = (dict["tag"] as? String) ?? "js"
+                let m = (dict["msg"] as? String) ?? ""
+                let host = (dict["host"] as? String) ?? ""
+                msg = host.isEmpty ? m : "[\(host)] \(m)"
+            } else {
+                tag = "js"
+                msg = String(describing: message.body)
+            }
+            Log.write(tag, msg)
+        }
+
         let onSignedIn: () -> Void
         private var dismissed = false
         private var watcherTask: Task<Void, Never>?
@@ -77,25 +149,56 @@ private struct AuthWebView: UIViewRepresentable {
         /// so `check(_:)` dismisses on the next navigation event.
         func startSessionWatcher(webView: WKWebView) {
             watcherTask?.cancel()
+            Log.write("auth", "Session_id watcher started (poll=400ms)")
             watcherTask = Task { @MainActor [weak self, weak webView] in
+                var ticks = 0
                 while let self = self, !self.dismissed, let webView = webView {
                     try? await Task.sleep(nanoseconds: 400_000_000)
                     if Task.isCancelled || self.dismissed { return }
+                    ticks += 1
                     let cookies = await webView.configuration.websiteDataStore
                         .httpCookieStore.allCookiesAsync()
-                    let sessionPresent = cookies.contains { c in
-                        c.name == "Session_id" &&
-                            (c.domain.hasSuffix(".yandex.com") ||
-                             c.domain.hasSuffix(".yandex.ru") ||
-                             c.domain == "yandex.com" ||
-                             c.domain == "yandex.ru")
+                    let yandexCookies = cookies.filter {
+                        $0.domain.contains("yandex.com") || $0.domain.contains("yandex.ru")
+                    }
+                    // Wait for Session_id on the PREFERRED domain — yandex.ru
+                    // for Russian locale, yandex.com otherwise. Otherwise an
+                    // old `.yandex.com` Session_id from a prior auth attempt
+                    // would trigger an early dismiss before passport.yandex.ru
+                    // has finished issuing the `.yandex.ru` session.
+                    let preferredDomain = AuthWebView.preferredYandexHost
+                    let sessionPresent = yandexCookies.contains { c in
+                        c.name == "Session_id" && c.domain.contains(preferredDomain)
+                    }
+                    if ticks % 5 == 0 {
+                        let names = yandexCookies.map { "\($0.name)@\($0.domain)" }.sorted().joined(separator: ",")
+                        Log.write("cookie", "tick=\(ticks) waiting for Session_id@\(preferredDomain); have \(yandexCookies.count): \(names)")
                     }
                     guard sessionPresent else { continue }
                     let current = webView.url?.absoluteString ?? ""
+                    Log.write("auth", "Session_id detected after \(ticks*400)ms; current=\(current)")
+                    let target = AuthWebView.gamesRootURL
                     if !current.hasPrefix("https://yandex.com/games/") &&
                        !current.hasPrefix("https://yandex.ru/games/") {
-                        webView.load(URLRequest(url: URL(string: "https://yandex.com/games/")!))
+                        Log.write("auth", "force-loading \(target.absoluteString)")
+                        webView.load(URLRequest(url: target))
                     }
+                    // 2.5s grace lets WebView complete the geo-redirect chain
+                    // (yandex.com → yandex.ru for Russian users). During that
+                    // chain Yandex SSO server emits Set-Cookie:Session_id on
+                    // BOTH `.yandex.com` and `.yandex.ru` — without this grace
+                    // we dismiss too early and the .yandex.ru session is never
+                    // established, leaving the catalog fetch anonymous.
+                    try? await Task.sleep(nanoseconds: 2_500_000_000)
+                    if Task.isCancelled || self.dismissed { return }
+                    self.dismissed = true
+                    let finalURL = webView.url?.absoluteString ?? "?"
+                    let postCookies = await webView.configuration.websiteDataStore
+                        .httpCookieStore.allCookiesAsync()
+                    let comSessions = postCookies.filter { $0.domain.contains(".yandex.com") && $0.name == "Session_id" }.count
+                    let ruSessions  = postCookies.filter { $0.domain.contains(".yandex.ru") && $0.name == "Session_id" }.count
+                    Log.write("auth", "post-grace dismiss; finalURL=\(finalURL) comSessions=\(comSessions) ruSessions=\(ruSessions)")
+                    self.onSignedIn()
                     return
                 }
             }
@@ -103,22 +206,36 @@ private struct AuthWebView: UIViewRepresentable {
 
         private func check(_ webView: WKWebView) {
             guard !dismissed, let url = webView.url?.absoluteString else { return }
-            // Auto-skip webauthn registration (dead end inside WKWebView).
             if url.contains("/webauthn-reg") || url.contains("/finish?") {
-                let target = URL(string: "https://yandex.com/games/")!
-                webView.load(URLRequest(url: target))
+                Log.write("auth", "skip dead-end \(url)")
+                webView.load(URLRequest(url: AuthWebView.gamesRootURL))
                 return
             }
-            if url.hasPrefix("https://yandex.com/games/") || url.hasPrefix("https://yandex.ru/games/") {
-                dismissed = true
-                watcherTask?.cancel()
-                onSignedIn()
-            }
+            // No URL-based dismiss here. The watcher waits for Session_id and
+            // gives WebView a 2.5s grace to complete the geo-redirect chain
+            // (yandex.com → yandex.ru) before dismissing — that's what gets
+            // the `.yandex.ru` session cookies set. Dismissing on first sight
+            // of /games/ short-circuits that and leaves auth half-finished.
         }
 
-        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) { check(webView) }
-        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) { check(webView) }
-        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) { check(webView) }
+        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+            Log.write("nav", "auth commit \(webView.url?.absoluteString ?? "?")")
+            check(webView)
+        }
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            Log.write("nav", "auth finish \(webView.url?.absoluteString ?? "?")")
+            check(webView)
+        }
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            Log.write("nav", "auth start \(webView.url?.absoluteString ?? "?")")
+            check(webView)
+        }
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            Log.write("nav", "auth fail \((error as NSError).code) \(error.localizedDescription)")
+        }
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            Log.write("nav", "auth failProv \((error as NSError).code) \(error.localizedDescription)")
+        }
     }
 }
 

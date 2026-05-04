@@ -136,7 +136,8 @@ class AdBlockingClient(
             }
             url.contains(".games.s3.yandex.net/")
                 || url.contains(".cdn.games.yandex.net/")
-                || url.contains(".gamecdn.yandex.net/") -> {
+                || url.contains(".gamecdn.yandex.net/")
+                || url.contains("game-static.ru/") -> {
                 view.evaluateJavascript(scripts.sdkStub, null)
             }
         }
@@ -160,13 +161,17 @@ fun installDocumentStartScripts(webView: WebView, scripts: InjectedScripts) {
         scripts.sdkStub,
         setOf(
             "https://*.games.s3.yandex.net",
-            // Yandex serves some apps from the CDN edge instead of the legacy
-            // S3 origin (e.g. app-263344). Without these patterns the stub is
-            // never registered for those iframes, the real ysdk.adv.* runs,
-            // our blocklist kills the ad SDK, onClose() never fires, and the
-            // game hangs on its own splash. Match both modern host families.
+            // Yandex serves apps from multiple CDN families plus
+            // publisher-owned domains. Without each pattern the stub is
+            // never registered for those iframes, the real ysdk.adv.* and
+            // ysdk.getPayments() run unmodified — backend purchase
+            // verification rejects our fake receipts, ad blocklist kills
+            // the ad SDK, and the game hangs or loses purchases.
             "https://*.cdn.games.yandex.net",
             "https://*.gamecdn.yandex.net",
+            // Vizor Apps publishes to game-static.ru (Klondike etc).
+            "https://*.game-static.ru",
+            "https://game-static.ru",
         ),
     )
 }

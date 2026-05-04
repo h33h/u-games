@@ -28,6 +28,32 @@ struct GameWebView: UIViewRepresentable {
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
         config.defaultWebpagePreferences.preferredContentMode = .mobile
 
+        // Layer 0: log bridge. Defines window.__yga_log so the inject
+        // scripts can post diagnostic events back to the native LogStore
+        // via WKScriptMessageHandler. forMainFrameOnly:false so the bridge
+        // is also available inside the game iframe (the SDK stub uses it).
+        let logBridge = WKUserScript(
+            source: """
+            (function(){
+              if (window.__yga_log) return;
+              window.__yga_log = function(tag, msg){
+                try {
+                  window.webkit.messageHandlers.ugamesLog.postMessage({
+                    tag: String(tag||'js'),
+                    msg: String(msg==null?'':msg),
+                    host: location.host,
+                    path: location.pathname
+                  });
+                } catch(_){}
+              };
+            })();
+            """,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        )
+        config.userContentController.addUserScript(logBridge)
+        config.userContentController.add(context.coordinator, name: "ugamesLog")
+
         // Layer 1: documentStart user scripts.
         let mainScript = WKUserScript(
             source: scripts.mainFrameScript,
@@ -85,7 +111,36 @@ struct GameWebView: UIViewRepresentable {
         }
     }
 
-    final class Coordinator: NSObject, WKUIDelegate, WKNavigationDelegate {
+    final class Coordinator: NSObject, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler {
+
+        // Receives `window.__yga_log(tag, msg)` calls from the inject scripts.
+        func userContentController(_ userContentController: WKUserContentController,
+                                   didReceive message: WKScriptMessage) {
+            guard message.name == "ugamesLog" else { return }
+            let tag: String
+            let msg: String
+            let rawMsg: String
+            if let dict = message.body as? [String: Any] {
+                tag = (dict["tag"] as? String) ?? "js"
+                let m = (dict["msg"] as? String) ?? ""
+                rawMsg = m
+                let host = (dict["host"] as? String) ?? ""
+                msg = host.isEmpty ? m : "[\(host)] \(m)"
+            } else {
+                tag = "js"
+                rawMsg = String(describing: message.body)
+                msg = rawMsg
+            }
+            Log.write(tag, msg)
+            // Side-channel: when the SDK stub traps screen.orientation.lock()
+            // it sends tag="orient" with the requested target string. Update
+            // the global OrientationStore so GameView can show/hide the
+            // rotate overlay.
+            if tag == "orient" {
+                Task { @MainActor in OrientationStore.shared.setFromString(rawMsg) }
+            }
+        }
+
         private weak var hostView: WKWebView?
         private var popup: WKWebView?
         private let scripts: InjectedScripts
@@ -172,12 +227,26 @@ struct GameWebView: UIViewRepresentable {
         // Layer 2: belt-and-braces re-injection at navigation milestones, in
         // case the documentStart script registration didn't apply in time
         // (older WebKit, race with React boot).
+        func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            Log.write("nav", "start \(webView.url?.absoluteString ?? "?")")
+        }
+
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+            Log.write("nav", "commit \(webView.url?.absoluteString ?? "?")")
             reinject(in: webView)
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            Log.write("nav", "finish \(webView.url?.absoluteString ?? "?")")
             reinject(in: webView)
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            Log.write("nav", "fail \((error as NSError).code) \(error.localizedDescription)")
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            Log.write("nav", "failProv \((error as NSError).code) \(error.localizedDescription)")
         }
 
         private func reinject(in webView: WKWebView) {

@@ -35,6 +35,19 @@
             result.request.isPWA = true;
             result.request.hidePaymentsAndCurrency = true;
           }
+          // Extract Yandex's authoritative orientation hint. Lives at
+          // __playPageData__.gameData.features.orientation (and a duplicate
+          // at gameSettings.features.orientation). Values observed:
+          // "landscape" / "portrait" / undefined-for-rotatable-games.
+          // The native shell shows the rotate-overlay based on this.
+          try {
+            var orientHint =
+              (result.gameData && result.gameData.features && result.gameData.features.orientation) ||
+              (result.gameSettings && result.gameSettings.features && result.gameSettings.features.orientation);
+            if (orientHint && typeof window.__yga_log === 'function') {
+              window.__yga_log('orient', String(orientHint) + ' (playPageData.features)');
+            }
+          } catch (_) {}
         }
       }
     } catch (_) {}

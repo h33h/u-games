@@ -6,6 +6,7 @@ struct CatalogView: View {
     @ObservedObject var favoritesStore: FavoritesStore
     let onGameClick: (Game) -> Void
     let onLoginClick: () -> Void
+    let onLogsRequest: () -> Void
 
     @State private var profileSheetPresented = false
 
@@ -32,6 +33,12 @@ struct CatalogView: View {
                         }
                     }
                 )
+                .onLongPressGesture(minimumDuration: 0.8) {
+                    // Long-press anywhere in the topbar to open the in-app
+                    // diagnostic Logs view. Useful for debugging stuck game
+                    // launches and auth issues without a Mac/USB cable.
+                    onLogsRequest()
+                }
                 contentView
             }
         }

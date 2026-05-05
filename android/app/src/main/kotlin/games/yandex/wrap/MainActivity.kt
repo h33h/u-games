@@ -13,6 +13,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.lifecycle.viewmodel.initializer
 import games.yandex.wrap.ui.AuthScreen
 import games.yandex.wrap.ui.CatalogScreen
+import games.yandex.wrap.ui.TabContainer
 import games.yandex.wrap.ui.CatalogViewModel
 import games.yandex.wrap.ui.GameScreen
 import games.yandex.wrap.ui.LogsScreen
@@ -41,15 +42,17 @@ class MainActivity : ComponentActivity() {
             UGamesTheme {
                 var route by remember { mutableStateOf<Route>(initialRoute) }
                 when (val r = route) {
-                        Route.Catalog -> CatalogScreen(
-                            viewModel = catalogVm,
-                            onGameClick = { game ->
-                                catalogVm.recordGameOpen(game)
-                                route = Route.Game(game.appId, game.title)
-                            },
-                            onLoginClick = { route = Route.Auth },
-                            onLogsRequest = { route = Route.Logs },
-                        )
+                        Route.Catalog -> TabContainer(hideBar = false) {
+                            CatalogScreen(
+                                viewModel = catalogVm,
+                                onGameClick = { game ->
+                                    catalogVm.recordGameOpen(game)
+                                    route = Route.Game(game.appId, game.title)
+                                },
+                                onLoginClick = { route = Route.Auth },
+                                onLogsRequest = { route = Route.Logs },
+                            )
+                        }
                         is Route.Game -> GameScreen(
                             appId = r.appId,
                             title = r.title,

@@ -188,7 +188,7 @@ fun CatalogScreen(
                         // Adaptive: at least 160dp wide cards. 360dp phones → 2,
                         // 600dp tablets → 3, 840dp+ landscape → 4-5.
                         columns = GridCells.Adaptive(minSize = 160.dp),
-                        contentPadding = PaddingValues(12.dp),
+                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 96.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.fillMaxSize(),

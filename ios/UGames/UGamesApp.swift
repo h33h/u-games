@@ -53,17 +53,19 @@ struct RootView: View {
             Color.black.ignoresSafeArea()
             switch route {
             case .catalog:
-                CatalogView(
-                    service: catalogService,
-                    recentStore: recentStore,
-                    favoritesStore: favoritesStore,
-                    onGameClick: { game in
-                        recentStore.record(game)
-                        route = .game(appId: game.appId, title: game.title)
-                    },
-                    onLoginClick: { route = .auth },
-                    onLogsRequest: { route = .logs }
-                )
+                TabContainer(hideBar: false) {
+                    CatalogView(
+                        service: catalogService,
+                        recentStore: recentStore,
+                        favoritesStore: favoritesStore,
+                        onGameClick: { game in
+                            recentStore.record(game)
+                            route = .game(appId: game.appId, title: game.title)
+                        },
+                        onLoginClick: { route = .auth },
+                        onLogsRequest: { route = .logs }
+                    )
+                }
             case .game(let appId, let title):
                 GameView(
                     appId: appId,

@@ -110,7 +110,9 @@ struct CatalogView: View {
                             }
                     }
                 }
-                .padding(12)
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+                .padding(.bottom, 96)
                 if service.isLoadingMore {
                     ProgressView().tint(.white).padding(16)
                 }

@@ -142,3 +142,59 @@ struct WideGameCard: View {
         )
     }
 }
+
+/// 130×130 icon card with title underneath. Per-genre rows on Home.
+struct SquareGameCard: View {
+    let game: Game
+    let onTap: () -> Void
+
+    private var halo: Color {
+        Color(hex: game.iconMainColor ?? game.mainColor) ?? UGColor.accent
+    }
+    private var placeholder: Color {
+        Color(hex: game.iconMainColor ?? game.mainColor) ?? UGColor.elevated
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ZStack {
+                placeholder
+                AsyncImage(url: URL(string: game.iconUrl.isEmpty ? game.coverUrl : game.iconUrl)) { phase in
+                    switch phase {
+                    case .success(let img): img.resizable().scaledToFill()
+                    default: Color.clear
+                    }
+                }
+            }
+            .frame(width: 130, height: 130)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(halo.opacity(UGColor.haloBorderAlpha)))
+            .shadow(color: halo.opacity(UGColor.haloAlpha), radius: 14, x: 0, y: 12)
+            Text(game.title)
+                .font(UGFont.bodyS)
+                .foregroundColor(UGColor.textPrimary)
+                .lineLimit(1)
+                .frame(width: 130, alignment: .leading)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
+    }
+}
+
+@available(iOS 17.0, *)
+#Preview("Square", traits: .fixedLayout(width: 160, height: 180)) {
+    ZStack {
+        Color.black.ignoresSafeArea()
+        SquareGameCard(
+            game: Game(
+                appId: 3, title: "Lily's Tea",
+                rating: 4.8, ratingCount: 24,
+                coverUrl: "", iconUrl: "",
+                categories: ["Casual"], developer: "studio",
+                mainColor: "#FF7EB9",
+                iconMainColor: "#FF7EB9"
+            ),
+            onTap: {}
+        )
+    }
+}

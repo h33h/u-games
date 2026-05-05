@@ -92,3 +92,53 @@ struct TileGameCard: View {
         .padding(12)
     }
 }
+
+/// Wide card (140×96) for Continue / Trending / Favorites rows on Home.
+struct WideGameCard: View {
+    let game: Game
+    let onTap: () -> Void
+
+    private var halo: Color { Color(hex: game.mainColor) ?? UGColor.accent }
+    private var placeholder: Color { Color(hex: game.mainColor) ?? UGColor.elevated }
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            placeholder
+            AsyncImage(url: URL(string: game.coverUrl)) { phase in
+                switch phase {
+                case .success(let img): img.resizable().scaledToFill()
+                default: Color.clear
+                }
+            }
+            Text(game.title)
+                .font(UGFont.caption)
+                .foregroundColor(UGColor.textPrimary)
+                .lineLimit(1)
+                .padding(8)
+                .shadow(color: .black.opacity(0.6), radius: 6, x: 0, y: 2)
+        }
+        .frame(width: 140, height: 96)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(halo.opacity(UGColor.haloBorderAlpha)))
+        .shadow(color: halo.opacity(UGColor.haloAlpha), radius: 14, x: 0, y: 12)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: onTap)
+    }
+}
+
+@available(iOS 17.0, *)
+#Preview("Wide", traits: .fixedLayout(width: 180, height: 130)) {
+    ZStack {
+        Color.black.ignoresSafeArea()
+        WideGameCard(
+            game: Game(
+                appId: 2, title: "Drift King",
+                rating: 4.5, ratingCount: 12,
+                coverUrl: "", iconUrl: "",
+                categories: ["Racing"], developer: "studio",
+                mainColor: "#FFC700"
+            ),
+            onTap: {}
+        )
+    }
+}

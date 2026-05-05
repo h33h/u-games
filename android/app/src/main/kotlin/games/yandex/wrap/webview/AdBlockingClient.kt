@@ -148,6 +148,51 @@ class AdBlockingClient(
     }
 }
 
+/**
+ * Install the `window.__yga_log(tag, msg)` shim at document start for every
+ * Yandex frame. The shim forwards calls to the native `ugamesLog`
+ * JavascriptInterface (see [games.yandex.wrap.diagnostics.UgamesLogJsBridge]).
+ * Mirrors the WKUserScript registered in iOS GameWebView.swift before the
+ * documentStart inject scripts.
+ *
+ * Falls back silently if DOCUMENT_START_SCRIPT is unavailable — inject scripts
+ * that try to call `__yga_log` will just no-op.
+ */
+fun installLogBridgeShim(webView: WebView) {
+    if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
+    WebViewCompat.addDocumentStartJavaScript(
+        webView,
+        LOG_BRIDGE_SHIM,
+        setOf(
+            "https://yandex.com",
+            "https://yandex.ru",
+            "https://passport.yandex.com",
+            "https://passport.yandex.ru",
+            "https://*.games.s3.yandex.net",
+            "https://*.cdn.games.yandex.net",
+            "https://*.gamecdn.yandex.net",
+            "https://*.game-static.ru",
+            "https://game-static.ru",
+        ),
+    )
+}
+
+private const val LOG_BRIDGE_SHIM = """
+(function(){
+  if (window.__yga_log) return;
+  window.__yga_log = function(tag, msg){
+    try {
+      window.ugamesLog.postMessage(JSON.stringify({
+        tag: String(tag||'js'),
+        msg: String(msg==null?'':msg),
+        host: location.host,
+        path: location.pathname
+      }));
+    } catch(_){}
+  };
+})();
+"""
+
 @Suppress("unused")
 fun installDocumentStartScripts(webView: WebView, scripts: InjectedScripts) {
     if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return

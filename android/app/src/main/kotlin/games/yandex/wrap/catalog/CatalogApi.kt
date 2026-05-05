@@ -1,5 +1,7 @@
 package games.yandex.wrap.catalog
 
+import android.webkit.CookieManager
+import games.yandex.wrap.diagnostics.LogStore
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
@@ -8,6 +10,8 @@ import io.ktor.client.request.parameter
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpHeaders
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -20,6 +24,10 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 data class FeedPage(
     val games: List<Game>,
@@ -118,28 +126,128 @@ class CatalogApi(private val httpClient: HttpClient) {
     /**
      * Pull `__appData__.userData` from the catalog page HTML to detect login
      * state and obtain avatar / display name.
+     *
+     * Locale-aware: Russian-locale devices fetch yandex.ru/games/ (the same
+     * realm AuthScreen authenticated against) so the SSR sees the matching
+     * Session_id. PWL passport sets Session_id only on `.yandex.com`; Russian
+     * users get geo-redirected to `yandex.ru`, and CookieManager only attaches
+     * cookies for the request's scheme+host pair — `.yandex.com` cookies would
+     * NOT travel onto a `.yandex.ru` redirect, leaving the SSR anonymous. So
+     * we bypass Ktor's HttpCookies plugin and ship a manually-merged Cookie
+     * header containing every yandex.* cookie. Mirrors iOS
+     * CatalogService.fetchProfile + ProfileFetchRedirectDelegate.
      */
-    suspend fun userProfile(lang: String = "en"): UserProfile {
-        val response: HttpResponse = httpClient.get(CATALOG_URL) {
-            parameter("lang", lang)
-            mobileHeaders()
+    suspend fun userProfile(lang: String = "en"): UserProfile = withContext(Dispatchers.IO) {
+        val host = preferredYandexHost()
+        val effectiveLang = if (host == "yandex.ru") "ru" else lang
+        val url = "https://$host/games/?lang=$effectiveLang"
+        val cookieHeader = buildMergedYandexCookieHeader()
+        LogStore.log(
+            "profile",
+            "fetch begin url=$url cookieHeaderLen=${cookieHeader.length}",
+        )
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", MOBILE_UA)
+            .header("Accept", "text/html")
+            .header("Accept-Language", "$effectiveLang,en;q=0.9")
+            .apply { if (cookieHeader.isNotEmpty()) header("Cookie", cookieHeader) }
+            .get()
+            .build()
+        val response = try {
+            profileHttp.newCall(request).execute()
+        } catch (t: Throwable) {
+            LogStore.log("profile", "fetch FAILED: ${t.message}")
+            return@withContext ANON
         }
-        val html = response.bodyAsText()
-        val appData = extractAppData(html) ?: return ANON
-        val parsed = lenientJson.parseToJsonElement(appData) as? JsonObject ?: return ANON
-        val userData = parsed["userData"] as? JsonObject ?: return ANON
+        val html = response.use { resp ->
+            LogStore.log(
+                "profile",
+                "fetch http status=${resp.code} finalUrl=${resp.request.url}",
+            )
+            resp.body?.string().orEmpty()
+        }
+        val appData = extractAppData(html)
+        if (appData == null) {
+            LogStore.log("profile", "NO __appData__ found (htmlLen=${html.length})")
+            return@withContext ANON
+        }
+        val parsed = lenientJson.parseToJsonElement(appData) as? JsonObject
+        if (parsed == null) {
+            LogStore.log("profile", "appData not a JSON object")
+            return@withContext ANON
+        }
+        val userData = parsed["userData"] as? JsonObject
+        if (userData == null) {
+            LogStore.log("profile", "no userData key")
+            return@withContext ANON
+        }
         val uid = userData["uid"]?.jsonPrimitive?.contentOrNull.orEmpty()
-        if (uid.isBlank()) return ANON
+        val login = userData["login"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        LogStore.log(
+            "profile",
+            "userData uid=${uid.ifEmpty { "<empty>" }} login=$login",
+        )
+        if (uid.isBlank()) return@withContext ANON
         val avatarsOrigin = userData["avatarsOrigin"]?.jsonPrimitive?.contentOrNull ?: "https://avatars.mds.yandex.net"
         val avatarId = userData["avatarId"]?.jsonPrimitive?.contentOrNull ?: "0/0-0"
         val avatarUrl = if (avatarId == "0/0-0") "" else "$avatarsOrigin/get-yapic/$avatarId/islands-300"
-        return UserProfile(
+        UserProfile(
             isAuthorized = true,
             displayName = userData["displayName"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-            login = userData["login"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+            login = login,
             avatarUrl = avatarUrl,
             hasYaPlus = userData["yaplusEnabled"]?.jsonPrimitive?.booleanOrNull == true,
         )
+    }
+
+    /**
+     * Reads cookies for both yandex.com and yandex.ru from the system
+     * CookieManager and merges them into a single Cookie header with last-write
+     * dedupe by name (cookies for both TLDs often share names like Session_id;
+     * the freshest value is what passport just set). Returns "" when no
+     * yandex.* cookies are available — the caller skips the Cookie header.
+     */
+    private fun buildMergedYandexCookieHeader(): String {
+        val cm = CookieManager.getInstance()
+        val merged = LinkedHashMap<String, String>()
+        for (host in COOKIE_DONOR_HOSTS) {
+            val raw = cm.getCookie(host).orEmpty()
+            if (raw.isEmpty()) continue
+            for (pair in raw.split(';')) {
+                val trimmed = pair.trim()
+                val idx = trimmed.indexOf('=')
+                if (idx <= 0) continue
+                val name = trimmed.substring(0, idx)
+                val value = trimmed.substring(idx + 1)
+                merged[name] = value
+            }
+        }
+        return merged.entries.joinToString("; ") { "${it.key}=${it.value}" }
+    }
+
+    /**
+     * Locale-aware host pick: Russian users hit yandex.ru so the SSR runs the
+     * same realm passport authenticated against (passport.yandex.ru issues
+     * Session_id only on `.yandex.ru`). Mirrors AuthScreen's preferredHost.
+     */
+    private fun preferredYandexHost(): String =
+        if (Locale.getDefault().language.lowercase().startsWith("ru")) "yandex.ru" else "yandex.com"
+
+    /**
+     * Bare OkHttp client used only for profile fetch. Has NO CookieJar so the
+     * manually-merged Cookie header is preserved across the .com→.ru
+     * geo-redirect (OkHttp's default redirect handling re-sends the original
+     * request headers, including our Cookie). Mirrors iOS
+     * `httpShouldHandleCookies = false`.
+     */
+    private val profileHttp: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
     }
 
     private fun extractAppData(html: String): String? {
@@ -210,5 +318,15 @@ class CatalogApi(private val httpClient: HttpClient) {
         const val COVER_SIZE = "pjpg250x140"
         const val ICON_SIZE = "pjpg256x256"
         val ANON = UserProfile(false, "", "", "", false)
+        // Hosts whose cookie jars contribute to the profile-fetch Cookie
+        // header. Order matters: later entries override earlier ones (last-
+        // write wins) so the freshest Session_id from the user's authenticated
+        // realm is what the SSR sees.
+        val COOKIE_DONOR_HOSTS = listOf(
+            "https://yandex.com",
+            "https://yandex.ru",
+            "https://passport.yandex.com",
+            "https://passport.yandex.ru",
+        )
     }
 }

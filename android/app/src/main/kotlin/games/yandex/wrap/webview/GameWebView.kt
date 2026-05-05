@@ -12,6 +12,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
+import games.yandex.wrap.diagnostics.UgamesLogJsBridge
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -54,9 +57,17 @@ fun GameWebView(
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
 
+            // Bridge `window.__yga_log(tag, msg)` from inject scripts to native
+            // LogStore + OrientationStore. Mirrors iOS WKScriptMessageHandler
+            // named "ugamesLog" in GameWebView.swift. Must be installed BEFORE
+            // documentStart scripts, otherwise the SDK stub's first orient
+            // dispatch races registration and is lost.
+            webView.addJavascriptInterface(UgamesLogJsBridge(), "ugamesLog")
+
             webView.webViewClient = AdBlockingClient(savedBlockList, savedScripts)
             webView.webChromeClient = PopupHandler(ctx, container)
 
+            installLogBridgeShim(webView)
             installDocumentStartScripts(webView, savedScripts)
 
             WebView.setWebContentsDebuggingEnabled(true)

@@ -5,6 +5,8 @@ import androidx.lifecycle.viewModelScope
 import games.yandex.wrap.catalog.CatalogRepository
 import games.yandex.wrap.catalog.Game
 import games.yandex.wrap.catalog.UserProfile
+import games.yandex.wrap.diagnostics.LogStore
+import java.util.Locale
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -130,12 +132,18 @@ class CatalogViewModel(private val repository: CatalogRepository) : ViewModel() 
     /// of that to absorb residual SSR/edge propagation latency.
     fun refreshProfile(attempts: Int = 4) {
         viewModelScope.launch {
-            waitForSessionCookie(timeoutMs = 3000)
+            LogStore.log("profile", "refreshProfile begin")
+            val waited = waitForSessionCookie(timeoutMs = 3000)
+            LogStore.log("profile", "Session_id wait: $waited")
             val delaysMs = longArrayOf(0, 350, 800, 1600)
             for (i in 0 until attempts) {
                 val d = delaysMs[i.coerceAtMost(delaysMs.size - 1)]
                 if (d > 0) delay(d)
                 val profile = runCatching { repository.userProfile() }.getOrNull()
+                LogStore.log(
+                    "profile",
+                    "attempt#${i + 1} -> isAuth=${profile?.isAuthorized} login=${profile?.login.orEmpty()}",
+                )
                 if (profile != null && profile.isAuthorized) {
                     _state.update { it.copy(profile = profile) }
                     return@launch
@@ -144,17 +152,30 @@ class CatalogViewModel(private val repository: CatalogRepository) : ViewModel() 
                     _state.update { it.copy(profile = profile) }
                 }
             }
+            LogStore.log("profile", "refreshProfile end (still anonymous)")
         }
     }
 
-    private suspend fun waitForSessionCookie(timeoutMs: Long) {
+    /**
+     * Wait for Session_id on the locale-preferred Yandex domain. Russian
+     * users authenticate against passport.yandex.ru and CookieManager will
+     * only return cookies scoped to that host; polling yandex.com would
+     * never see the session and time out incorrectly.
+     */
+    private suspend fun waitForSessionCookie(timeoutMs: Long): String {
         val cm = android.webkit.CookieManager.getInstance()
+        val preferredHost = if (Locale.getDefault().language.lowercase().startsWith("ru")) "yandex.ru" else "yandex.com"
         val deadline = System.currentTimeMillis() + timeoutMs
+        var ticks = 0
         while (System.currentTimeMillis() < deadline) {
-            val raw = cm.getCookie("https://yandex.com").orEmpty()
-            if (raw.contains("Session_id=")) return
+            val raw = cm.getCookie("https://$preferredHost").orEmpty()
+            if (raw.contains("Session_id=")) {
+                return "found@$preferredHost after ${ticks * 150}ms"
+            }
             delay(150)
+            ticks++
         }
+        return "TIMEOUT@$preferredHost after ${timeoutMs}ms"
     }
 
     fun signOut() {

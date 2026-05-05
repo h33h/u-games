@@ -19,6 +19,7 @@ import games.yandex.wrap.ui.AuthScreen
 import games.yandex.wrap.ui.CatalogScreen
 import games.yandex.wrap.ui.CatalogViewModel
 import games.yandex.wrap.ui.GameScreen
+import games.yandex.wrap.ui.LogsScreen
 
 class MainActivity : ComponentActivity() {
 
@@ -51,6 +52,7 @@ class MainActivity : ComponentActivity() {
                                 route = Route.Game(game.appId, game.title)
                             },
                             onLoginClick = { route = Route.Auth },
+                            onLogsRequest = { route = Route.Logs },
                         )
                         is Route.Game -> GameScreen(
                             appId = r.appId,
@@ -63,6 +65,7 @@ class MainActivity : ComponentActivity() {
                             catalogVm.refreshProfile()
                             route = Route.Catalog
                         })
+                        Route.Logs -> LogsScreen(onClose = { route = Route.Catalog })
                     }
                 }
             }
@@ -73,6 +76,7 @@ class MainActivity : ComponentActivity() {
 private sealed interface Route {
     data object Catalog : Route
     data object Auth : Route
+    data object Logs : Route
     data class Game(val appId: Long, val title: String) : Route
 }
 

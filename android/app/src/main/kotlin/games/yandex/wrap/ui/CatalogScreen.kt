@@ -1,7 +1,9 @@
 package games.yandex.wrap.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -81,6 +83,7 @@ fun CatalogScreen(
     viewModel: CatalogViewModel,
     onGameClick: (Game) -> Unit,
     onLoginClick: () -> Unit,
+    onLogsRequest: () -> Unit = {},
 ) {
     val state by viewModel.state.collectAsState()
     val recent by viewModel.recent.collectAsState()
@@ -141,6 +144,7 @@ fun CatalogScreen(
                 onProfileClick = {
                     if (state.profile.isAuthorized) profileSheetVisible = true else onLoginClick()
                 },
+                onProfileLongPress = onLogsRequest,
             )
 
             when {
@@ -249,6 +253,7 @@ private fun CatalogTopBar(
     onQueryChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onProfileClick: () -> Unit,
+    onProfileLongPress: () -> Unit = {},
 ) {
     Row(
         modifier = Modifier
@@ -283,18 +288,35 @@ private fun CatalogTopBar(
             shape = RoundedCornerShape(12.dp),
         )
         Spacer(Modifier.size(8.dp))
-        ProfileButton(profile = profile, onClick = onProfileClick)
+        ProfileButton(
+            profile = profile,
+            onClick = onProfileClick,
+            onLongClick = onProfileLongPress,
+        )
     }
 }
 
+/**
+ * Long-press on the profile avatar opens the in-app diagnostic Logs view.
+ * Useful for debugging stuck game launches, auth, and orientation issues
+ * without a USB cable. Mirrors the iOS `.onLongPressGesture` on the topbar —
+ * Compose dispatches gestures top-down so the parent Row can't swallow
+ * long-press without breaking the OutlinedTextField focus, hence we attach
+ * to the profile button area.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ProfileButton(profile: UserProfile, onClick: () -> Unit) {
+private fun ProfileButton(
+    profile: UserProfile,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {},
+) {
     if (profile.isAuthorized && profile.avatarUrl.isNotEmpty()) {
         Box(
             modifier = Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .clickable(onClick = onClick),
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick),
             contentAlignment = Alignment.Center,
         ) {
             AsyncImage(
@@ -305,7 +327,13 @@ private fun ProfileButton(profile: UserProfile, onClick: () -> Unit) {
             )
         }
     } else {
-        IconButton(onClick = onClick, modifier = Modifier.size(40.dp)) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .combinedClickable(onClick = onClick, onLongClick = onLongClick),
+            contentAlignment = Alignment.Center,
+        ) {
             Icon(
                 Icons.Default.AccountCircle,
                 contentDescription = "Login",

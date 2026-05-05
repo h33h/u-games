@@ -161,3 +161,74 @@ private fun TileGameCardPreview() {
         )
     }
 }
+
+/**
+ * Wide card (140×96) for Continue / Trending / Favorites rows on Home.
+ * Title overlaid bottom, full-bleed cover, halo by mainColor.
+ */
+@Composable
+fun WideGameCard(
+    game: Game,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haloColor = parseHexColor(game.mainColor) ?: UGColors.Accent
+    val placeholder = parseHexColor(game.mainColor) ?: UGColors.Elevated
+    Box(
+        modifier = modifier
+            .size(width = 140.dp, height = 96.dp)
+            .shadow(
+                elevation = 12.dp,
+                shape = RoundedCornerShape(16.dp),
+                clip = false,
+                ambientColor = haloColor.copy(alpha = UGColors.HaloAlpha),
+                spotColor = haloColor.copy(alpha = UGColors.HaloAlpha),
+            )
+            .clip(RoundedCornerShape(16.dp))
+            .background(placeholder)
+            .border(
+                width = 1.dp,
+                color = haloColor.copy(alpha = UGColors.HaloBorderAlpha),
+                shape = RoundedCornerShape(16.dp),
+            )
+            .clickable(onClick = onClick),
+    ) {
+        AsyncImage(
+            model = game.coverUrl,
+            contentDescription = game.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxWidth().height(96.dp),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(8.dp),
+        ) {
+            Text(
+                text = game.title,
+                color = UGColors.TextPrimary,
+                style = UGType.Caption,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF000000, widthDp = 180, heightDp = 130)
+@Composable
+private fun WideGameCardPreview() {
+    UGamesTheme {
+        WideGameCard(
+            game = Game(
+                appId = 1, title = "Drift King",
+                rating = 4.5f, ratingCount = 12,
+                coverUrl = "", iconUrl = "",
+                categories = listOf("Racing"), developer = "studio",
+                mainColor = "#FFC700",
+            ),
+            onClick = {},
+            modifier = Modifier.padding(12.dp),
+        )
+    }
+}

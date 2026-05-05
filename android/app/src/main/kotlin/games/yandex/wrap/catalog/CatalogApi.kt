@@ -282,8 +282,16 @@ class CatalogApi(private val httpClient: HttpClient) {
         val rating = item["rating"]?.jsonPrimitive?.floatOrNull ?: 0f
         val ratingCount = item["ratingCount"]?.jsonPrimitive?.intOrNull ?: 0
         val media = item["media"] as? JsonObject
-        val coverPrefix = media?.get("cover")?.jsonObject?.get("prefix-url")?.jsonPrimitive?.contentOrNull
-        val iconPrefix = media?.get("icon")?.jsonObject?.get("prefix-url")?.jsonPrimitive?.contentOrNull
+        val coverObj = media?.get("cover") as? JsonObject
+        val iconObj = media?.get("icon") as? JsonObject
+        val coverPrefix = coverObj?.get("prefix-url")?.jsonPrimitive?.contentOrNull
+        val iconPrefix = iconObj?.get("prefix-url")?.jsonPrimitive?.contentOrNull
+        val mainColor = coverObj?.get("mainColor")?.jsonPrimitive?.contentOrNull
+        val iconMainColor = iconObj?.get("mainColor")?.jsonPrimitive?.contentOrNull
+        val videoUrl = (media?.get("videos") as? JsonArray)
+            ?.firstOrNull()
+            ?.let { it as? JsonObject }
+            ?.get("mp4StreamUrl")?.jsonPrimitive?.contentOrNull
         val categories = (item["categoriesNames"] as? JsonElement)
             ?.let { it as? JsonArray }
             ?.mapNotNull { it.jsonPrimitive.contentOrNull }
@@ -300,6 +308,9 @@ class CatalogApi(private val httpClient: HttpClient) {
             iconUrl = iconPrefix?.let { it + ICON_SIZE } ?: coverPrefix?.let { it + ICON_SIZE } ?: "",
             categories = categories,
             developer = developer,
+            mainColor = mainColor,
+            iconMainColor = iconMainColor,
+            videoUrl = videoUrl,
         )
     }
 

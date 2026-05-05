@@ -44,6 +44,11 @@ targets:
           UIColorName: black
         NSAppTransportSecurity:
           NSAllowsArbitraryLoadsInWebContent: true
+        LSRequiresIPhoneOS: true
+        CFBundleURLTypes:
+          - CFBundleURLName: games.yandex.wrap.ugames
+            CFBundleURLSchemes:
+              - ugames
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: games.yandex.wrap

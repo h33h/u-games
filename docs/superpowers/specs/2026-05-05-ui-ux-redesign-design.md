@@ -80,8 +80,9 @@ TabContainer (bottom tabs, floating glass)
 
 | Стиль | Размер / Вес / Tracking | Использование |
 |---|---|---|
-| Display | 30 / 900 / -0.8px | Hero title, Detail title (часть слов в `cover.mainColor`) |
-| Title-L | 24 / 800 / -0.5px | Greeting Home (`Good evening`), Detail eyebrow-следующий |
+| Display-XL | 34 / 900 / -1.0px | Detail title (часть слов в `cover.mainColor`) |
+| Display | 30 / 900 / -0.8px | Hero title (часть слов в `cover.mainColor`) |
+| Title-L | 24 / 800 / -0.5px | Greeting Home (`Good evening`) |
 | Title-M | 18 / 800 / -0.3px | Заголовки рядов («Trending now») |
 | Body | 15 / 400 | Описание игры |
 | Body-S | 13 / 500 | Карточка title, мета |
@@ -153,7 +154,7 @@ TabContainer (bottom tabs, floating glass)
 `ScrollView` с прозрачным sticky-низом.
 
 1. **Hero 360dp** — те же правила что Home Hero (видео или градиент по `mainColor`). Sticky-меньше: на скролле hero уходит за безопасную зону, размер 360→160dp с parallax-fade. Top-кнопки `← / ♥ / ↗` остаются sticky на topbar (glass).
-2. **Title block** — eyebrow «{categoriesNames[0]} · {year}» (year хардкодим текущим, если в feed нет). Display-34/900, последнее слово в `cover.mainColor`. Stat-chips: `★ {rating}`, `{ratingCount} ratings`, `No ads` (yellow-tint).
+2. **Title block** — eyebrow «{categoriesNames[0]} · {year}» (year хардкодим текущим, если в feed нет). Display-XL (см. типографику), последнее слово в `cover.mainColor`. Stat-chips: `★ {rating}`, `{ratingCount} ratings`, `No ads` (yellow-tint).
 3. **About** — eyebrow `ABOUT`, body. Поле описания **проверяем на этапе implement**: в `feed-schema.md` `description` не задокументирован. Если в живом ответе нет — секция скрывается.
 4. **Stats grid** (3 колонки, `surface`-карточки 14r):
    - `Genre` — `categoriesNames[0]` capitalized.
@@ -181,7 +182,7 @@ TabContainer (bottom tabs, floating glass)
 
 - `Adaptive(160dp)`, `aspect-ratio 16/10` cover, `mainColor` фолбэк до загрузки.
 - Внутри cover: top-right heart toggle 30dp glass-circle, bottom-left rating pill (`★ {rating}` accent text on dark glass).
-- Под cover: title (Body-S 13/500, max 1 line), мета `{genre} · {ratingCount} ratings` (Caption 10/600 muted).
+- Под cover: title (Body-S 13/500, max 2 lines), мета `{genre} · {ratingCount} ratings` (Caption 10/600 muted).
 - Halo по `mainColor`.
 
 ### Wide (Continue, Trending row, Favorites row на Home)

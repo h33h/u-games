@@ -232,3 +232,74 @@ private fun WideGameCardPreview() {
         )
     }
 }
+
+/**
+ * Square 130×130 icon card for per-genre rows. Title under cover.
+ * Uses iconUrl primarily (icons are square in feed; covers are 16:9).
+ */
+@Composable
+fun SquareGameCard(
+    game: Game,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haloColor = parseHexColor(game.iconMainColor ?: game.mainColor) ?: UGColors.Accent
+    val placeholder = parseHexColor(game.iconMainColor ?: game.mainColor) ?: UGColors.Elevated
+    Column(
+        modifier = modifier.clickable(onClick = onClick),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(130.dp)
+                .shadow(
+                    elevation = 12.dp,
+                    shape = RoundedCornerShape(16.dp),
+                    clip = false,
+                    ambientColor = haloColor.copy(alpha = UGColors.HaloAlpha),
+                    spotColor = haloColor.copy(alpha = UGColors.HaloAlpha),
+                )
+                .clip(RoundedCornerShape(16.dp))
+                .background(placeholder)
+                .border(
+                    width = 1.dp,
+                    color = haloColor.copy(alpha = UGColors.HaloBorderAlpha),
+                    shape = RoundedCornerShape(16.dp),
+                ),
+        ) {
+            AsyncImage(
+                model = game.iconUrl.ifEmpty { game.coverUrl },
+                contentDescription = game.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(130.dp),
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = game.title,
+            color = UGColors.TextPrimary,
+            style = UGType.BodyS,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 2.dp),
+        )
+    }
+}
+
+@Preview(showBackground = true, backgroundColor = 0xFF000000, widthDp = 160, heightDp = 180)
+@Composable
+private fun SquareGameCardPreview() {
+    UGamesTheme {
+        SquareGameCard(
+            game = Game(
+                appId = 1, title = "Lily's Tea",
+                rating = 4.8f, ratingCount = 24,
+                coverUrl = "", iconUrl = "",
+                categories = listOf("Casual"), developer = "studio",
+                mainColor = "#FF7EB9",
+                iconMainColor = "#FF7EB9",
+            ),
+            onClick = {},
+            modifier = Modifier.padding(12.dp),
+        )
+    }
+}

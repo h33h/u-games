@@ -400,6 +400,12 @@ private enum GameDecoder {
         let media = item["media"] as? [String: Any]
         let cover = (media?["cover"] as? [String: Any])?["prefix-url"] as? String
         let icon = (media?["icon"] as? [String: Any])?["prefix-url"] as? String
+        let coverObj = media?["cover"] as? [String: Any]
+        let iconObj = media?["icon"] as? [String: Any]
+        let mainColor = coverObj?["mainColor"] as? String
+        let iconMainColor = iconObj?["mainColor"] as? String
+        let videos = media?["videos"] as? [[String: Any]]
+        let videoUrl = videos?.first?["mp4StreamUrl"] as? String
         let categories = (item["categoriesNames"] as? [String]) ?? []
         let developer = (item["developer"] as? [String: Any])?["name"] as? String ?? ""
         let coverUrl = cover.map { "\($0)pjpg250x140" } ?? ""
@@ -412,7 +418,10 @@ private enum GameDecoder {
             coverUrl: coverUrl,
             iconUrl: iconUrl,
             categories: categories,
-            developer: developer
+            developer: developer,
+            mainColor: mainColor,
+            iconMainColor: iconMainColor,
+            videoUrl: videoUrl
         )
     }
 }

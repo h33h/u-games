@@ -21,8 +21,9 @@ object UGColors {
     val AccentEnd = Color(0xFFFF7E00)
     val Danger = Color(0xFFFF4D6A)
 
-    /** Glass surface fallback for API < 31 (no blur). */
-    val GlassFallback = Color(0xCC141418)
+    /** Glass surface fallback for API < 31 (no blur). 0xD9 ≈ 0.85 alpha,
+     *  matches iOS UGColor.glassFallback. */
+    val GlassFallback = Color(0xD9141418)
 
     /** 35% opacity glow used in shadow tints — see Modifier.coloredHalo. */
     val HaloAlpha = 0.35f

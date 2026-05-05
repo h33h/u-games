@@ -79,7 +79,7 @@ fun StoryCard(
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 54.dp)
+                    .padding(top = 24.dp)
                     .offset(x = (-14 - index * 8).dp)
                     .rotate(degrees = (-8 + index * 8).toFloat())
                     .size(42.dp)

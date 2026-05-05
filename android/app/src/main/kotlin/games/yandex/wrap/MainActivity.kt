@@ -4,14 +4,10 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.viewModelFactory
 import androidx.lifecycle.viewmodel.initializer
@@ -20,6 +16,7 @@ import games.yandex.wrap.ui.CatalogScreen
 import games.yandex.wrap.ui.CatalogViewModel
 import games.yandex.wrap.ui.GameScreen
 import games.yandex.wrap.ui.LogsScreen
+import games.yandex.wrap.ui.theme.UGamesTheme
 
 class MainActivity : ComponentActivity() {
 
@@ -41,10 +38,9 @@ class MainActivity : ComponentActivity() {
         } ?: Route.Catalog
 
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
-                Surface(color = Color.Black) {
-                    var route by remember { mutableStateOf<Route>(initialRoute) }
-                    when (val r = route) {
+            UGamesTheme {
+                var route by remember { mutableStateOf<Route>(initialRoute) }
+                when (val r = route) {
                         Route.Catalog -> CatalogScreen(
                             viewModel = catalogVm,
                             onGameClick = { game ->
@@ -65,8 +61,7 @@ class MainActivity : ComponentActivity() {
                             catalogVm.refreshProfile()
                             route = Route.Catalog
                         })
-                        Route.Logs -> LogsScreen(onClose = { route = Route.Catalog })
-                    }
+                    Route.Logs -> LogsScreen(onClose = { route = Route.Catalog })
                 }
             }
         }

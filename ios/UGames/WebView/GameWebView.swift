@@ -5,6 +5,7 @@ struct GameWebView: UIViewRepresentable {
     let url: URL
     let scripts: InjectedScripts
     let blockList: BlockList
+    var paused: Bool = false
 
     func makeCoordinator() -> Coordinator { Coordinator(scripts: scripts) }
 
@@ -109,6 +110,37 @@ struct GameWebView: UIViewRepresentable {
         if webView.url != url {
             webView.load(URLRequest(url: url))
         }
+        // Reflect the paused flag into the page: dispatch a visibilitychange
+        // event with the corresponding visibilityState getter override and
+        // pause every <video>/<audio> the game has lying around. Most games
+        // (and the Yandex SDK stub) honour visibilitychange and stop their
+        // RAF loop, which is the closest WKWebView lets us get to a true
+        // "pause timers" without private API. isUserInteractionEnabled is
+        // toggled too so stray taps behind the rotate overlay can't reach
+        // the canvas.
+        let js = Self.visibilityJS(paused: paused)
+        webView.evaluateJavaScript(js, completionHandler: nil)
+        webView.isUserInteractionEnabled = !paused
+    }
+
+    private static func visibilityJS(paused: Bool) -> String {
+        let state = paused ? "hidden" : "visible"
+        return """
+        (function(){
+          try {
+            Object.defineProperty(document, 'visibilityState', {
+              configurable: true,
+              get: function() { return '\(state)'; }
+            });
+            Object.defineProperty(document, 'hidden', {
+              configurable: true,
+              get: function() { return \(paused ? "true" : "false"); }
+            });
+            document.dispatchEvent(new Event('visibilitychange'));
+            \(paused ? "document.querySelectorAll('video,audio').forEach(function(e){ try{e.pause();}catch(_){} });" : "")
+          } catch(_) {}
+        })();
+        """
     }
 
     final class Coordinator: NSObject, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler {

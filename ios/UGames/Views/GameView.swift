@@ -10,6 +10,7 @@ struct GameView: View {
 
     @State private var showBack: Bool = true
     @State private var revision: Int = 0
+    @State private var exiting: Bool = false
     @StateObject private var orient: OrientationStore = .shared
 
     var body: some View {
@@ -17,7 +18,8 @@ struct GameView: View {
             let isPortrait = proxy.size.height >= proxy.size.width
             content(isPortrait: isPortrait)
         }
-        .ignoresSafeArea()
+        .persistentSystemOverlays(.hidden)
+        .defersSystemGestures(on: .bottom)
     }
 
     @ViewBuilder
@@ -32,6 +34,7 @@ struct GameView: View {
                     blockList: blockList,
                     paused: overlayVisible,
                 )
+                .ignoresSafeArea()
             }
 
             Color.clear
@@ -48,7 +51,7 @@ struct GameView: View {
                     diameter: 40,
                     iconSize: 18,
                     background: Color.black.opacity(0.8),
-                    action: onBack
+                    action: handleBack
                 )
                 .padding(.leading, UGSpace.m)
                 .padding(.top, UGSpace.s)
@@ -56,27 +59,47 @@ struct GameView: View {
             }
 
             if overlayVisible, let target = orient.required {
-                RotateDeviceOverlay(target: target, onBack: onBack)
+                RotateDeviceOverlay(target: target, onBack: handleBack)
+                    .ignoresSafeArea()
                     .transition(.opacity)
+            }
+
+            if exiting {
+                Color.black
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+                    .accessibilityHidden(true)
             }
         }
         .navigationBarBackButtonHidden(true)
         .onChange(of: revision) { _ in scheduleHide() }
         .onAppear {
             orient.reset()
+            orient.gameActive = true
             scheduleHide()
         }
         .onDisappear {
             orient.reset()
+            orient.gameActive = false
         }
         .gesture(
             DragGesture()
                 .onEnded { value in
                     if value.translation.width > 80 && abs(value.translation.height) < 60 {
-                        onBack()
+                        handleBack()
                     }
                 }
         )
+    }
+
+    private func handleBack() {
+        guard !exiting else { return }
+        exiting = true
+        orient.gameActive = false
+        requestPortrait()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            onBack()
+        }
     }
 
     private func isOverlayVisible(isPortrait: Bool) -> Bool {
@@ -95,6 +118,16 @@ struct GameView: View {
                 withAnimation { showBack = false }
             }
         }
+    }
+
+    private func requestPortrait() {
+        guard let scene = UIApplication.shared
+            .connectedScenes
+            .compactMap({ $0 as? UIWindowScene })
+            .first(where: { $0.activationState == .foregroundActive })
+        else { return }
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) { _ in }
+        scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
     }
 }
 

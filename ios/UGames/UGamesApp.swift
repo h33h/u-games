@@ -4,6 +4,8 @@ import WebKit
 
 @main
 struct UGamesApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     init() {
         _ = SharedCookieStore.shared
 
@@ -20,6 +22,15 @@ struct UGamesApp: App {
                 .preferredColorScheme(.dark)
                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         }
+    }
+}
+
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        supportedInterfaceOrientationsFor window: UIWindow?
+    ) -> UIInterfaceOrientationMask {
+        OrientationLock.gameActive ? .allButUpsideDown : .portrait
     }
 }
 

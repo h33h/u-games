@@ -9,35 +9,36 @@ struct StoryCard: View {
     private var anchor: Color { Color(hex: games.first?.mainColor) ?? UGColor.Accent.primary }
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            LinearGradient(
-                colors: [anchor.opacity(0.55), Color(red: 0x0A/255.0, green: 0x04/255.0, blue: 0x18/255.0)],
-                startPoint: .topLeading, endPoint: .bottomTrailing
-            )
-            stackedCovers
-            LinearGradient(
-                stops: [.init(color: .clear, location: 0.5), .init(color: .black.opacity(0.6), location: 1.0)],
-                startPoint: .top, endPoint: .bottom
-            )
-            VStack(alignment: .leading, spacing: UGSpace.xs) {
-                Text(subtitle)
-                    .font(UGFont.label)
-                    .foregroundColor(UGColor.Text.secondary)
-                Text(title)
-                    .font(UGFont.titleL)
-                    .foregroundColor(UGColor.Text.primary)
-                    .lineLimit(2)
-            }
-            .padding(UGSpace.l)
-        }
-        .frame(height: UGSize.storyH)
-        .haloChrome(anchor, size: .xl)
-        .pressable()
-        .contentShape(Rectangle())
-        .onTapGesture {
+        Button {
             UGHaptics.tap()
             onTap()
+        } label: {
+            ZStack(alignment: .bottomLeading) {
+                LinearGradient(
+                    colors: [anchor.opacity(0.55), Color(red: 0x0A/255.0, green: 0x04/255.0, blue: 0x18/255.0)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+                stackedCovers
+                LinearGradient(
+                    stops: [.init(color: .clear, location: 0.5), .init(color: .black.opacity(0.6), location: 1.0)],
+                    startPoint: .top, endPoint: .bottom
+                )
+                VStack(alignment: .leading, spacing: UGSpace.xs) {
+                    Text(subtitle)
+                        .font(UGFont.label)
+                        .foregroundColor(UGColor.Text.secondary)
+                    Text(title)
+                        .font(UGFont.titleL)
+                        .foregroundColor(UGColor.Text.primary)
+                        .lineLimit(2)
+                }
+                .padding(UGSpace.l)
+            }
+            .frame(height: UGSize.storyH)
+            .haloChrome(anchor, size: .xl)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(PressableCardStyle())
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel("\(subtitle). \(title)")

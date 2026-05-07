@@ -8,6 +8,9 @@ final class OrientationStore: ObservableObject {
     enum Required { case landscape, portrait }
 
     @Published var required: Required? = nil
+    @Published var gameActive: Bool = false {
+        didSet { OrientationLock.gameActive = gameActive }
+    }
 
     private init() {}
 
@@ -21,4 +24,8 @@ final class OrientationStore: ObservableObject {
             required = .portrait
         }
     }
+}
+
+enum OrientationLock {
+    nonisolated(unsafe) static var gameActive: Bool = false
 }

@@ -1,7 +1,45 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "An unofficial Yandex Games wrapper. Open source under MIT." : {
 
+    },
+    "Back to catalog" : {
+
+    },
+    "by %@" : {
+
+    },
+    "Couldn't load related games" : {
+
+    },
+    "Favorites · %@" : {
+
+    },
+    "No log entries yet.\nReproduce the issue, then re-open this view." : {
+
+    },
+    "Profile" : {
+
+    },
+    "Search games" : {
+
+    },
+    "See all" : {
+
+    },
+    "Signing in via Yandex Passport…" : {
+
+    },
+    "U-Games" : {
+
+    },
+    "v%@" : {
+
+    },
+    "View on GitHub →" : {
+
+    }
   },
   "version" : "1.0"
 }

@@ -510,7 +510,7 @@ private struct ZoomableImage: View {
                 .offset(offset)
                 .frame(width: geo.size.width, height: geo.size.height)
                 .gesture(magnification)
-                .simultaneousGesture(panWhenZoomed)
+                .simultaneousGesture(panWhenZoomed, including: isZoomed ? .all : .none)
                 .onTapGesture(count: 2) { toggleDoubleTapZoom() }
             }
         }

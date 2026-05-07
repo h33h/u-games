@@ -10,27 +10,28 @@ struct HeroSection: View {
     private var placeholder: Color { Color(hex: game.mainColor) ?? UGColor.Surface.raised }
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            CoverImage(
-                url: URL(string: game.coverUrl(size: "pjpg1280x720")),
-                placeholder: placeholder
-            )
-            LinearGradient(
-                stops: [.init(color: .clear, location: 0.35), .init(color: .black.opacity(0.85), location: 1.0)],
-                startPoint: .top, endPoint: .bottom
-            )
-            VStack { topRow; Spacer() }
-            bottomBlock
-        }
-        .frame(height: UGSize.heroH)
-        .frame(maxWidth: .infinity)
-        .haloChrome(halo, size: .xl)
-        .pressable()
-        .contentShape(RoundedRectangle(cornerRadius: UGRadius.xl))
-        .onTapGesture {
+        Button {
             UGHaptics.tap()
             onPlay()
+        } label: {
+            ZStack(alignment: .bottomLeading) {
+                CoverImage(
+                    url: URL(string: game.coverUrl(size: "pjpg1280x720")),
+                    placeholder: placeholder
+                )
+                LinearGradient(
+                    stops: [.init(color: .clear, location: 0.35), .init(color: .black.opacity(0.85), location: 1.0)],
+                    startPoint: .top, endPoint: .bottom
+                )
+                VStack { topRow; Spacer() }
+                bottomBlock
+            }
+            .frame(height: UGSize.heroH)
+            .frame(maxWidth: .infinity)
+            .haloChrome(halo, size: .xl)
+            .contentShape(RoundedRectangle(cornerRadius: UGRadius.xl))
         }
+        .buttonStyle(PressableCardStyle())
         .accessibilityElement(children: .contain)
     }
 

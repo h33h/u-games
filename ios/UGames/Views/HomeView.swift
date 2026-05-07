@@ -97,10 +97,10 @@ struct HomeView: View {
             HStack(spacing: UGSpace.m) {
                 ForEach(games) { g in
                     GameCard(game: g, style: .wide, onTap: { onGameClick(g) })
-                        .padding(.vertical, UGSpace.xxxl)
                 }
             }
             .padding(.horizontal, UGSpace.l)
+            .padding(.bottom, UGSpace.l)
         }
     }
 
@@ -110,10 +110,10 @@ struct HomeView: View {
             HStack(spacing: UGSpace.m) {
                 ForEach(games) { g in
                     GameCard(game: g, style: .square, onTap: { onGameClick(g) })
-                        .padding(.vertical, UGSpace.xl)
                 }
             }
             .padding(.horizontal, UGSpace.l)
+            .padding(.bottom, UGSpace.l)
         }
     }
 }

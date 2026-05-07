@@ -29,19 +29,20 @@ struct GameCard: View {
     }
 
     var body: some View {
-        Group {
-            switch style {
-            case .tile: tileBody
-            case .wide: wideBody
-            case .square: squareBody
-            }
-        }
-        .pressable()
-        .contentShape(Rectangle())
-        .onTapGesture {
+        Button {
             UGHaptics.tap()
             onTap()
+        } label: {
+            Group {
+                switch style {
+                case .tile: tileBody
+                case .wide: wideBody
+                case .square: squareBody
+                }
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(PressableCardStyle())
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(game.title)

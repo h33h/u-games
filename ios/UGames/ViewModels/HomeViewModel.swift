@@ -87,7 +87,15 @@ final class HomeViewModel: ObservableObject {
         } catch {
             self.error = error.localizedDescription
         }
-        await service.refreshProfile()
+        // Detach the profile fetch so it survives the calling view-task
+        // being cancelled when the user opens a game right after Home
+        // loads. Logs were showing 4× "FAILED: cancelled" within 1 ms —
+        // that's URLSession.data(for:) tripping over Task cancellation
+        // before the first network roundtrip lands.
+        let svc = service
+        Task.detached(priority: .userInitiated) {
+            await svc.refreshProfile()
+        }
     }
 
     func toggleFavorite(_ game: Game) {

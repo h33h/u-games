@@ -9,6 +9,7 @@ import android.webkit.WebView
 import android.widget.FrameLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
@@ -27,6 +28,12 @@ fun GameWebView(
 ) {
     val savedScripts = remember { scripts }
     val savedBlockList = remember { blockList }
+    // Track the last applied paused state so update only flips onPause/
+    // onResume when the flag actually changes. Calling onPause/pauseTimers
+    // on every recomposition was harmless on the success path but the
+    // wasted work made the WebView visibly stutter during scroll-driven
+    // tab redraws (e.g. the rotate overlay flicking on for a frame).
+    val lastPausedRef = remember { mutableStateOf<Boolean?>(null) }
 
     AndroidView(
         modifier = modifier,
@@ -83,12 +90,23 @@ fun GameWebView(
             // orientation we can't satisfy aren't burning frames behind the
             // rotate overlay. resumeTimers is global on WebView prior to API
             // 28, so calling it on a single instance is enough.
-            if (paused) {
-                webView.onPause()
-                webView.pauseTimers()
-            } else {
-                webView.onResume()
-                webView.resumeTimers()
+            //
+            // Only flip when paused changes — and skip the very first call
+            // when paused is false, because the WebView starts running by
+            // default and an unconditional resumeTimers() before loadUrl
+            // finishes can race some game engines' boot sequence.
+            val last = lastPausedRef.value
+            if (last == null && !paused) {
+                lastPausedRef.value = paused
+            } else if (last != paused) {
+                lastPausedRef.value = paused
+                if (paused) {
+                    webView.onPause()
+                    webView.pauseTimers()
+                } else {
+                    webView.onResume()
+                    webView.resumeTimers()
+                }
             }
         },
         onRelease = { container ->

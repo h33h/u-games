@@ -110,17 +110,25 @@ struct GameWebView: UIViewRepresentable {
         if webView.url != url {
             webView.load(URLRequest(url: url))
         }
-        // Reflect the paused flag into the page: dispatch a visibilitychange
-        // event with the corresponding visibilityState getter override and
-        // pause every <video>/<audio> the game has lying around. Most games
-        // (and the Yandex SDK stub) honour visibilitychange and stop their
-        // RAF loop, which is the closest WKWebView lets us get to a true
-        // "pause timers" without private API. isUserInteractionEnabled is
-        // toggled too so stray taps behind the rotate overlay can't reach
-        // the canvas.
-        let js = Self.visibilityJS(paused: paused)
-        webView.evaluateJavaScript(js, completionHandler: nil)
-        webView.isUserInteractionEnabled = !paused
+        // Only emit the visibility-change script when the paused flag
+        // actually flips. Earlier we ran it on every recomposition, which
+        // overrode `document.visibilityState` getter mid-game-init and
+        // tripped some games (e.g. Construct 3 / GamePush titles like
+        // game id 388978) into a "GamePush Timeout 5000ms" boot loop.
+        // Skip the very first update when paused is false — the page
+        // already starts in the visible state, so the no-op script we'd
+        // emit is just dead weight that races init.
+        let last = context.coordinator.lastPausedState
+        if last == nil && !paused {
+            context.coordinator.lastPausedState = paused
+            return
+        }
+        if last != paused {
+            context.coordinator.lastPausedState = paused
+            let js = Self.visibilityJS(paused: paused)
+            webView.evaluateJavaScript(js, completionHandler: nil)
+            webView.isUserInteractionEnabled = !paused
+        }
     }
 
     private static func visibilityJS(paused: Bool) -> String {
@@ -144,6 +152,12 @@ struct GameWebView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler {
+
+        /// Tracks the last applied paused state so updateUIView only re-runs
+        /// the visibility-change script when the flag actually flips. Optional
+        /// so the FIRST update is a no-op (the default page state already
+        /// matches `paused == false`).
+        var lastPausedState: Bool? = nil
 
         // Receives `window.__yga_log(tag, msg)` calls from the inject scripts.
         func userContentController(_ userContentController: WKUserContentController,

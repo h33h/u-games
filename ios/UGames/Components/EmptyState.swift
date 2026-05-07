@@ -12,7 +12,7 @@ struct EmptyState: View {
             Image(systemName: systemIcon)
                 .font(.system(size: 48, weight: .light))
                 .foregroundColor(UGColor.textMuted)
-                .padding(.bottom, 14)
+                .padding(.bottom, UGSpace.l)
             Text(title)
                 .font(UGFont.titleM)
                 .foregroundColor(UGColor.textPrimary)
@@ -21,23 +21,15 @@ struct EmptyState: View {
                     .font(UGFont.bodyS)
                     .foregroundColor(UGColor.textMuted)
                     .multilineTextAlignment(.center)
-                    .padding(.top, 6)
+                    .padding(.top, UGSpace.s)
             }
             if let ctaLabel, let onCta {
-                Button(action: onCta) {
-                    Text(ctaLabel)
-                        .font(UGFont.bodyS)
-                        .foregroundColor(.black)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 10)
-                        .background(LinearGradient.ugAccent)
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
-                }
-                .padding(.top, 16)
+                UGPillButton(title: ctaLabel, shape: .rounded(UGRadius.m), action: onCta)
+                    .padding(.top, UGSpace.l)
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 32)
+        .padding(.horizontal, UGSpace.xxl)
+        .padding(.vertical, UGSpace.huge)
     }
 }
 

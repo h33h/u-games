@@ -31,6 +31,91 @@ extension LinearGradient {
     }
 }
 
+/// Single source of truth for every drop-shadow in the app. Each case
+/// encodes color/opacity/radius/offset so call sites stay declarative
+/// (`.ugShadow(.haloLg(halo))`) and visual changes happen in one place.
+enum UGShadow {
+    /// Hero/feature surfaces — biggest cards (Hero, StoryCard, Detail hero).
+    case haloXL(Color)
+    /// Standard cards (Tile, Wide, Square in grids and rows).
+    case haloLg(Color)
+    /// Compact media tiles (Detail screenshots, More-like-this).
+    case haloSm(Color)
+    /// Floating chrome (tab bar) — neutral black drop.
+    case chrome
+    /// Drop behind overlay text on imagery for legibility.
+    case overlayText
+    /// Soft accent glow for the active state (chips). Pass `nil` to disable.
+    case glow(Color?)
+    /// CTA button halo (▶ Play now).
+    case cta(Color)
+    /// Tiny stacked elements (StoryCard mini-covers).
+    case stack
+}
+
+extension View {
+    @ViewBuilder
+    func ugShadow(_ token: UGShadow) -> some View {
+        switch token {
+        case .haloXL(let c):
+            shadow(color: c.opacity(UGColor.haloAlpha), radius: 20, x: 0, y: 14)
+        case .haloLg(let c):
+            shadow(color: c.opacity(UGColor.haloAlpha), radius: 14, x: 0, y: 12)
+        case .haloSm(let c):
+            shadow(color: c.opacity(UGColor.haloAlpha), radius: 12, x: 0, y: 8)
+        case .chrome:
+            shadow(color: .black.opacity(0.5), radius: 16, x: 0, y: 12)
+        case .overlayText:
+            shadow(color: .black.opacity(0.6), radius: 6, x: 0, y: 2)
+        case .glow(let c):
+            shadow(color: (c ?? .clear).opacity(0.4), radius: 8, x: 0, y: 0)
+        case .cta(let c):
+            shadow(color: c.opacity(0.5), radius: 18, x: 0, y: 8)
+        case .stack:
+            shadow(color: .black.opacity(0.45), radius: 6, x: 0, y: 2)
+        }
+    }
+}
+
+/// Three card-art tiers that pair a rounded-corner radius with the
+/// matching halo shadow token. Centralises the "clip + tinted border +
+/// tinted drop shadow" decoration every game-art surface uses.
+enum UGHaloSize {
+    /// Hero / Story / Detail-hero (radius 22, XL drop).
+    case xl
+    /// Tile / Wide / Square (radius 16, Lg drop).
+    case lg
+    /// Compact media (Detail screenshot tile — radius 16, Sm drop).
+    case sm
+
+    var cornerRadius: CGFloat {
+        switch self {
+        case .xl: UGRadius.xl
+        case .lg, .sm: UGRadius.l
+        }
+    }
+
+    func shadow(_ color: Color) -> UGShadow {
+        switch self {
+        case .xl: .haloXL(color)
+        case .lg: .haloLg(color)
+        case .sm: .haloSm(color)
+        }
+    }
+}
+
+extension View {
+    /// Standard "halo" decoration for a game-art surface: rounded clip
+    /// + faint tinted stroke + tinted drop shadow. The same triplet
+    /// every card had inlined.
+    func haloChrome(_ color: Color, size: UGHaloSize) -> some View {
+        let shape = RoundedRectangle(cornerRadius: size.cornerRadius)
+        return clipShape(shape)
+            .overlay(shape.stroke(color.opacity(UGColor.haloBorderAlpha)))
+            .ugShadow(size.shadow(color))
+    }
+}
+
 /// Typography tokens. Sizes from the spec table.
 enum UGFont {
     static let displayXL = Font.system(size: 34, weight: .black)

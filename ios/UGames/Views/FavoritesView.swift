@@ -5,7 +5,7 @@ struct FavoritesView: View {
     let onGameClick: (Game) -> Void
     let onBrowse: () -> Void
 
-    private let columns = [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 12)]
+    private let columns = [GridItem(.adaptive(minimum: UGSize.tileGridMin, maximum: UGSize.tileGridMax), spacing: UGSpace.m)]
 
     var body: some View {
         ZStack {
@@ -24,9 +24,9 @@ struct FavoritesView: View {
                         .font(UGFont.titleM)
                         .foregroundColor(UGColor.textPrimary)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 14)
-                        .padding(.top, 12)
-                    LazyVGrid(columns: columns, spacing: 12) {
+                        .padding(.horizontal, UGSpace.l)
+                        .padding(.top, UGSpace.m)
+                    LazyVGrid(columns: columns, spacing: UGSpace.m) {
                         ForEach(favorites.games) { game in
                             TileGameCard(
                                 game: game,
@@ -36,9 +36,9 @@ struct FavoritesView: View {
                             )
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.top, 8)
-                    .padding(.bottom, 96)
+                    .padding(.horizontal, UGSpace.m)
+                    .padding(.top, UGSpace.s)
+                    .padding(.bottom, UGSize.tabBarInset)
                 }
             }
         }

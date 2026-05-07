@@ -15,23 +15,13 @@ struct ProfileView: View {
         ZStack(alignment: .top) {
             UGColor.bg0.ignoresSafeArea()
             VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Button(action: onBack) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(UGColor.textPrimary)
-                            .padding(8)
-                    }
-                    Text("Profile").font(UGFont.titleM).foregroundColor(UGColor.textPrimary)
-                    Spacer()
-                }
-                .padding(.horizontal, 8)
-                Spacer().frame(height: 16)
+                UGTopBar(title: "Profile", onBack: onBack)
+                Spacer().frame(height: UGSpace.l)
                 hero
-                    .padding(.horizontal, 18)
-                Spacer().frame(height: 28)
+                    .padding(.horizontal, UGSpace.l)
+                Spacer().frame(height: UGSpace.xxxl)
                 settingsCard
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, UGSpace.l)
                 Spacer()
             }
         }
@@ -40,32 +30,12 @@ struct ProfileView: View {
     @ViewBuilder
     private var hero: some View {
         let p = service.profile
-        HStack(alignment: .center, spacing: 16) {
-            Group {
-                if p.isAuthorized, let url = URL(string: p.avatarUrl), !p.avatarUrl.isEmpty {
-                    CachedAsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let img): img.resizable().scaledToFill()
-                        default: UGColor.elevated
-                        }
-                    }
-                    .frame(width: 96, height: 96)
-                    .clipShape(Circle())
-                    .overlay(Circle().stroke(LinearGradient.ugAccent, lineWidth: p.hasYaPlus ? 3 : 0))
-                } else {
-                    ZStack {
-                        Circle().fill(UGColor.elevated)
-                        Image(systemName: "person.crop.circle")
-                            .font(.system(size: 56))
-                            .foregroundColor(UGColor.textMuted)
-                    }
-                    .frame(width: 96, height: 96)
-                }
-            }
-            .contentShape(Circle())
-            .onLongPressGesture(minimumDuration: 0.7) { onLogsClick() }
+        HStack(alignment: .center, spacing: UGSpace.l) {
+            UGAvatar(profile: p, diameter: UGSize.avatarL, plusBorderWidth: 3, fallbackIconSize: 56)
+                .contentShape(Circle())
+                .onLongPressGesture(minimumDuration: 0.7) { onLogsClick() }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: UGSpace.xs) {
                 let displayName = !p.displayName.isEmpty ? p.displayName
                     : (!p.login.isEmpty ? p.login : "Guest")
                 Text(displayName)
@@ -77,13 +47,7 @@ struct ProfileView: View {
                         .foregroundColor(UGColor.textMuted)
                 }
                 if p.hasYaPlus {
-                    Text("YANDEX PLUS")
-                        .font(UGFont.caption)
-                        .foregroundColor(UGColor.accent)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(UGColor.accent.opacity(0.18))
-                        .clipShape(Capsule())
+                    UGChip(text: "YANDEX PLUS", style: .accentSoft)
                 }
             }
             Spacer()
@@ -113,7 +77,7 @@ struct ProfileView: View {
             SettingsRow(systemIcon: "info.circle", label: "About", onTap: onAboutClick)
         }
         .background(UGColor.elevated)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: UGRadius.l))
     }
 }
 
@@ -130,7 +94,7 @@ private struct SettingsRow: View {
                 Image(systemName: systemIcon)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(tint)
-                    .frame(width: 24)
+                    .frame(width: UGSize.settingsIconCol)
                 Text(label)
                     .font(UGFont.bodyS)
                     .foregroundColor(tint)
@@ -141,8 +105,8 @@ private struct SettingsRow: View {
                         .foregroundColor(UGColor.textMuted)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.horizontal, UGSpace.l)
+            .padding(.vertical, UGSpace.l)
             .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)

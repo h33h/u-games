@@ -11,11 +11,11 @@ struct GenreChipRow: View {
         // padding doesn't keep the halo from getting clipped by the
         // ScrollView's viewport.
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
+            HStack(spacing: UGSpace.s) {
                 chip(label: "All", value: nil)
                 ForEach(genres, id: \.self) { g in chip(label: g, value: g) }
             }
-            .padding(.horizontal, 14)
+            .padding(.horizontal, UGSpace.l)
         }
     }
 
@@ -24,12 +24,12 @@ struct GenreChipRow: View {
         return Text(label)
             .font(UGFont.bodyS)
             .foregroundColor(active ? UGColor.bg0 : UGColor.textSecondary)
-            .padding(.horizontal, 14).padding(.vertical, 8)
+            .padding(.horizontal, UGSpace.l).padding(.vertical, UGSpace.s)
             .background(active ? UGColor.accent : UGColor.surface)
             .clipShape(Capsule())
             .overlay(Capsule().stroke(active ? UGColor.accent : UGColor.divider))
-            .shadow(color: active ? UGColor.accent.opacity(0.4) : .clear, radius: 8, x: 0, y: 0)
-            .padding(.vertical, 12)
+            .ugShadow(.glow(active ? UGColor.accent : nil))
+            .padding(.vertical, UGSpace.m)
             .onTapGesture { onSelect(value) }
     }
 }

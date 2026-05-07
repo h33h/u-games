@@ -11,61 +11,37 @@ struct TileGameCard: View {
     private var placeholder: Color { Color(hex: game.mainColor) ?? UGColor.elevated }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: UGSpace.s) {
             // Cover ZStack: placeholder + image share the same clip + stroke,
             // so the image never bleeds past the rounded border. Heart and
             // rating pill are siblings inside the same ZStack so they
             // overlap the cover, not the surrounding shadow.
             ZStack {
-                placeholder
-                GeometryReader { geo in
-                    CachedAsyncImage(url: URL(string: game.coverUrl)) { phase in
-                        switch phase {
-                        case .success(let img):
-                            img
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: geo.size.width, height: geo.size.height)
-                                .clipped()
-                        default:
-                            Color.clear
-                        }
-                    }
-                }
+                CoverImage(url: URL(string: game.coverUrl), placeholder: placeholder)
 
-                Button(action: onFavoriteToggle) {
-                    Image(systemName: isFavorite ? "heart.fill" : "heart")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(isFavorite ? UGColor.danger : UGColor.textPrimary)
-                        .frame(width: 30, height: 30)
-                        .background(Color.black.opacity(0.55))
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.borderless)
+                UGCircleIconButton(
+                    systemName: isFavorite ? "heart.fill" : "heart",
+                    tint: isFavorite ? UGColor.danger : UGColor.textPrimary,
+                    diameter: UGSize.buttonSm,
+                    iconSize: 14,
+                    action: onFavoriteToggle
+                )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(8)
+                .padding(UGSpace.s)
 
                 if game.ratingCount > 0 {
-                    Text(String(format: "★ %.1f", game.rating))
-                        .font(UGFont.caption)
-                        .foregroundColor(UGColor.accent)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(Color.black.opacity(0.55))
-                        .clipShape(Capsule())
+                    UGChip(text: String(format: "★ %.1f", game.rating), style: .overlayRating)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                        .padding(8)
+                        .padding(UGSpace.s)
                 }
             }
             .aspectRatio(16.0/10.0, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(halo.opacity(UGColor.haloBorderAlpha)))
-            .shadow(color: halo.opacity(UGColor.haloAlpha), radius: 14, x: 0, y: 12)
+            .haloChrome(halo, size: .lg)
 
             // Title + meta wrapped in a fixed-height block so cards in the
             // same row don't end up at different heights when one has a
             // 1-line title and the next has 2 lines / no meta.
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: UGSpace.xs) {
                 Text(game.title)
                     .font(UGFont.bodyS)
                     .foregroundColor(UGColor.textPrimary)
@@ -81,7 +57,7 @@ struct TileGameCard: View {
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(height: 48, alignment: .topLeading)
+            .frame(height: UGSize.tileTitleH, alignment: .topLeading)
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
@@ -117,32 +93,16 @@ struct WideGameCard: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            placeholder
-            GeometryReader { geo in
-                CachedAsyncImage(url: URL(string: game.coverUrl)) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .clipped()
-                    default:
-                        Color.clear
-                    }
-                }
-            }
+            CoverImage(url: URL(string: game.coverUrl), placeholder: placeholder)
             Text(game.title)
                 .font(UGFont.caption)
                 .foregroundColor(UGColor.textPrimary)
                 .lineLimit(1)
-                .padding(8)
-                .shadow(color: .black.opacity(0.6), radius: 6, x: 0, y: 2)
+                .padding(UGSpace.s)
+                .ugShadow(.overlayText)
         }
-        .frame(width: 140, height: 96)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(halo.opacity(UGColor.haloBorderAlpha)))
-        .shadow(color: halo.opacity(UGColor.haloAlpha), radius: 14, x: 0, y: 12)
+        .frame(width: UGSize.wideCardW, height: UGSize.wideCardH)
+        .haloChrome(halo, size: .lg)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
     }
@@ -178,33 +138,18 @@ struct SquareGameCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ZStack {
-                placeholder
-                GeometryReader { geo in
-                    CachedAsyncImage(url: URL(string: game.iconUrl.isEmpty ? game.coverUrl : game.iconUrl)) { phase in
-                        switch phase {
-                        case .success(let img):
-                            img
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: geo.size.width, height: geo.size.height)
-                                .clipped()
-                        default:
-                            Color.clear
-                        }
-                    }
-                }
-            }
-            .frame(width: 130, height: 130)
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(halo.opacity(UGColor.haloBorderAlpha)))
-            .shadow(color: halo.opacity(UGColor.haloAlpha), radius: 14, x: 0, y: 12)
+        VStack(alignment: .leading, spacing: UGSpace.s) {
+            CoverImage(
+                url: URL(string: game.iconUrl.isEmpty ? game.coverUrl : game.iconUrl),
+                placeholder: placeholder
+            )
+            .frame(width: UGSize.squareCard, height: UGSize.squareCard)
+            .haloChrome(halo, size: .lg)
             Text(game.title)
                 .font(UGFont.bodyS)
                 .foregroundColor(UGColor.textPrimary)
                 .lineLimit(1)
-                .frame(width: 130, alignment: .leading)
+                .frame(width: UGSize.squareCard, alignment: .leading)
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)

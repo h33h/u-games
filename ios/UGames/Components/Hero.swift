@@ -13,32 +13,10 @@ struct HeroSection: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            placeholder
-            // GeometryReader gives the inner Image a *concrete* width/height
-            // to size itself with. `.scaledToFill()` alone uses the source
-            // image's intrinsic dimensions and ignores the parent's
-            // proposed size — that's why the cover was bleeding past the
-            // rounded corner. Explicit `.frame(width:height:)` followed by
-            // `.clipped()` is the only combination that bounds AsyncImage
-            // reliably.
-            GeometryReader { geo in
-                // Hero is 300pt tall — feed thumb (pjpg250x140) is a
-                // postage stamp at this size. Use the next pre-rendered
-                // pjpg1280x720 for visible quality.
-                CachedAsyncImage(url: URL(string: game.coverUrl(size: "pjpg1280x720"))) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .clipped()
-                    default:
-                        Color.clear
-                    }
-                }
-            }
-
+            CoverImage(
+                url: URL(string: game.coverUrl(size: "pjpg1280x720")),
+                placeholder: placeholder
+            )
             LinearGradient(
                 stops: [.init(color: .clear, location: 0.35), .init(color: .black.opacity(0.85), location: 1.0)],
                 startPoint: .top, endPoint: .bottom
@@ -46,45 +24,25 @@ struct HeroSection: View {
             VStack { topRow; Spacer() }
             bottomBlock
         }
-        .frame(height: 300)
+        .frame(height: UGSize.heroH)
         .frame(maxWidth: .infinity)
-        .clipShape(RoundedRectangle(cornerRadius: 22))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(halo.opacity(UGColor.haloBorderAlpha)))
-        .shadow(color: halo.opacity(UGColor.haloAlpha), radius: 20, x: 0, y: 14)
+        .haloChrome(halo, size: .xl)
         // Tap anywhere on the card opens the same Detail flow as the
         // Play button. SwiftUI's button hit-test takes precedence at
         // the Save / Share / Play-now sub-targets, so they keep
         // working independently.
-        .contentShape(RoundedRectangle(cornerRadius: 22))
+        .contentShape(RoundedRectangle(cornerRadius: UGRadius.xl))
         .onTapGesture { onPlay() }
     }
 
     private var topRow: some View {
         HStack {
-            Text("✦ FEATURED TODAY")
-                .font(UGFont.caption)
-                .foregroundColor(UGColor.accent)
-                .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(UGColor.accent.opacity(0.18))
-                .clipShape(Capsule())
+            UGChip(text: "✦ FEATURED TODAY", style: .accentSoft)
             Spacer()
-            heroIcon("heart", action: onFavorite)
-            heroIcon("square.and.arrow.up", action: onShare)
+            UGCircleIconButton(systemName: "heart", diameter: UGSize.buttonM, iconSize: 14, background: Color.black.opacity(0.5), action: onFavorite)
+            UGCircleIconButton(systemName: "square.and.arrow.up", diameter: UGSize.buttonM, iconSize: 14, background: Color.black.opacity(0.5), action: onShare)
         }
-        .padding(14)
-    }
-
-    @ViewBuilder
-    private func heroIcon(_ system: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: system)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(UGColor.textPrimary)
-                .frame(width: 32, height: 32)
-                .background(Color.black.opacity(0.5))
-                .clipShape(Circle())
-        }
-        .buttonStyle(.borderless)
+        .padding(UGSpace.l)
     }
 
     private var bottomBlock: some View {
@@ -93,16 +51,11 @@ struct HeroSection: View {
             game.ratingCount > 0 ? "\(game.ratingCount) ratings" : nil,
             game.categories.first,
         ].compactMap { $0 }
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: UGSpace.s) {
             if !chips.isEmpty {
-                HStack(spacing: 6) {
+                HStack(spacing: UGSpace.s) {
                     ForEach(chips, id: \.self) { c in
-                        Text(c)
-                            .font(UGFont.caption)
-                            .foregroundColor(UGColor.textSecondary)
-                            .padding(.horizontal, 9).padding(.vertical, 5)
-                            .background(Color.white.opacity(0.08))
-                            .clipShape(Capsule())
+                        UGChip(text: c, style: .neutral)
                     }
                 }
             }
@@ -110,17 +63,9 @@ struct HeroSection: View {
                 .font(UGFont.display)
                 .foregroundColor(UGColor.textPrimary)
                 .lineLimit(2)
-            Button(action: onPlay) {
-                Text("▶ Play now")
-                    .font(UGFont.bodyS.weight(.heavy))
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 22).padding(.vertical, 11)
-                    .background(LinearGradient.ugAccent)
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(.borderless)
+            UGPillButton(title: "▶ Play now", action: onPlay)
         }
-        .padding(18)
+        .padding(UGSpace.l)
     }
 }
 

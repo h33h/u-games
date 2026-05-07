@@ -19,7 +19,7 @@ struct StoryCard: View {
                 stops: [.init(color: .clear, location: 0.5), .init(color: .black.opacity(0.6), location: 1.0)],
                 startPoint: .top, endPoint: .bottom
             )
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: UGSpace.xs) {
                 Text(subtitle)
                     .font(UGFont.label)
                     .foregroundColor(UGColor.textSecondary)
@@ -28,12 +28,10 @@ struct StoryCard: View {
                     .foregroundColor(UGColor.textPrimary)
                     .lineLimit(2)
             }
-            .padding(18)
+            .padding(UGSpace.l)
         }
-        .frame(height: 160)
-        .clipShape(RoundedRectangle(cornerRadius: 22))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(anchor.opacity(UGColor.haloBorderAlpha)))
-        .shadow(color: anchor.opacity(UGColor.haloAlpha), radius: 20, x: 0, y: 14)
+        .frame(height: UGSize.storyH)
+        .haloChrome(anchor, size: .xl)
         .onTapGesture(perform: onTap)
     }
 
@@ -49,12 +47,12 @@ struct StoryCard: View {
                         placeholder
                     }
                 }
-                .frame(width: 42, height: 42)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .frame(width: UGSize.storyMiniCover, height: UGSize.storyMiniCover)
+                .clipShape(RoundedRectangle(cornerRadius: UGRadius.s))
                 .clipped()
                 .rotationEffect(.degrees(Double(-8 + idx * 8)))
                 .offset(x: CGFloat(-14 - idx * 8), y: 24)
-                .shadow(radius: 6)
+                .ugShadow(.stack)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)

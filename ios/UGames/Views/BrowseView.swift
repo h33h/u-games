@@ -8,7 +8,7 @@ struct BrowseView: View {
     @FocusState private var searchFocused: Bool
     @State private var lastTriggerGamesCount: Int = 0
 
-    private let columns = [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 14)]
+    private let columns = [GridItem(.adaptive(minimum: UGSize.tileGridMin, maximum: UGSize.tileGridMax), spacing: UGSpace.l)]
 
     var body: some View {
         ZStack {
@@ -27,9 +27,9 @@ struct BrowseView: View {
                             }
                         },
                     )
-                    .padding(.top, 8)
+                    .padding(.top, UGSpace.s)
                 }
-                Spacer().frame(height: 12)
+                Spacer().frame(height: UGSpace.m)
                 content
             }
         }
@@ -49,7 +49,7 @@ struct BrowseView: View {
 
     @ViewBuilder
     private var topBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: UGSpace.s) {
             Image(systemName: "magnifyingglass")
                 .foregroundColor(UGColor.textSecondary)
             TextField(
@@ -75,13 +75,13 @@ struct BrowseView: View {
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, UGSpace.l)
+        .padding(.vertical, UGSpace.s)
         .background(UGColor.surface)
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(UGColor.divider))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
+        .overlay(RoundedRectangle(cornerRadius: UGRadius.m).stroke(UGColor.divider))
+        .clipShape(RoundedRectangle(cornerRadius: UGRadius.m))
+        .padding(.horizontal, UGSpace.m)
+        .padding(.top, UGSpace.s)
     }
 
     @ViewBuilder
@@ -95,7 +95,7 @@ struct BrowseView: View {
                 Text(err).foregroundColor(UGColor.textSecondary).font(UGFont.body).multilineTextAlignment(.center)
                 Spacer()
             }
-            .padding(24)
+            .padding(UGSpace.xxl)
         } else if visible.isEmpty && viewModel.mode == .search {
             VStack {
                 Spacer()
@@ -103,10 +103,10 @@ struct BrowseView: View {
                     .foregroundColor(UGColor.textSecondary).font(UGFont.body)
                 Spacer()
             }
-            .padding(24)
+            .padding(UGSpace.xxl)
         } else {
             ScrollView {
-                LazyVGrid(columns: columns, spacing: 18) {
+                LazyVGrid(columns: columns, spacing: UGSpace.l) {
                     ForEach(visible) { game in
                         TileGameCard(
                             game: game,
@@ -125,18 +125,18 @@ struct BrowseView: View {
                         }
                     }
                     if viewModel.isLoadingMore {
-                        ProgressView().tint(UGColor.textPrimary).padding(16)
+                        ProgressView().tint(UGColor.textPrimary).padding(UGSpace.l)
                     }
                     if !visible.isEmpty && !viewModel.hasMore && !viewModel.isLoading {
                         Text(viewModel.mode == .search ? "End of search results" : "End of catalog")
                             .font(UGFont.caption)
                             .foregroundColor(UGColor.textMuted)
-                            .padding(20)
+                            .padding(UGSpace.xl)
                     }
                 }
-                .padding(.horizontal, 14)
-                .padding(.top, 4)
-                .padding(.bottom, 96)
+                .padding(.horizontal, UGSpace.l)
+                .padding(.top, UGSpace.xs)
+                .padding(.bottom, UGSize.tabBarInset)
             }
             .scrollDismissesKeyboard(.immediately)
             .refreshable { await viewModel.refresh() }

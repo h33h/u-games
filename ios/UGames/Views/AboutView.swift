@@ -8,26 +8,16 @@ struct AboutView: View {
         ZStack(alignment: .top) {
             UGColor.bg0.ignoresSafeArea()
             VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Button(action: onBack) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(UGColor.textPrimary)
-                            .padding(8)
-                    }
-                    Text("About").font(UGFont.titleM).foregroundColor(UGColor.textPrimary)
-                    Spacer()
-                }
-                .padding(.horizontal, 8)
+                UGTopBar(title: "About", onBack: onBack)
                 Spacer()
-                VStack(spacing: 16) {
+                VStack(spacing: UGSpace.l) {
                     ZStack {
-                        RoundedRectangle(cornerRadius: 22).fill(UGColor.elevated)
+                        RoundedRectangle(cornerRadius: UGRadius.xl).fill(UGColor.elevated)
                         Image(systemName: "gamecontroller.fill")
                             .font(.system(size: 48))
                             .foregroundColor(UGColor.accent)
                     }
-                    .frame(width: 96, height: 96)
+                    .frame(width: UGSize.avatarL, height: UGSize.avatarL)
                     Text("U-Games").font(UGFont.titleL).foregroundColor(UGColor.textPrimary)
                     Text("v\(version)")
                         .font(UGFont.bodyS)
@@ -36,15 +26,15 @@ struct AboutView: View {
                         .font(UGFont.bodyS)
                         .foregroundColor(UGColor.textSecondary)
                         .multilineTextAlignment(.center)
-                        .padding(.horizontal, 28)
+                        .padding(.horizontal, UGSpace.xxxl)
                     Link(destination: URL(string: "https://github.com/")!) {
                         Text("View on GitHub →")
                             .font(UGFont.bodyS)
                             .foregroundColor(UGColor.accent)
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 10)
+                            .padding(.horizontal, UGSpace.l)
+                            .padding(.vertical, UGSpace.s)
                             .background(UGColor.elevated)
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                            .clipShape(RoundedRectangle(cornerRadius: UGRadius.m))
                     }
                 }
                 .frame(maxWidth: .infinity)

@@ -47,16 +47,16 @@ struct GameView: View {
                 .onTapGesture { revision += 1 }
 
             if showBack {
-                Button(action: onBack) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundColor(.white)
-                        .frame(width: 40, height: 40)
-                        .background(Color.black.opacity(0.8))
-                        .clipShape(Circle())
-                }
-                .padding(.leading, 12)
-                .padding(.top, 8)
+                UGCircleIconButton(
+                    systemName: "chevron.left",
+                    tint: .white,
+                    diameter: 40,
+                    iconSize: 18,
+                    background: Color.black.opacity(0.8),
+                    action: onBack
+                )
+                .padding(.leading, UGSpace.m)
+                .padding(.top, UGSpace.s)
                 .transition(.opacity)
             }
 
@@ -113,7 +113,7 @@ private struct RotateDeviceOverlay: View {
     var body: some View {
         ZStack {
             Color.black.opacity(0.96).ignoresSafeArea()
-            VStack(spacing: 28) {
+            VStack(spacing: UGSpace.xxxl) {
                 Image(systemName: "rotate.right")
                     .font(.system(size: 96, weight: .light))
                     .foregroundColor(.white)
@@ -129,20 +129,20 @@ private struct RotateDeviceOverlay: View {
                     .font(.callout)
                     .foregroundColor(.gray)
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 32)
+                    .padding(.horizontal, UGSpace.huge)
 
                 Button(action: onBack) {
                     Text("Назад в каталог")
                         .font(.callout)
                         .foregroundColor(.white)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
+                        .padding(.horizontal, UGSpace.xxl)
+                        .padding(.vertical, UGSpace.m)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 22)
+                            RoundedRectangle(cornerRadius: UGRadius.xl)
                                 .stroke(Color.white.opacity(0.4), lineWidth: 1)
                         )
                 }
-                .padding(.top, 8)
+                .padding(.top, UGSpace.s)
             }
             .padding()
         }

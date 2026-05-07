@@ -3,7 +3,7 @@ import SwiftUI
 /// Animated shimmer placeholder. Replaces ProgressView spinners. Animates a
 /// left-to-right gradient sweep at 1.4s on infinite repeat.
 struct Skeleton: View {
-    var cornerRadius: CGFloat = 12
+    var cornerRadius: CGFloat = UGRadius.m
 
     @State private var phase: CGFloat = -0.3
 

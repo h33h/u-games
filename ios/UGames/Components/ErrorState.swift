@@ -9,7 +9,7 @@ struct ErrorState: View {
             Image(systemName: "wifi.slash")
                 .font(.system(size: 48, weight: .light))
                 .foregroundColor(UGColor.textMuted)
-                .padding(.bottom, 14)
+                .padding(.bottom, UGSpace.l)
             Text("Couldn't load")
                 .font(UGFont.titleM)
                 .foregroundColor(UGColor.textPrimary)
@@ -17,20 +17,12 @@ struct ErrorState: View {
                 .font(UGFont.bodyS)
                 .foregroundColor(UGColor.textMuted)
                 .multilineTextAlignment(.center)
-                .padding(.top, 6)
-            Button(action: onRetry) {
-                Text("Try again")
-                    .font(UGFont.bodyS)
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-                    .background(LinearGradient.ugAccent)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-            }
-            .padding(.top, 16)
+                .padding(.top, UGSpace.s)
+            UGPillButton(title: "Try again", shape: .rounded(UGRadius.m), action: onRetry)
+                .padding(.top, UGSpace.l)
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 32)
+        .padding(.horizontal, UGSpace.xxl)
+        .padding(.vertical, UGSpace.huge)
     }
 }
 

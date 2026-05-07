@@ -55,16 +55,16 @@ struct GameDetailView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         hero
-                        Spacer().frame(height: 20)
+                        Spacer().frame(height: UGSpace.xl)
                         titleBlock
-                        Spacer().frame(height: 24)
+                        Spacer().frame(height: UGSpace.xxl)
                         aboutSection
                         screenshotsRow
-                        Spacer().frame(height: 24)
-                        sectionHeader("More like this")
-                        Spacer().frame(height: 12)
+                        Spacer().frame(height: UGSpace.xxl)
+                        SectionHeader(title: "More like this", horizontalPadding: UGSpace.l)
+                        Spacer().frame(height: UGSpace.m)
                         similarRow
-                        Spacer().frame(height: 24)
+                        Spacer().frame(height: UGSpace.xxl)
                         informationBlock
                         // Bottom inset matches the sticky CTA strip
                         // (gradient + safe area) so the Information
@@ -78,8 +78,8 @@ struct GameDetailView: View {
                 // Sticky top controls — anchored to the screen top so
                 // they stay visible/tappable while the hero scrolls.
                 heroTopRow
-                    .padding(.top, max(safeTop, 44) + 8)
-                    .padding(.horizontal, 14)
+                    .padding(.top, max(safeTop, 44) + UGSpace.s)
+                    .padding(.horizontal, UGSpace.l)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
@@ -123,14 +123,14 @@ struct GameDetailView: View {
                 startPoint: .top, endPoint: .bottom
             )
         }
-        .frame(height: 360)
+        .frame(height: UGSize.heroDetailH)
         .frame(maxWidth: .infinity)
         .overlay(alignment: .bottom) {
             Rectangle()
                 .fill(halo.opacity(UGColor.haloBorderAlpha))
                 .frame(height: 0.5)
         }
-        .shadow(color: halo.opacity(UGColor.haloAlpha), radius: 20, x: 0, y: 14)
+        .ugShadow(.haloXL(halo))
     }
 
     /// Cover image that grows upward when the parent ScrollView is
@@ -142,19 +142,10 @@ struct GameDetailView: View {
         GeometryReader { geo in
             let minY = geo.frame(in: .global).minY
             let stretch = max(0, minY)
-            ZStack {
-                placeholder
-                CachedAsyncImage(url: URL(string: viewModel.game.coverUrl(size: "pjpg1280x720"))) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    default:
-                        Color.clear
-                    }
-                }
-            }
+            CoverImage(
+                url: URL(string: viewModel.game.coverUrl(size: "pjpg1280x720")),
+                placeholder: placeholder
+            )
             .frame(width: geo.size.width, height: geo.size.height + stretch)
             .clipped()
             .offset(y: -stretch)
@@ -163,38 +154,21 @@ struct GameDetailView: View {
 
     private var heroTopRow: some View {
         HStack {
-            heroIcon("chevron.left", action: onBack)
+            UGCircleIconButton(systemName: "chevron.left", action: onBack)
             Spacer()
-            heroIcon(
-                favorites.contains(viewModel.game.appId) ? "heart.fill" : "heart",
+            UGCircleIconButton(
+                systemName: favorites.contains(viewModel.game.appId) ? "heart.fill" : "heart",
                 tint: favorites.contains(viewModel.game.appId) ? UGColor.danger : UGColor.textPrimary,
                 action: { favorites.toggle(viewModel.game) }
             )
-            heroIcon("square.and.arrow.up", action: { onShare(viewModel.game) })
+            UGCircleIconButton(systemName: "square.and.arrow.up", action: { onShare(viewModel.game) })
         }
-    }
-
-    @ViewBuilder
-    private func heroIcon(
-        _ system: String,
-        tint: Color = UGColor.textPrimary,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: system)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(tint)
-                .frame(width: 36, height: 36)
-                .background(Color.black.opacity(0.55))
-                .clipShape(Circle())
-        }
-        .buttonStyle(.borderless)
     }
 
     // MARK: Title block
 
     private var titleBlock: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: UGSpace.m) {
             // Eyebrow combines anything we have: first genre + release
             // year. Both fields are honest data — no hardcoded suffix.
             let eyebrow = [
@@ -202,10 +176,7 @@ struct GameDetailView: View {
                 yearFromIso(viewModel.detail?.datePublished),
             ].compactMap { $0 }.joined(separator: " · ")
             if !eyebrow.isEmpty {
-                Text(eyebrow)
-                    .font(UGFont.label)
-                    .tracking(1.2)
-                    .foregroundColor(UGColor.textMuted)
+                UGEyebrow(text: eyebrow)
             }
             Text(viewModel.game.title)
                 .font(UGFont.displayXL)
@@ -220,16 +191,16 @@ struct GameDetailView: View {
             }
             chipsRow
         }
-        .padding(.horizontal, 18)
+        .padding(.horizontal, UGSpace.l)
     }
 
     @ViewBuilder
     private var chipsRow: some View {
         let chips = buildChips()
         if !chips.isEmpty {
-            HStack(spacing: 6) {
+            HStack(spacing: UGSpace.s) {
                 ForEach(chips, id: \.self) { c in
-                    chip(text: c)
+                    UGChip(text: c, style: .neutral)
                 }
             }
         }
@@ -252,46 +223,30 @@ struct GameDetailView: View {
         return out
     }
 
-    private func chip(text: String) -> some View {
-        Text(text)
-            .font(UGFont.caption)
-            .foregroundColor(UGColor.textSecondary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(Color.white.opacity(0.08))
-            .clipShape(Capsule())
-    }
-
     // MARK: About + screenshots (from JSON-LD on the per-app page)
 
     @ViewBuilder
     private var aboutSection: some View {
         let description = viewModel.detail?.description
         if let text = description, !text.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("ABOUT")
-                    .font(UGFont.label)
-                    .tracking(1.2)
-                    .foregroundColor(UGColor.textMuted)
+            VStack(alignment: .leading, spacing: UGSpace.s) {
+                UGEyebrow(text: "About")
                 Text(text)
                     .font(UGFont.body)
                     .foregroundColor(UGColor.textSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 20)
+            .padding(.horizontal, UGSpace.l)
+            .padding(.bottom, UGSpace.xl)
         } else if viewModel.isLoadingDetail {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("ABOUT")
-                    .font(UGFont.label)
-                    .tracking(1.2)
-                    .foregroundColor(UGColor.textMuted)
+            VStack(alignment: .leading, spacing: UGSpace.s) {
+                UGEyebrow(text: "About")
                 ForEach(0..<3) { _ in
-                    Skeleton(cornerRadius: 4).frame(height: 12)
+                    Skeleton(cornerRadius: UGSpace.xs).frame(height: UGSpace.m)
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 20)
+            .padding(.horizontal, UGSpace.l)
+            .padding(.bottom, UGSpace.xl)
         }
     }
 
@@ -299,74 +254,40 @@ struct GameDetailView: View {
     private var screenshotsRow: some View {
         let urls = viewModel.detail?.screenshots ?? []
         if !urls.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("SCREENSHOTS")
-                    .font(UGFont.label)
-                    .tracking(1.2)
-                    .foregroundColor(UGColor.textMuted)
-                    .padding(.horizontal, 18)
+            VStack(alignment: .leading, spacing: UGSpace.s) {
+                UGEyebrow(text: "Screenshots")
+                    .padding(.horizontal, UGSpace.l)
                 ScrollView(.horizontal, showsIndicators: false) {
-                    LazyHStack(spacing: 10) {
+                    LazyHStack(spacing: UGSpace.s) {
                         ForEach(Array(urls.enumerated()), id: \.offset) { idx, url in
                             screenshotTile(url: url)
                                 .onTapGesture { fullscreen = ScreenshotPager(index: idx) }
                         }
                     }
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, UGSpace.l)
                 }
             }
         } else if viewModel.isLoadingDetail {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("SCREENSHOTS")
-                    .font(UGFont.label)
-                    .tracking(1.2)
-                    .foregroundColor(UGColor.textMuted)
-                    .padding(.horizontal, 18)
+            VStack(alignment: .leading, spacing: UGSpace.s) {
+                UGEyebrow(text: "Screenshots")
+                    .padding(.horizontal, UGSpace.l)
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
+                    HStack(spacing: UGSpace.s) {
                         ForEach(0..<3) { _ in
-                            Skeleton(cornerRadius: 16)
-                                .frame(width: 220, height: 124)
+                            Skeleton(cornerRadius: UGRadius.l)
+                                .frame(width: UGSize.screenshotW, height: UGSize.screenshotH)
                         }
                     }
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, UGSpace.l)
                 }
             }
         }
     }
 
     private func screenshotTile(url: String) -> some View {
-        ZStack {
-            UGColor.elevated
-            GeometryReader { geo in
-                CachedAsyncImage(url: URL(string: url)) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .clipped()
-                    default:
-                        Color.clear
-                    }
-                }
-            }
-        }
-        .frame(width: 220, height: 124)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(halo.opacity(UGColor.haloBorderAlpha)))
-        .shadow(color: halo.opacity(UGColor.haloAlpha), radius: 12, x: 0, y: 8)
-    }
-
-    private func sectionHeader(_ title: String) -> some View {
-        HStack {
-            Text(title)
-                .font(UGFont.titleM)
-                .foregroundColor(UGColor.textPrimary)
-            Spacer()
-        }
-        .padding(.horizontal, 18)
+        CoverImage(url: URL(string: url))
+            .frame(width: UGSize.screenshotW, height: UGSize.screenshotH)
+            .haloChrome(halo, size: .sm)
     }
 
     // MARK: Similar row
@@ -375,27 +296,27 @@ struct GameDetailView: View {
     private var similarRow: some View {
         if viewModel.isLoadingSimilar {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
+                HStack(spacing: UGSpace.m) {
                     ForEach(0..<3) { _ in
-                        Skeleton(cornerRadius: 16)
-                            .frame(width: 160, height: 140)
+                        Skeleton(cornerRadius: UGRadius.l)
+                            .frame(width: UGSize.similarTileW, height: UGSize.similarTileH)
                     }
                 }
-                .padding(.horizontal, 18)
+                .padding(.horizontal, UGSpace.l)
             }
         } else if viewModel.similar.isEmpty {
             if viewModel.similarError != nil {
                 Text("Couldn't load related games")
                     .font(UGFont.bodyS)
                     .foregroundColor(UGColor.textMuted)
-                    .padding(.horizontal, 18)
+                    .padding(.horizontal, UGSpace.l)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 EmptyView()
             }
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 12) {
+                LazyHStack(spacing: UGSpace.m) {
                     ForEach(viewModel.similar, id: \.appId) { g in
                         TileGameCard(
                             game: g,
@@ -403,10 +324,10 @@ struct GameDetailView: View {
                             onTap: { onSimilarClick(g) },
                             onFavoriteToggle: { favorites.toggle(g) }
                         )
-                        .frame(width: 160)
+                        .frame(width: UGSize.similarTileW)
                     }
                 }
-                .padding(.horizontal, 18)
+                .padding(.horizontal, UGSpace.l)
             }
         }
     }
@@ -423,11 +344,8 @@ struct GameDetailView: View {
         // formatted as a row instead of floating loose under the title.
         let rows = buildInfoRows()
         if !rows.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("INFORMATION")
-                    .font(UGFont.label)
-                    .tracking(1.2)
-                    .foregroundColor(UGColor.textMuted)
+            VStack(alignment: .leading, spacing: UGSpace.s) {
+                UGEyebrow(text: "Information")
                 VStack(spacing: 0) {
                     ForEach(Array(rows.enumerated()), id: \.offset) { idx, row in
                         if idx > 0 {
@@ -440,20 +358,20 @@ struct GameDetailView: View {
                             Text(row.label)
                                 .font(UGFont.bodyS)
                                 .foregroundColor(UGColor.textMuted)
-                                .frame(width: 110, alignment: .leading)
+                                .frame(width: UGSize.infoLabelCol, alignment: .leading)
                             Text(row.value)
                                 .font(UGFont.bodyS)
                                 .foregroundColor(UGColor.textPrimary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 12)
+                        .padding(.horizontal, UGSpace.l)
+                        .padding(.vertical, UGSpace.m)
                     }
                 }
                 .background(UGColor.surface)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .clipShape(RoundedRectangle(cornerRadius: UGRadius.m))
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, UGSpace.l)
         }
     }
 
@@ -489,21 +407,13 @@ struct GameDetailView: View {
             )
             .frame(height: ctaStripHeight + safeBottom)
             .allowsHitTesting(false)
-            Button(action: { onPlay(viewModel.game) }) {
-                Text("▶ Play now")
-                    .font(UGFont.bodyS.weight(.heavy))
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 28)
-                    .padding(.vertical, 14)
-                    .background(LinearGradient.ugAccent)
-                    .clipShape(Capsule())
-                    .shadow(color: UGColor.accent.opacity(0.5), radius: 18, x: 0, y: 8)
-                    .scaleEffect(ctaScale)
+            UGPillButton(title: "▶ Play now", size: .large, glow: true) {
+                onPlay(viewModel.game)
             }
-            .buttonStyle(.borderless)
+            .scaleEffect(ctaScale)
             // Lift the button above the home-indicator inset so it's
             // never tap-blocked by the system gesture zone.
-            .padding(.bottom, safeBottom + 22)
+            .padding(.bottom, safeBottom + UGSpace.xxl)
         }
         .frame(maxWidth: .infinity)
     }
@@ -612,33 +522,20 @@ struct ScreenshotsFullscreenView: View {
                         }
                     }
                     .tag(idx)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, UGSpace.m)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
             VStack {
                 HStack {
                     Spacer()
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(UGColor.textPrimary)
-                            .frame(width: 36, height: 36)
-                            .background(Color.black.opacity(0.55))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.borderless)
+                    UGCircleIconButton(systemName: "xmark", action: onDismiss)
                 }
-                .padding(.horizontal, 14)
+                .padding(.horizontal, UGSpace.l)
                 Spacer()
                 if screenshots.count > 1 {
-                    Text("\(page + 1) / \(screenshots.count)")
-                        .font(UGFont.caption)
-                        .foregroundColor(UGColor.textSecondary)
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(Color.black.opacity(0.55))
-                        .clipShape(Capsule())
-                        .padding(.bottom, 28)
+                    UGChip(text: "\(page + 1) / \(screenshots.count)", style: .overlay)
+                        .padding(.bottom, UGSpace.xxxl)
                 }
             }
         }

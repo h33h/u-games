@@ -6,7 +6,7 @@ struct StoryCard: View {
     let games: [Game]
     let onTap: () -> Void
 
-    private var anchor: Color { Color(hex: games.first?.mainColor) ?? UGColor.accent }
+    private var anchor: Color { Color(hex: games.first?.mainColor) ?? UGColor.Accent.primary }
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -22,10 +22,10 @@ struct StoryCard: View {
             VStack(alignment: .leading, spacing: UGSpace.xs) {
                 Text(subtitle)
                     .font(UGFont.label)
-                    .foregroundColor(UGColor.textSecondary)
+                    .foregroundColor(UGColor.Text.secondary)
                 Text(title)
                     .font(UGFont.titleL)
-                    .foregroundColor(UGColor.textPrimary)
+                    .foregroundColor(UGColor.Text.primary)
                     .lineLimit(2)
             }
             .padding(UGSpace.l)
@@ -46,7 +46,7 @@ struct StoryCard: View {
     private var stackedCovers: some View {
         ZStack(alignment: .topTrailing) {
             ForEach(Array(games.prefix(3).enumerated()), id: \.element.appId) { idx, g in
-                let placeholder = Color(hex: g.mainColor) ?? UGColor.elevated
+                let placeholder = Color(hex: g.mainColor) ?? UGColor.Surface.raised
                 CachedAsyncImage(url: URL(string: g.iconUrl.isEmpty ? g.coverUrl : g.iconUrl)) { phase in
                     switch phase {
                     case .success(let img):

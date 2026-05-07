@@ -2,7 +2,7 @@ import SwiftUI
 
 struct CoverImage: View {
     let url: URL?
-    var placeholder: Color = UGColor.elevated
+    var placeholder: Color = UGColor.Surface.raised
     var contentMode: ContentMode = .fill
 
     var body: some View {

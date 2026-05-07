@@ -16,15 +16,15 @@ struct GameDetailView: View {
 
     private let ctaStripHeight: CGFloat = 170
 
-    private var halo: Color { Color(hex: viewModel.game.mainColor) ?? UGColor.accent }
-    private var placeholder: Color { Color(hex: viewModel.game.mainColor) ?? UGColor.elevated }
+    private var halo: Color { Color(hex: viewModel.game.mainColor) ?? UGColor.Accent.primary }
+    private var placeholder: Color { Color(hex: viewModel.game.mainColor) ?? UGColor.Surface.raised }
 
     var body: some View {
         GeometryReader { proxy in
             let safeTop = proxy.safeAreaInsets.top
             let safeBottom = proxy.safeAreaInsets.bottom
             ZStack(alignment: .bottom) {
-                UGColor.bg0
+                UGColor.Surface.base
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         hero
@@ -76,7 +76,7 @@ struct GameDetailView: View {
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0.30),
-                    .init(color: UGColor.bg0, location: 1.0),
+                    .init(color: UGColor.Surface.base, location: 1.0),
                 ],
                 startPoint: .top, endPoint: .bottom
             )
@@ -85,7 +85,7 @@ struct GameDetailView: View {
         .frame(maxWidth: .infinity)
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(halo.opacity(UGColor.haloBorderAlpha))
+                .fill(halo.opacity(UGShadow.HaloSize.xl.borderAlpha))
                 .frame(height: 0.5)
         }
         .ugShadow(.halo(.xl, halo))
@@ -117,7 +117,7 @@ struct GameDetailView: View {
             UGCircleIconButton(
                 systemName: isFav ? "heart.fill" : "heart",
                 accessibilityLabel: isFav ? "Remove from favorites" : "Add to favorites",
-                tint: isFav ? UGColor.danger : UGColor.textPrimary,
+                tint: isFav ? UGColor.Feedback.danger : UGColor.Text.primary,
                 action: { favorites.toggle(viewModel.game) }
             )
             UGCircleIconButton(
@@ -139,13 +139,13 @@ struct GameDetailView: View {
             }
             Text(viewModel.game.title)
                 .font(UGFont.displayXL)
-                .foregroundColor(UGColor.textPrimary)
+                .foregroundColor(UGColor.Text.primary)
                 .lineLimit(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let author = pickAuthor() {
                 Text("by \(author)")
                     .font(UGFont.bodyS)
-                    .foregroundColor(UGColor.textSecondary)
+                    .foregroundColor(UGColor.Text.secondary)
                     .lineLimit(1)
             }
             chipsRow
@@ -190,7 +190,7 @@ struct GameDetailView: View {
                 UGEyebrow(text: "About")
                 Text(text)
                     .font(UGFont.body)
-                    .foregroundColor(UGColor.textSecondary)
+                    .foregroundColor(UGColor.Text.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.horizontal, UGSpace.l)
@@ -263,7 +263,7 @@ struct GameDetailView: View {
             if viewModel.similarError != nil {
                 Text("Couldn't load related games")
                     .font(UGFont.bodyS)
-                    .foregroundColor(UGColor.textMuted)
+                    .foregroundColor(UGColor.Text.muted)
                     .padding(.horizontal, UGSpace.l)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
@@ -298,25 +298,25 @@ struct GameDetailView: View {
                     ForEach(Array(rows.enumerated()), id: \.offset) { idx, row in
                         if idx > 0 {
                             Rectangle()
-                                .fill(UGColor.divider)
+                                .fill(UGColor.Border.divider)
                                 .frame(height: 1)
                                 .frame(maxWidth: .infinity)
                         }
                         HStack(alignment: .top) {
                             Text(row.label)
                                 .font(UGFont.bodyS)
-                                .foregroundColor(UGColor.textMuted)
+                                .foregroundColor(UGColor.Text.muted)
                                 .frame(width: UGSize.infoLabelCol, alignment: .leading)
                             Text(row.value)
                                 .font(UGFont.bodyS)
-                                .foregroundColor(UGColor.textPrimary)
+                                .foregroundColor(UGColor.Text.primary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .padding(.horizontal, UGSpace.l)
                         .padding(.vertical, UGSpace.m)
                     }
                 }
-                .background(UGColor.surface)
+                .background(UGColor.Surface.subtle)
                 .clipShape(RoundedRectangle(cornerRadius: UGRadius.m))
             }
             .padding(.horizontal, UGSpace.l)
@@ -340,8 +340,8 @@ struct GameDetailView: View {
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0.00),
-                    .init(color: UGColor.bg0, location: 0.45),
-                    .init(color: UGColor.bg0, location: 1.00),
+                    .init(color: UGColor.Surface.base, location: 0.45),
+                    .init(color: UGColor.Surface.base, location: 1.00),
                 ],
                 startPoint: .top, endPoint: .bottom
             )

@@ -48,7 +48,7 @@ struct TabContainer: View {
 
     var body: some View {
         ZStack {
-            UGColor.bg0.ignoresSafeArea()
+            UGColor.Surface.base.ignoresSafeArea()
             tabContent
             if profilePresented {
                 if aboutPresented {

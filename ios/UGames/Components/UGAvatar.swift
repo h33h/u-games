@@ -18,7 +18,7 @@ struct UGAvatar: View {
                     case .success(let img):
                         img.resizable().scaledToFill()
                     default:
-                        UGColor.elevated
+                        UGColor.Surface.raised
                     }
                 }
                 .frame(width: diameter, height: diameter)
@@ -31,10 +31,10 @@ struct UGAvatar: View {
                 )
             } else {
                 ZStack {
-                    Circle().fill(UGColor.elevated)
+                    Circle().fill(UGColor.Surface.raised)
                     Image(systemName: "person.crop.circle")
                         .font(.system(size: fallbackIconSize))
-                        .foregroundColor(UGColor.textSecondary)
+                        .foregroundColor(UGColor.Text.secondary)
                 }
                 .frame(width: diameter, height: diameter)
             }

@@ -11,15 +11,15 @@ struct EmptyState: View {
         VStack(spacing: 0) {
             Image(systemName: systemIcon)
                 .font(.system(size: 48, weight: .light))
-                .foregroundColor(UGColor.textMuted)
+                .foregroundColor(UGColor.Text.muted)
                 .padding(.bottom, UGSpace.l)
             Text(title)
                 .font(UGFont.titleM)
-                .foregroundColor(UGColor.textPrimary)
+                .foregroundColor(UGColor.Text.primary)
             if let message, !message.isEmpty {
                 Text(message)
                     .font(UGFont.bodyS)
-                    .foregroundColor(UGColor.textMuted)
+                    .foregroundColor(UGColor.Text.muted)
                     .multilineTextAlignment(.center)
                     .padding(.top, UGSpace.s)
             }

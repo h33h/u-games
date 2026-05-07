@@ -3,13 +3,13 @@ import SwiftUI
 struct UGCircleIconButton: View {
     let systemName: String
     let accessibilityLabel: String
-    var tint: Color = UGColor.textPrimary
+    var tint: Color = UGColor.Text.primary
 
     var diameter: CGFloat = UGSize.buttonL
 
     var iconSize: CGFloat = 16
     var iconWeight: Font.Weight = .semibold
-    var background: Color = UGColor.overlayBg
+    var background: Color = UGColor.Surface.overlay
     let action: () -> Void
 
     var body: some View {
@@ -37,7 +37,7 @@ struct UGCircleIconButton: View {
         Color.gray.ignoresSafeArea()
         HStack(spacing: 12) {
             UGCircleIconButton(systemName: "chevron.left", accessibilityLabel: "Back", action: {})
-            UGCircleIconButton(systemName: "heart.fill", accessibilityLabel: "Remove from favorites", tint: UGColor.danger, action: {})
+            UGCircleIconButton(systemName: "heart.fill", accessibilityLabel: "Remove from favorites", tint: UGColor.Feedback.danger, action: {})
             UGCircleIconButton(systemName: "square.and.arrow.up", accessibilityLabel: "Share", action: {})
             UGCircleIconButton(systemName: "xmark", accessibilityLabel: "Close", action: {})
         }

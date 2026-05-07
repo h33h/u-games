@@ -19,12 +19,12 @@ struct GenreChipRow: View {
         let active = (value == selected) || (value == nil && selected == nil)
         return Text(label)
             .font(UGFont.bodyS)
-            .foregroundColor(active ? UGColor.bg0 : UGColor.textSecondary)
+            .foregroundColor(active ? UGColor.Surface.base : UGColor.Text.secondary)
             .padding(.horizontal, UGSpace.l).padding(.vertical, UGSpace.s)
-            .background(active ? UGColor.accent : UGColor.surface)
+            .background(active ? UGColor.Accent.primary : UGColor.Surface.subtle)
             .clipShape(Capsule())
-            .overlay(Capsule().stroke(active ? UGColor.accent : UGColor.divider))
-            .ugShadow(.glow(.subtle, active ? UGColor.accent : .clear))
+            .overlay(Capsule().stroke(active ? UGColor.Accent.primary : UGColor.Border.divider))
+            .ugShadow(.glow(.subtle, active ? UGColor.Accent.primary : .clear))
             .padding(.vertical, UGSpace.m)
             .onTapGesture { onSelect(value) }
     }

@@ -11,7 +11,7 @@ struct HomeView: View {
 
     var body: some View {
         ZStack {
-            UGColor.bg0.ignoresSafeArea()
+            UGColor.Surface.base.ignoresSafeArea()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: UGSpace.xl) {
                     HomeHeader(
@@ -24,7 +24,7 @@ struct HomeView: View {
                     UGSearchBarShell {
                         Text("Search games")
                             .font(UGFont.bodyS)
-                            .foregroundColor(UGColor.textMuted)
+                            .foregroundColor(UGColor.Text.muted)
                         Spacer()
                     }
                     .contentShape(Rectangle())
@@ -71,7 +71,7 @@ struct HomeView: View {
                     if let err = viewModel.error, viewModel.hero == nil {
                         Text(err)
                             .font(UGFont.bodyS)
-                            .foregroundColor(UGColor.danger)
+                            .foregroundColor(UGColor.Feedback.danger)
                             .padding(.horizontal, UGSpace.l)
                     }
 
@@ -120,11 +120,11 @@ private struct HomeHeader: View {
         VStack(alignment: .leading, spacing: UGSpace.xs) {
             Text(eyebrow().uppercased())
                 .font(UGFont.label)
-                .foregroundColor(UGColor.textMuted)
+                .foregroundColor(UGColor.Text.muted)
             HStack {
                 Text(greeting())
                     .font(UGFont.titleL)
-                    .foregroundColor(UGColor.textPrimary)
+                    .foregroundColor(UGColor.Text.primary)
                 Spacer()
                 UGAvatar(profile: profile)
                     .frame(minWidth: 44, minHeight: 44)

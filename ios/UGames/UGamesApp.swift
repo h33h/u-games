@@ -18,6 +18,7 @@ struct UGamesApp: App {
         WindowGroup {
             RootView()
                 .preferredColorScheme(.dark)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         }
     }
 }
@@ -59,7 +60,7 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
-            UGColor.bg0.ignoresSafeArea()
+            UGColor.Surface.base.ignoresSafeArea()
             TabContainer(
                 catalogService: catalogService,
                 favoritesStore: favoritesStore,
@@ -75,7 +76,7 @@ struct RootView: View {
             )
             if let route = routeStack.last {
                 routeOverlay(for: route)
-                    .background(UGColor.bg0.ignoresSafeArea())
+                    .background(UGColor.Surface.base.ignoresSafeArea())
                     .id(routeId(route))
                     .transition(.opacity)
             }

@@ -8,17 +8,17 @@ struct SectionHeader: View {
         HStack {
             Text(title)
                 .font(UGFont.titleM)
-                .foregroundColor(UGColor.textPrimary)
+                .foregroundColor(UGColor.Text.primary)
             Spacer()
             if let seeAllAction {
                 Button(action: seeAllAction) {
                     HStack(spacing: UGSpace.xs) {
                         Text("See all")
                             .font(UGFont.bodyS)
-                            .foregroundColor(UGColor.textSecondary)
+                            .foregroundColor(UGColor.Text.secondary)
                         Image(systemName: "chevron.right")
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(UGColor.textSecondary)
+                            .foregroundColor(UGColor.Text.secondary)
                     }
                 }
                 .buttonStyle(.borderless)
@@ -35,7 +35,7 @@ struct UGEyebrow: View {
         Text(text.uppercased())
             .font(UGFont.label)
             .tracking(1.2)
-            .foregroundColor(UGColor.textMuted)
+            .foregroundColor(UGColor.Text.muted)
     }
 }
 

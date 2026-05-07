@@ -6,8 +6,8 @@ struct HeroSection: View {
     let onFavorite: () -> Void
     let onShare: () -> Void
 
-    private var halo: Color { Color(hex: game.mainColor) ?? UGColor.accent }
-    private var placeholder: Color { Color(hex: game.mainColor) ?? UGColor.elevated }
+    private var halo: Color { Color(hex: game.mainColor) ?? UGColor.Accent.primary }
+    private var placeholder: Color { Color(hex: game.mainColor) ?? UGColor.Surface.raised }
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
@@ -74,7 +74,7 @@ struct HeroSection: View {
             }
             Text(game.title)
                 .font(UGFont.display)
-                .foregroundColor(UGColor.textPrimary)
+                .foregroundColor(UGColor.Text.primary)
                 .lineLimit(2)
             UGPillButton(title: "▶ Play now", action: onPlay)
         }

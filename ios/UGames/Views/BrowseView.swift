@@ -12,7 +12,7 @@ struct BrowseView: View {
 
     var body: some View {
         ZStack {
-            UGColor.bg0.ignoresSafeArea()
+            UGColor.Surface.base.ignoresSafeArea()
             VStack(spacing: 0) {
                 topBar
                 if viewModel.mode == .feed && !viewModel.categories.isEmpty {
@@ -53,9 +53,9 @@ struct BrowseView: View {
                     get: { viewModel.searchQuery },
                     set: { viewModel.searchQuery = $0 },
                 ),
-                prompt: Text("Search games").foregroundColor(UGColor.textMuted),
+                prompt: Text("Search games").foregroundColor(UGColor.Text.muted),
             )
-            .foregroundColor(UGColor.textPrimary)
+            .foregroundColor(UGColor.Text.primary)
             .submitLabel(.search)
             .onSubmit { viewModel.submitSearch() }
             .autocorrectionDisabled()
@@ -67,7 +67,7 @@ struct BrowseView: View {
                     viewModel.searchQuery = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(UGColor.textSecondary)
+                        .foregroundColor(UGColor.Text.secondary)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
                 }
@@ -82,7 +82,7 @@ struct BrowseView: View {
     private var content: some View {
         let visible = viewModel.visibleGames
         if visible.isEmpty && viewModel.isLoading {
-            VStack { Spacer(); ProgressView().tint(UGColor.textPrimary); Spacer() }
+            VStack { Spacer(); ProgressView().tint(UGColor.Text.primary); Spacer() }
         } else if visible.isEmpty, let err = viewModel.error {
             EmptyState(
                 systemIcon: "wifi.slash",
@@ -117,12 +117,12 @@ struct BrowseView: View {
                         }
                     }
                     if viewModel.isLoadingMore {
-                        ProgressView().tint(UGColor.textPrimary).padding(UGSpace.l)
+                        ProgressView().tint(UGColor.Text.primary).padding(UGSpace.l)
                     }
                     if !visible.isEmpty && !viewModel.hasMore && !viewModel.isLoading {
                         Text(viewModel.mode == .search ? "End of search results" : "End of catalog")
                             .font(UGFont.caption)
-                            .foregroundColor(UGColor.textMuted)
+                            .foregroundColor(UGColor.Text.muted)
                             .padding(UGSpace.xl)
                     }
                 }

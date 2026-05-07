@@ -15,7 +15,7 @@ struct GameCard: View {
 
     private var halo: Color {
         let hex = style == .square ? (game.iconMainColor ?? game.mainColor) : game.mainColor
-        return Color(hex: hex) ?? UGColor.accent
+        return Color(hex: hex) ?? UGColor.Accent.primary
     }
     private var placeholder: Color { halo }
 
@@ -55,7 +55,7 @@ struct GameCard: View {
                     UGCircleIconButton(
                         systemName: isFavorite ? "heart.fill" : "heart",
                         accessibilityLabel: isFavorite ? "Remove from favorites" : "Add to favorites",
-                        tint: isFavorite ? UGColor.danger : UGColor.textPrimary,
+                        tint: isFavorite ? UGColor.Feedback.danger : UGColor.Text.primary,
                         diameter: UGSize.buttonSm,
                         iconSize: 14,
                         action: onFavoriteToggle
@@ -75,7 +75,7 @@ struct GameCard: View {
             VStack(alignment: .leading, spacing: UGSpace.xs) {
                 Text(game.title)
                     .font(UGFont.bodyS)
-                    .foregroundColor(UGColor.textPrimary)
+                    .foregroundColor(UGColor.Text.primary)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 let meta = [
@@ -85,7 +85,7 @@ struct GameCard: View {
                 if !meta.isEmpty {
                     Text(meta)
                         .font(UGFont.caption)
-                        .foregroundColor(UGColor.textMuted)
+                        .foregroundColor(UGColor.Text.muted)
                         .lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -99,7 +99,7 @@ struct GameCard: View {
             CoverImage(url: coverUrl, placeholder: placeholder)
             Text(game.title)
                 .font(UGFont.caption)
-                .foregroundColor(UGColor.textPrimary)
+                .foregroundColor(UGColor.Text.primary)
                 .lineLimit(1)
                 .padding(UGSpace.s)
                 .ugShadow(.elevation(.text))
@@ -115,7 +115,7 @@ struct GameCard: View {
                 .haloChrome(halo, size: .lg)
             Text(game.title)
                 .font(UGFont.bodyS)
-                .foregroundColor(UGColor.textPrimary)
+                .foregroundColor(UGColor.Text.primary)
                 .lineLimit(1)
                 .frame(width: UGSize.squareCard, alignment: .leading)
         }

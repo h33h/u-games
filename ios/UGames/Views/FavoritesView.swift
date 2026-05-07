@@ -9,7 +9,7 @@ struct FavoritesView: View {
 
     var body: some View {
         ZStack {
-            UGColor.bg0.ignoresSafeArea()
+            UGColor.Surface.base.ignoresSafeArea()
             if favorites.games.isEmpty {
                 EmptyState(
                     systemIcon: "heart",
@@ -22,7 +22,7 @@ struct FavoritesView: View {
                 ScrollView {
                     Text("Favorites · \(favorites.games.count)")
                         .font(UGFont.titleM)
-                        .foregroundColor(UGColor.textPrimary)
+                        .foregroundColor(UGColor.Text.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal, UGSpace.l)
                         .padding(.top, UGSpace.m)

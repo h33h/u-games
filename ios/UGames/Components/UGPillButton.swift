@@ -65,7 +65,7 @@ private struct OptionalGlow: ViewModifier {
     let enabled: Bool
     func body(content: Content) -> some View {
         if enabled {
-            content.ugShadow(.glow(.strong, UGColor.accent))
+            content.ugShadow(.glow(.strong, UGColor.Accent.primary))
         } else {
             content
         }

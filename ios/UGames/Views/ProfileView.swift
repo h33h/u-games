@@ -10,7 +10,7 @@ struct ProfileView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            UGColor.bg0.ignoresSafeArea()
+            UGColor.Surface.base.ignoresSafeArea()
             VStack(alignment: .leading, spacing: 0) {
                 UGTopBar(title: "Profile", onBack: onBack)
                 Spacer().frame(height: UGSpace.l)
@@ -42,11 +42,11 @@ struct ProfileView: View {
                     : (!p.login.isEmpty ? p.login : "Guest")
                 Text(displayName)
                     .font(UGFont.titleL)
-                    .foregroundColor(UGColor.textPrimary)
+                    .foregroundColor(UGColor.Text.primary)
                 if !p.login.isEmpty && p.login != displayName {
                     Text(p.login)
                         .font(UGFont.bodyS)
-                        .foregroundColor(UGColor.textMuted)
+                        .foregroundColor(UGColor.Text.muted)
                 }
                 if p.hasYaPlus {
                     UGChip(text: "YANDEX PLUS", style: .accentSoft)
@@ -73,12 +73,12 @@ struct ProfileView: View {
                     onTap: onLoginClick,
                 )
             }
-            Divider().background(UGColor.divider)
+            Divider().background(UGColor.Border.divider)
             SettingsRow(systemIcon: "doc.text", label: "Diagnostic logs", onTap: onLogsClick)
-            Divider().background(UGColor.divider)
+            Divider().background(UGColor.Border.divider)
             SettingsRow(systemIcon: "info.circle", label: "About", onTap: onAboutClick)
         }
-        .background(UGColor.elevated)
+        .background(UGColor.Surface.raised)
         .clipShape(RoundedRectangle(cornerRadius: UGRadius.l))
     }
 }
@@ -90,7 +90,7 @@ private struct SettingsRow: View {
     let onTap: () -> Void
 
     var body: some View {
-        let tint = danger ? UGColor.danger : UGColor.textPrimary
+        let tint = danger ? UGColor.Feedback.danger : UGColor.Text.primary
         Button(action: onTap) {
             HStack {
                 Image(systemName: systemIcon)
@@ -104,7 +104,7 @@ private struct SettingsRow: View {
                 if !danger {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundColor(UGColor.textMuted)
+                        .foregroundColor(UGColor.Text.muted)
                 }
             }
             .padding(.horizontal, UGSpace.l)

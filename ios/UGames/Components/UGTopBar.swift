@@ -13,14 +13,14 @@ struct UGTopBar<Trailing: View>: View {
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(UGColor.textPrimary)
+                    .foregroundColor(UGColor.Text.primary)
                     .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
             }
             .accessibilityLabel("Back")
             Text(title)
                 .font(UGFont.titleM)
-                .foregroundColor(UGColor.textPrimary)
+                .foregroundColor(UGColor.Text.primary)
             Spacer()
             trailing()
         }

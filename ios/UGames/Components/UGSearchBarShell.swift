@@ -7,13 +7,13 @@ struct UGSearchBarShell<Content: View>: View {
         HStack(spacing: UGSpace.s) {
             Image(systemName: "magnifyingglass")
                 .font(UGFont.bodyS.weight(.semibold))
-                .foregroundColor(UGColor.textSecondary)
+                .foregroundColor(UGColor.Text.secondary)
             content()
         }
         .padding(.horizontal, UGSpace.l)
         .padding(.vertical, UGSpace.m)
-        .background(UGColor.surface)
-        .overlay(RoundedRectangle(cornerRadius: UGRadius.m).stroke(UGColor.divider))
+        .background(UGColor.Surface.subtle)
+        .overlay(RoundedRectangle(cornerRadius: UGRadius.m).stroke(UGColor.Border.divider))
         .clipShape(RoundedRectangle(cornerRadius: UGRadius.m))
     }
 }

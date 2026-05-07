@@ -10,9 +10,9 @@ struct Skeleton: View {
             .fill(
                 LinearGradient(
                     stops: [
-                        .init(color: UGColor.elevated, location: 0),
+                        .init(color: UGColor.Surface.raised, location: 0),
                         .init(color: Color(red: 0x22 / 255.0, green: 0x22 / 255.0, blue: 0x2A / 255.0), location: max(0, min(1, phase + 0.3))),
-                        .init(color: UGColor.elevated, location: max(0, min(1, phase + 0.6))),
+                        .init(color: UGColor.Surface.raised, location: max(0, min(1, phase + 0.6))),
                     ],
                     startPoint: .leading, endPoint: .trailing
                 )

@@ -30,17 +30,17 @@ struct UGChip: View {
 
     private var foreground: Color {
         switch style {
-        case .neutral: UGColor.textSecondary
-        case .accentSoft, .overlayRating: UGColor.accent
-        case .overlay: UGColor.textSecondary
+        case .neutral: UGColor.Text.secondary
+        case .accentSoft, .overlayRating: UGColor.Accent.primary
+        case .overlay: UGColor.Text.secondary
         }
     }
 
     private var background: Color {
         switch style {
         case .neutral: Color.white.opacity(0.08)
-        case .accentSoft: UGColor.accent.opacity(0.18)
-        case .overlayRating, .overlay: UGColor.overlayBg
+        case .accentSoft: UGColor.Accent.primary.opacity(0.18)
+        case .overlayRating, .overlay: UGColor.Surface.overlay
         }
     }
 

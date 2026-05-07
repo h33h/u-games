@@ -6,7 +6,7 @@ struct AuthView: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            UGColor.bg0.ignoresSafeArea()
+            UGColor.Surface.base.ignoresSafeArea()
             VStack(spacing: 0) {
                 UGTopBar(title: "Sign in to Yandex", onBack: onClose)
                 AuthWebView(onSignedIn: onClose)

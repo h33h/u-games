@@ -54,6 +54,71 @@ class CatalogApi(private val httpClient: HttpClient) {
         clientHeight: Int = 915,
     ): FeedPage = fetchFeed(pageId = null, gamesPerPage = gamesPerPage, lang = lang, clientWidth = clientWidth, clientHeight = clientHeight)
 
+    /**
+     * Same `/feed/` endpoint as [firstFeedPage] but preserves the editorial
+     * block structure (`type` / `size` / `title` / `items`) instead of
+     * flattening. Used by Home to drive Hero (first item of the first
+     * `categorized` `size=l` block), Spotlight (first `categorized` `size=s`
+     * block with ≥5 items) and per-genre rows. Also extracts the genre list
+     * from `siteNavigationLinks.categories` so Browse chips don't need a
+     * separate request.
+     */
+    suspend fun firstFeedPageWithBlocks(
+        gamesPerPage: Int = 24,
+        lang: String = "en",
+        clientWidth: Int = 412,
+        clientHeight: Int = 915,
+    ): FeedWithBlocks {
+        val response: JsonObject = httpClient.get(FEED_URL) {
+            parameter("with_promos", "true")
+            parameter("lang", lang)
+            parameter("games_count", gamesPerPage.toString())
+            parameter("categorized_size", "5")
+            parameter("with_recent_games", "true")
+            parameter("platform", "android_other")
+            parameter("client_width", clientWidth.toString())
+            parameter("client_height", clientHeight.toString())
+            mobileHeaders()
+        }.body()
+
+        val feedArr = response["feed"] as? JsonArray ?: JsonArray(emptyList())
+        val blocks = feedArr.mapNotNull { el ->
+            val obj = el as? JsonObject ?: return@mapNotNull null
+            val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val size = obj["size"]?.jsonPrimitive?.contentOrNull
+            val title = obj["title"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val itemsArr = obj["items"] as? JsonArray ?: JsonArray(emptyList())
+            val items = itemsArr.mapNotNull { (it as? JsonObject)?.let(::itemToGame) }
+            if (items.isEmpty()) null else FeedBlock(type, size, title, items)
+        }
+        // Dedupe across blocks with first-write-wins so Hero/Spotlight pick
+        // the canonical instance and per-genre rows don't repeat the same
+        // appId.
+        val flat = run {
+            val seen = mutableSetOf<Long>()
+            buildList { for (b in blocks) for (g in b.items) if (seen.add(g.appId)) add(g) }
+        }
+        val pageInfo = response["pageInfo"] as? JsonObject
+        val nextPageId = pageInfo?.get("nextPageId")?.jsonPrimitive?.contentOrNull
+        val hasNext = pageInfo?.get("hasNextPage")?.jsonPrimitive?.booleanOrNull ?: (nextPageId != null)
+
+        val nav = response["siteNavigationLinks"] as? JsonObject
+        val cats = (nav?.get("categories") as? JsonArray ?: JsonArray(emptyList()))
+            .mapNotNull {
+                val o = it as? JsonObject ?: return@mapNotNull null
+                o["title"]?.jsonPrimitive?.contentOrNull
+                    ?: o["name"]?.jsonPrimitive?.contentOrNull
+            }
+
+        return FeedWithBlocks(
+            blocks = blocks,
+            flatGames = flat,
+            genres = cats,
+            nextPageId = nextPageId,
+            hasNext = hasNext,
+        )
+    }
+
     suspend fun nextFeedPage(
         pageId: String,
         gamesPerPage: Int = 24,

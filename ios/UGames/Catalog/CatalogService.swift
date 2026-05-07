@@ -19,6 +19,13 @@ final class CatalogService: ObservableObject {
     @Published private(set) var hasMore: Bool = false
     @Published private(set) var error: String?
     @Published private(set) var profile: UserProfile = .anonymous
+    /// Bumped by RootView each time the user closes a game and returns to
+    /// the catalog. HomeViewModel observes it to re-fetch the feed so
+    /// Yandex's server-side `recentGames` (now including the game that
+    /// was just played) lands in feedRecent.
+    @Published private(set) var gameSessionEndCount: Int = 0
+
+    func notifyGameSessionEnded() { gameSessionEndCount &+= 1 }
     @Published var searchQuery: String = "" {
         didSet { onQueryChanged(searchQuery) }
     }
@@ -179,13 +186,141 @@ final class CatalogService: ObservableObject {
         }
     }
 
-    private struct FeedPage {
+    struct FeedPage {
         let games: [Game]
         let nextPageId: String?
         let hasNext: Bool
     }
 
-    private func fetchFeed(pageId: String?, gamesPerPage: Int = 24, lang: String = "en") async throws -> FeedPage {
+    /// Block-aware /feed/ caller for Home. Returns the editorial block list
+    /// plus a deduped flat list and the genre vocabulary harvested from
+    /// `siteNavigationLinks.categories`. Same query params as `fetchFeed` so
+    /// the response shape matches; the only difference is preservation of
+    /// block structure on the client side.
+    func fetchFeedWithBlocks(
+        gamesPerPage: Int = 24,
+        lang: String = "en",
+        tab: String? = nil,
+    ) async throws -> FeedWithBlocks {
+        var components = URLComponents(string: "https://yandex.com/games/api/catalogue/v2/feed/")!
+        var items = [
+            URLQueryItem(name: "with_promos", value: "true"),
+            URLQueryItem(name: "lang", value: lang),
+            URLQueryItem(name: "games_count", value: String(gamesPerPage)),
+            URLQueryItem(name: "suggested_width", value: "3"),
+            URLQueryItem(name: "suggested_rows", value: "8"),
+            URLQueryItem(name: "with_recent_games", value: "true"),
+            URLQueryItem(name: "platform", value: "ios"),
+            URLQueryItem(name: "client_width", value: "390"),
+            URLQueryItem(name: "client_height", value: "844"),
+        ]
+        if let tab = tab, !tab.isEmpty {
+            items.append(URLQueryItem(name: "tab", value: tab))
+        }
+        components.queryItems = items
+        var request = URLRequest(url: components.url!)
+        request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, _) = try await URLSession.shared.data(for: request)
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let feed = root["feed"] as? [[String: Any]]
+        else { return FeedWithBlocks(blocks: [], flatGames: [], recentGames: [], genres: [], nextPageId: nil, hasNext: false) }
+        var blocks: [FeedBlock] = []
+        var seen = Set<Int64>()
+        var flat: [Game] = []
+        for raw in feed {
+            guard let type = raw["type"] as? String else { continue }
+            let size = raw["size"] as? String
+            let title = (raw["title"] as? String) ?? ""
+            let items = ((raw["items"] as? [[String: Any]]) ?? []).compactMap(GameDecoder.parse)
+            if items.isEmpty { continue }
+            blocks.append(FeedBlock(type: type, size: size, title: title, items: items))
+            for g in items where seen.insert(g.appId).inserted { flat.append(g) }
+        }
+        let pageInfo = root["pageInfo"] as? [String: Any]
+        let nextPageId = pageInfo?["nextPageId"] as? String
+        let hasNext = (pageInfo?["hasNextPage"] as? Bool) ?? (nextPageId != nil)
+        // Server-side recents live at the response root, not inside feed[].
+        let recentGames = ((root["recentGames"] as? [[String: Any]]) ?? [])
+            .compactMap(GameDecoder.parse)
+        // siteNavigationLinks.categories is empty in the JSON response;
+        // categories are only available via the SSR HTML __appData__.
+        // fetchCategories() is the right place to load them.
+        return FeedWithBlocks(
+            blocks: blocks,
+            flatGames: flat,
+            recentGames: recentGames,
+            genres: [],
+            nextPageId: nextPageId,
+            hasNext: hasNext,
+        )
+    }
+
+    /// REST search endpoint. Returns a paginated `FeedPage`-shaped response
+    /// (the same JSON shape as `/feed/`) so BrowseViewModel can drive paging
+    /// through `nextPageId`. The previous HTML-scrape path silently capped
+    /// at one page of ~24 results — that's why search looked broken.
+    func fetchSearchPaginated(
+        query: String,
+        pageId: String? = nil,
+        gamesPerPage: Int = 24,
+        lang: String = "en",
+    ) async throws -> FeedPage {
+        var components = URLComponents(string: "https://yandex.com/games/api/catalogue/v2/search/")!
+        var items = [
+            URLQueryItem(name: "query", value: query),
+            URLQueryItem(name: "lang", value: lang),
+            URLQueryItem(name: "platform", value: "ios"),
+            URLQueryItem(name: "games_count", value: String(gamesPerPage)),
+        ]
+        if let pageId = pageId {
+            items.append(URLQueryItem(name: "page_id", value: pageId))
+        }
+        components.queryItems = items
+        var request = URLRequest(url: components.url!)
+        request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, _) = try await URLSession.shared.data(for: request)
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let feed = root["feed"] as? [[String: Any]]
+        else { return FeedPage(games: [], nextPageId: nil, hasNext: false) }
+        let games = GameDecoder.flatten(feed)
+        let pageInfo = root["pageInfo"] as? [String: Any]
+        let nextPageId = pageInfo?["nextPageId"] as? String
+        let hasNext = (pageInfo?["hasNextPage"] as? Bool) ?? (nextPageId != nil)
+        return FeedPage(games: games, nextPageId: nextPageId, hasNext: hasNext)
+    }
+
+    /// Fetches the localized list of category tabs by scraping the SSR
+    /// `__appData__.categoriesForTabs` from the catalog landing page. Yandex
+    /// does NOT expose this list via JSON; the only stable source is the
+    /// HTML root document. Each entry is `(name, title, gamesCount)`.
+    func fetchCategories(lang: String = "en") async throws -> [GameCategory] {
+        let host = Self.preferredYandexHost
+        let preferredLang = host == "yandex.ru" ? "ru" : lang
+        var components = URLComponents(string: "https://\(host)/games/")!
+        components.queryItems = [URLQueryItem(name: "lang", value: preferredLang)]
+        var request = URLRequest(url: components.url!)
+        request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("text/html", forHTTPHeaderField: "Accept")
+        let (data, _) = try await URLSession.shared.data(for: request)
+        guard let html = String(data: data, encoding: .utf8),
+              let json = extractAppData(html),
+              let parsed = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+              let raw = parsed["categoriesForTabs"] as? [[String: Any]]
+        else { return [] }
+        return raw.compactMap { d in
+            guard let name = d["name"] as? String, !name.isEmpty,
+                  let title = d["title"] as? String, !title.isEmpty
+            else { return nil }
+            let count = (d["gamesCount"] as? Int) ?? 0
+            return GameCategory(name: name, title: title, gamesCount: count)
+        }
+    }
+
+    /// Pulls a single feed page in legacy (flat) form. Phase 2 keeps this for
+    /// Browse pagination; Phase 3 may unify with the block-aware caller.
+    func fetchFeed(pageId: String?, gamesPerPage: Int = 24, lang: String = "en") async throws -> FeedPage {
         var components = URLComponents(string: "https://yandex.com/games/api/catalogue/v2/feed/")!
         var items = [
             URLQueryItem(name: "with_promos", value: "true"),
@@ -212,6 +347,125 @@ final class CatalogService: ObservableObject {
         let next = pageInfo?["nextPageId"] as? String
         let hasNext = (pageInfo?["hasNextPage"] as? Bool) ?? (next != nil)
         return FeedPage(games: games, nextPageId: next, hasNext: hasNext)
+    }
+
+    /// Fetch rich game-detail metadata that the JSON `/feed/` endpoint
+    /// does not expose: long description, screenshots, published date.
+    ///
+    /// Yandex serves these only via JSON-LD inside the SSR HTML at
+    /// `/games/app/<id>` (`<script type="application/ld+json">`).
+    /// `apiData.appInfo` in `__appData__` is just a base64 version
+    /// stamp; there is no JSON endpoint behind it that returns the
+    /// full detail blob.
+    ///
+    /// Screenshot URLs come back with `/orig` suffix — multi-MB PNGs.
+    /// We rewrite to `pjpg500x280` (~60 KB), the next-most-common
+    /// pre-rendered size on Yandex's avatars storage.
+    func fetchAppDetail(appId: Int64, lang: String = "en") async -> AppDetail {
+        let host = Self.preferredYandexHost
+        let preferredLang = host == "yandex.ru" ? "ru" : lang
+        var components = URLComponents(string: "https://\(host)/games/app/\(appId)")!
+        components.queryItems = [URLQueryItem(name: "lang", value: preferredLang)]
+        var request = URLRequest(url: components.url!)
+        request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("text/html", forHTTPHeaderField: "Accept")
+        request.setValue("\(preferredLang),en;q=0.9", forHTTPHeaderField: "Accept-Language")
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            guard let html = String(data: data, encoding: .utf8) else { return .empty }
+            guard let ldJson = extractJsonLd(html) else { return .empty }
+            guard let parsed = try JSONSerialization.jsonObject(with: Data(ldJson.utf8)) as? [String: Any],
+                  let graph = parsed["@graph"] as? [[String: Any]]
+            else { return .empty }
+            let gameNode = graph.first { node in
+                let type = node["@type"] as? String
+                return type == "SoftwareApplication" || type == "VideoGame" || type == "MobileApplication"
+            }
+            guard let game = gameNode else { return .empty }
+
+            // Prefer the multi-paragraph description on mainEntityOfPage;
+            // the top-level `description` is the short OG tagline.
+            let mainEntity = game["mainEntityOfPage"] as? [String: Any]
+            let rawDesc = (mainEntity?["description"] as? String) ?? (game["description"] as? String)
+            let description: String? = rawDesc.flatMap {
+                let trimmed = decodeHtmlEntities($0).trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+
+            let screenshots = ((game["screenshot"] as? [[String: Any]]) ?? [])
+                .compactMap { $0["url"] as? String }
+                .map { rewriteAvatarSize($0, newSize: "pjpg500x280") }
+
+            let datePublished = game["datePublished"] as? String
+
+            // `genre` may be a string or an array — JSON-LD allows both.
+            let genres: [String]
+            if let arr = game["genre"] as? [String] {
+                genres = arr.map { decodeHtmlEntities($0) }
+            } else if let single = game["genre"] as? String {
+                genres = [decodeHtmlEntities(single)]
+            } else {
+                genres = []
+            }
+
+            let languages: [String]
+            if let arr = game["inLanguage"] as? [String] {
+                languages = arr
+            } else if let single = game["inLanguage"] as? String {
+                languages = [single]
+            } else {
+                languages = []
+            }
+
+            let author: String? = {
+                let n = (game["author"] as? [String: Any])?["name"] as? String
+                let cleaned = n.flatMap { decodeHtmlEntities($0) }?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return (cleaned?.isEmpty == false) ? cleaned : nil
+            }()
+
+            return AppDetail(
+                description: description,
+                screenshots: screenshots,
+                datePublished: datePublished,
+                genres: genres,
+                languages: languages,
+                author: author
+            )
+        } catch {
+            return .empty
+        }
+    }
+
+    /// Pull the contents of `<script type="application/ld+json">…</script>`.
+    private func extractJsonLd(_ html: String) -> String? {
+        let markers = ["type=\"application/ld+json\"", "type='application/ld+json'"]
+        for marker in markers {
+            guard let markerRange = html.range(of: marker) else { continue }
+            guard let openIdx = html.range(of: ">", range: markerRange.upperBound..<html.endIndex) else { continue }
+            guard let closeIdx = html.range(of: "</script>", range: openIdx.upperBound..<html.endIndex) else { continue }
+            return String(html[openIdx.upperBound..<closeIdx.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return nil
+    }
+
+    /// Replace the trailing size suffix on a Yandex avatars URL. The
+    /// storage only serves pre-rendered sizes; sticking to a known-good
+    /// value keeps the request from 404-ing.
+    private func rewriteAvatarSize(_ url: String, newSize: String) -> String {
+        guard let lastSlash = url.lastIndex(of: "/"), lastSlash != url.startIndex else { return url }
+        return String(url[..<url.index(after: lastSlash)]) + newSize
+    }
+
+    /// Minimal HTML-entity decoder for the few cases that appear in
+    /// JSON-LD titles and descriptions.
+    private func decodeHtmlEntities(_ s: String) -> String {
+        s.replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
     }
 
     /// Fetch games similar to the given app from Yandex's recommender. Used
@@ -241,7 +495,7 @@ final class CatalogService: ObservableObject {
         }
     }
 
-    private func fetchSearch(query: String, lang: String = "en") async throws -> [Game] {
+    func fetchSearch(query: String, lang: String = "en") async throws -> [Game] {
         var components = URLComponents(string: "https://yandex.com/games/search")!
         components.queryItems = [
             URLQueryItem(name: "query", value: query),
@@ -260,7 +514,7 @@ final class CatalogService: ObservableObject {
         return GameDecoder.flatten(blocks)
     }
 
-    private static var preferredYandexHost: String {
+    static var preferredYandexHost: String {
         let lang = Locale.preferredLanguages.first ?? Locale.current.identifier
         return lang.hasPrefix("ru") ? "yandex.ru" : "yandex.com"
     }
@@ -343,7 +597,7 @@ final class CatalogService: ObservableObject {
         )
     }
 
-    private func extractAppData(_ html: String) -> String? {
+    func extractAppData(_ html: String) -> String? {
         guard let markerRange = html.range(of: "id=\"__appData__\"") else { return nil }
         guard let openIdx = html.range(of: ">", range: markerRange.upperBound..<html.endIndex) else { return nil }
         guard let closeIdx = html.range(of: "</script>", range: openIdx.upperBound..<html.endIndex) else { return nil }
@@ -378,7 +632,7 @@ final class ProfileFetchRedirectDelegate: NSObject, URLSessionTaskDelegate, @unc
     }
 }
 
-private enum GameDecoder {
+enum GameDecoder {
     static func flatten(_ blocks: [[String: Any]]) -> [Game] {
         var seen = Set<Int64>()
         var out: [Game] = []
@@ -392,7 +646,7 @@ private enum GameDecoder {
         return out
     }
 
-    private static func parse(_ item: [String: Any]) -> Game? {
+    static func parse(_ item: [String: Any]) -> Game? {
         guard let appId = (item["appID"] as? NSNumber)?.int64Value,
               let title = item["title"] as? String else { return nil }
         let rating = (item["rating"] as? NSNumber)?.doubleValue ?? 0
@@ -400,10 +654,19 @@ private enum GameDecoder {
         let media = item["media"] as? [String: Any]
         let cover = (media?["cover"] as? [String: Any])?["prefix-url"] as? String
         let icon = (media?["icon"] as? [String: Any])?["prefix-url"] as? String
+        let coverObj = media?["cover"] as? [String: Any]
+        let iconObj = media?["icon"] as? [String: Any]
+        let mainColor = coverObj?["mainColor"] as? String
+        let iconMainColor = iconObj?["mainColor"] as? String
+        let videos = media?["videos"] as? [[String: Any]]
+        let videoUrl = videos?.first?["mp4StreamUrl"] as? String
         let categories = (item["categoriesNames"] as? [String]) ?? []
         let developer = (item["developer"] as? [String: Any])?["name"] as? String ?? ""
         let coverUrl = cover.map { "\($0)pjpg250x140" } ?? ""
         let iconUrl = (icon ?? cover).map { "\($0)pjpg256x256" } ?? ""
+        let ageRating = ((item["features"] as? [String: Any])?["age_rating"] as? String)?
+            .trimmingCharacters(in: .whitespaces)
+        let ageRatingClean = (ageRating?.isEmpty == true) ? nil : ageRating
         return Game(
             appId: appId,
             title: title,
@@ -412,7 +675,12 @@ private enum GameDecoder {
             coverUrl: coverUrl,
             iconUrl: iconUrl,
             categories: categories,
-            developer: developer
+            developer: developer,
+            mainColor: mainColor,
+            iconMainColor: iconMainColor,
+            videoUrl: videoUrl,
+            coverPrefixUrl: cover,
+            ageRating: ageRatingClean
         )
     }
 }

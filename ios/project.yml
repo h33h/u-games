@@ -27,6 +27,11 @@ targets:
         excludes:
           - "Info.plist"
     resources:
+      # ios/UGames/Resources/* are symlinks pointing at ../shared/inject/*
+      # and ../shared/blocklist/* so Android (assets.srcDirs) and iOS
+      # both pull from a single source. XcodeGen with `type: folder`
+      # copies the symlink targets, not the symlink itself, so the .app
+      # bundle ends up with the latest shared content on every build.
       - path: UGames/Resources
         type: folder
     info:
@@ -44,6 +49,11 @@ targets:
           UIColorName: black
         NSAppTransportSecurity:
           NSAllowsArbitraryLoadsInWebContent: true
+        LSRequiresIPhoneOS: true
+        CFBundleURLTypes:
+          - CFBundleURLName: games.yandex.wrap.ugames
+            CFBundleURLSchemes:
+              - ugames
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: games.yandex.wrap

@@ -1,24 +1,36 @@
 package games.yandex.wrap
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.viewmodel.viewModelFactory
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import games.yandex.wrap.catalog.Game
 import games.yandex.wrap.ui.AuthScreen
-import games.yandex.wrap.ui.CatalogScreen
-import games.yandex.wrap.ui.CatalogViewModel
 import games.yandex.wrap.ui.GameScreen
+import games.yandex.wrap.ui.LogsScreen
+import games.yandex.wrap.ui.TabContainer
+import games.yandex.wrap.ui.TabPushed
+import games.yandex.wrap.ui.browse.BrowseScreen
+import games.yandex.wrap.ui.browse.BrowseViewModel
+import games.yandex.wrap.ui.detail.GameDetailScreen
+import games.yandex.wrap.ui.detail.GameDetailViewModel
+import games.yandex.wrap.ui.favorites.FavoritesScreen
+import games.yandex.wrap.ui.home.HomeScreen
+import games.yandex.wrap.ui.home.HomeViewModel
+import games.yandex.wrap.ui.profile.AboutScreen
+import games.yandex.wrap.ui.profile.ProfileScreen
+import games.yandex.wrap.ui.profile.ProfileViewModel
+import games.yandex.wrap.ui.theme.UGamesTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -30,67 +42,162 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val factory = viewModelFactory {
-            initializer { CatalogViewModel(app.catalogRepository) }
+            initializer { HomeViewModel(app.catalogRepository) }
+            initializer { BrowseViewModel(app.catalogRepository) }
+            initializer { ProfileViewModel(app.catalogRepository) }
         }
-        val catalogVm = ViewModelProvider(this, factory)[CatalogViewModel::class.java]
+        val provider = ViewModelProvider(this, factory)
+        val homeVm = provider[HomeViewModel::class.java]
+        val browseVm = provider[BrowseViewModel::class.java]
+        val profileVm = provider[ProfileViewModel::class.java]
 
-        // ugames://app/<id> launches directly into the game frame.
-        val initialRoute: Route = parseDeepLink(intent)?.let { appId ->
-            Route.Game(appId, "")
-        } ?: Route.Catalog
+        // Deep-link bypasses the Detail screen because we don't have a
+        // full Game object on cold start (only the appId). The user lands
+        // straight in the WebView, matching the link's "open the game"
+        // intent.
+        val deepLink: TabPushed = parseDeepLink(intent)
+            ?.let { TabPushed.Game(appId = it, title = "") }
+            ?: TabPushed.None
+
+        // Phase 3: card clicks land on GameDetail first; Detail's "Play
+        // now" is what pushes the WebView. Yandex maintains recents
+        // server-side per profile, so no local store update here.
+        val openGame: (Game, (TabPushed) -> Unit) -> Unit = { game, push ->
+            push(TabPushed.GameDetail(game))
+        }
+
+        val openShare: (Game) -> Unit = { game ->
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, game.title)
+                putExtra(Intent.EXTRA_TEXT, game.playUrl)
+            }
+            startActivity(Intent.createChooser(intent, "Share game"))
+        }
 
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme()) {
-                Surface(color = Color.Black) {
-                    var route by remember { mutableStateOf<Route>(initialRoute) }
-                    when (val r = route) {
-                        Route.Catalog -> CatalogScreen(
-                            viewModel = catalogVm,
-                            onGameClick = { game ->
-                                catalogVm.recordGameOpen(game)
-                                route = Route.Game(game.appId, game.title)
+            UGamesTheme {
+                val favorites by homeVm.favorites.collectAsState()
+                TabContainer(
+                    initialTab = "home",
+                    initialPushed = deepLink,
+                    home = { push, switchTab ->
+                        HomeScreen(
+                            viewModel = homeVm,
+                            onGameClick = { game -> openGame(game, push) },
+                            onOpenBrowse = {
+                                browseVm.requestSearchFocus()
+                                switchTab("browse")
                             },
-                            onLoginClick = { route = Route.Auth },
+                            onOpenBrowseFiltered = { genre ->
+                                browseVm.setCategoryByName(genre)
+                                switchTab("browse")
+                            },
+                            onProfileClick = { push(TabPushed.Profile) },
+                            onProfileLongPress = { push(TabPushed.Logs) },
+                            onShareGame = openShare,
                         )
-                        is Route.Game -> GameScreen(
-                            appId = r.appId,
-                            title = r.title,
-                            scripts = app.injectedScripts,
-                            blockList = app.blockList,
-                            onBack = { route = Route.Catalog },
+                    },
+                    browse = { push, _ ->
+                        BrowseScreen(
+                            viewModel = browseVm,
+                            onGameClick = { game -> openGame(game, push) },
                         )
-                        Route.Auth -> AuthScreen(onClose = {
-                            catalogVm.refreshProfile()
-                            route = Route.Catalog
-                        })
-                    }
-                }
+                    },
+                    favorites = { push, switchTab ->
+                        FavoritesScreen(
+                            games = favorites,
+                            onGameClick = { game -> openGame(game, push) },
+                            onToggleFavorite = { game -> homeVm.toggleFavorite(game) },
+                            onBrowse = { switchTab("browse") },
+                        )
+                    },
+                    pushedHost = { pushed, push, onPop, replace ->
+                        when (pushed) {
+                            is TabPushed.GameDetail -> {
+                                // Fresh VM keyed on the game so navigating
+                                // Detail(A) → Similar tile → Detail(B) gets
+                                // a clean state and a new similar fetch.
+                                val detailVm = remember(pushed.game.appId) {
+                                    GameDetailViewModel(
+                                        repository = app.catalogRepository,
+                                        initialGame = pushed.game,
+                                    )
+                                }
+                                GameDetailScreen(
+                                    viewModel = detailVm,
+                                    onBack = onPop,
+                                    onPlay = { game ->
+                                        push(TabPushed.Game(game.appId, game.title))
+                                    },
+                                    onShare = openShare,
+                                    onSimilarClick = { game ->
+                                        push(TabPushed.GameDetail(game))
+                                    },
+                                    onSimilarFavoriteToggle = { game ->
+                                        // Repository toggle bypasses the
+                                        // detail VM so any tab that
+                                        // observes favoriteIds (Browse,
+                                        // Favorites grid, Home favorites
+                                        // row) updates immediately.
+                                        lifecycleScope.launch {
+                                            runCatching {
+                                                app.catalogRepository.toggleFavorite(game)
+                                            }
+                                        }
+                                    },
+                                )
+                            }
+                            is TabPushed.Game -> GameScreen(
+                                appId = pushed.appId,
+                                title = pushed.title,
+                                scripts = app.injectedScripts,
+                                blockList = app.blockList,
+                                onBack = {
+                                    // Yandex updates server-side
+                                    // recentGames on the play session —
+                                    // refresh Home so the just-played
+                                    // game appears in Recently played.
+                                    homeVm.onGameSessionEnded()
+                                    onPop()
+                                },
+                            )
+                            TabPushed.Auth -> AuthScreen(onClose = {
+                                profileVm.refresh()
+                                homeVm.refresh()
+                                onPop()
+                            })
+                            TabPushed.Logs -> LogsScreen(onClose = onPop)
+                            TabPushed.About -> AboutScreen(onBack = onPop)
+                            TabPushed.Profile -> ProfileScreen(
+                                viewModel = profileVm,
+                                onBack = onPop,
+                                onLoginClick = { replace(TabPushed.Auth) },
+                                onLogsClick = { replace(TabPushed.Logs) },
+                                onAboutClick = { replace(TabPushed.About) },
+                            )
+                            TabPushed.None -> {}
+                        }
+                    },
+                )
             }
         }
     }
 }
 
-private sealed interface Route {
-    data object Catalog : Route
-    data object Auth : Route
-    data class Game(val appId: Long, val title: String) : Route
-}
-
 /// Parse ugames://app/<id> deep links. Returns the appId if the URI matches,
-/// null otherwise (so callers fall back to Catalog). Tolerant: also accepts
-/// https://yandex.com/games/app/<id> intents in case Android's auto-verify
-/// claims the URL even though we don't ship Digital Asset Links.
-private fun parseDeepLink(intent: android.content.Intent?): Long? {
-    val uri = intent?.data ?: return null
+/// null otherwise (so callers fall back to the default Home tab). Tolerant
+/// of `https://yandex.com/games/app/<id>` intents in case Android claims
+/// the URL via auto-verify even though we don't ship Digital Asset Links.
+private fun parseDeepLink(intent: Intent?): Long? {
+    val uri: Uri = intent?.data ?: return null
     val scheme = uri.scheme?.lowercase() ?: return null
     val pathSegments = uri.pathSegments
     return when (scheme) {
         "ugames" -> {
-            // ugames://app/<id> — host="app", first path segment is the id
             if (uri.host == "app") pathSegments.firstOrNull()?.toLongOrNull() else null
         }
         "https", "http" -> {
-            // https://yandex.com/games/app/<id>
             if (uri.host?.endsWith("yandex.com") == true || uri.host?.endsWith("yandex.ru") == true) {
                 val idx = pathSegments.indexOf("app")
                 if (idx >= 0 && idx + 1 < pathSegments.size) pathSegments[idx + 1].toLongOrNull() else null

@@ -32,3 +32,5 @@ ios/Pods/
 # Misc
 node_modules/
 *.log
+.superpowers/
+.scratch/

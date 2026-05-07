@@ -25,7 +25,12 @@ struct GameView: View {
         ZStack(alignment: .topLeading) {
             Color.black.ignoresSafeArea()
             if let url = URL(string: "https://yandex.com/games/app/\(appId)") {
-                GameWebView(url: url, scripts: scripts, blockList: blockList)
+                GameWebView(
+                    url: url,
+                    scripts: scripts,
+                    blockList: blockList,
+                    paused: rotateOverlayVisible,
+                )
             }
 
             // Tap-to-reveal hot zone — small enough to not steal touches.

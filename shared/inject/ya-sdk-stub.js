@@ -46,6 +46,77 @@
     try { if (typeof window.__yga_log === 'function') window.__yga_log(tag, msg); } catch (_) {}
   }
 
+  // Yandex's MOBILE iframe HTML (e.g. game 388978's index.html) does NOT
+  // include any script that loads the YaGames SDK — desktop iframe HTML
+  // has an inline script that reads `?sdk=/sdk/_/v2.<hash>.js` and adds
+  // a <script src="https://yandex.com${sdk}"> tag, but the mobile build
+  // simply ships 5 Construct 3 scripts and expects the host PWA app to
+  // inject the SDK natively. Our wrapper isn't that PWA, so we do it here
+  // ourselves: read `?sdk=` from location.search (honest-path.js patches
+  // gameSrc to include it on the parent side), build the absolute SDK URL
+  // against the parent origin (yandex.com / yandex.ru), and append a
+  // synchronous-style <script> tag so the SDK loads BEFORE the game's
+  // bundle reads window.YaGames.
+  try {
+    var sdkParamMatch = (location.search || '').match(/[?&]sdk=([^&]+)/);
+    var sdkPath = sdkParamMatch ? decodeURIComponent(sdkParamMatch[1]) : null;
+    if (sdkPath && sdkPath.indexOf('http') !== 0) {
+      // For mobile UAs, Yandex serves /sdk/_/v2.<hash>.js ONLY from the
+      // per-game CDN origin (app-XXX.games.s3.yandex.net), NOT from
+      // yandex.com (yandex.com responds 404 for the same path under an
+      // iPhone/Android UA). Build the SDK URL against the iframe's own
+      // origin instead of the parent origin from `#origin=`.
+      sdkPath = location.origin + sdkPath;
+    }
+    if (sdkPath) {
+      ylog('sdk', 'inject SDK <script src=' + sdkPath + '>');
+      // documentStart runs before <head> exists; create one if needed.
+      var head = document.head || document.documentElement;
+      if (head) {
+        var s = document.createElement('script');
+        s.src = sdkPath;
+        s.async = false; // preserve order vs the game's bundle
+        s.onerror = function () { ylog('sdk', 'SDK <script> load FAILED ' + sdkPath); };
+        s.onload = function () { ylog('sdk', 'SDK <script> loaded'); };
+        head.appendChild(s);
+      } else {
+        ylog('sdk', 'no head/documentElement to attach SDK <script>');
+      }
+    }
+  } catch (e) {
+    ylog('sdk', 'inject error ' + (e && e.message || e));
+  }
+
+  // Forward console.error / console.warn / unhandled errors to LogStore so
+  // games that freeze at the loader leave a breadcrumb trail (Construct 3 /
+  // GamePush titles like 388978 dump useful messages on init failure that
+  // we'd otherwise need a USB-attached browser to see).
+  try {
+    var realErr = console.error.bind(console);
+    var realWarn = console.warn.bind(console);
+    function fmt(args) {
+      try {
+        return Array.prototype.map.call(args, function (a) {
+          if (a == null) return String(a);
+          if (typeof a === 'string') return a;
+          if (a instanceof Error) return (a.name || 'Error') + ': ' + a.message;
+          try { return JSON.stringify(a); } catch (_) { return String(a); }
+        }).join(' ').slice(0, 600);
+      } catch (_) { return '<unstringifiable>'; }
+    }
+    console.error = function () { try { ylog('jserr', fmt(arguments)); } catch (_) {} return realErr.apply(console, arguments); };
+    console.warn  = function () { try { ylog('jswarn', fmt(arguments)); } catch (_) {} return realWarn.apply(console, arguments); };
+    window.addEventListener('error', function (ev) {
+      var src = ev && (ev.filename || (ev.target && (ev.target.src || ev.target.href)) || '');
+      ylog('jserr', 'window.onerror ' + (ev && ev.message || '') + ' @ ' + (src || '?') + (ev && ev.lineno ? ':' + ev.lineno : ''));
+    }, true);
+    window.addEventListener('unhandledrejection', function (ev) {
+      var r = ev && ev.reason;
+      var msg = r ? (r.message || String(r)) : '?';
+      ylog('jserr', 'unhandledrejection ' + msg);
+    });
+  } catch (_) {}
+
   // Behavior flags. 'auto' grants the rewarded reward without showing an ad
   // (the user expects every monetization touchpoint to "just work" for free).
   var REWARDED_MODE = 'auto';
@@ -360,7 +431,12 @@
       try { p[k] = real[k]; } catch (_) {}
     }
     p.init = function (opts) {
+      var optsDump;
+      try { optsDump = JSON.stringify(opts || {}).slice(0, 120); } catch (_) { optsDump = '<unstringifiable>'; }
+      ylog('sdk', 'YaGames.init begin opts=' + optsDump);
+      var t0 = Date.now();
       return real.init.call(real, opts).then(function (ysdk) {
+        ylog('sdk', 'YaGames.init resolved in ' + (Date.now() - t0) + 'ms');
         try { patchAdv(ysdk && ysdk.adv); } catch (_) {}
         // Wrap getPayments so the returned Payments object grants every
         // purchase for free without a real Yandex Plus / RU Bank check.
@@ -384,15 +460,32 @@
           }
         } catch (_) {}
         return ysdk;
+      }).catch(function (err) {
+        ylog('sdk', 'YaGames.init REJECTED in ' + (Date.now() - t0) + 'ms: ' + (err && err.message || err));
+        throw err;
       });
     };
     patchedCache = p;
     return p;
   }
 
+  var __yga_get_count__ = 0;
   Object.defineProperty(window, 'YaGames', {
     configurable: true,
-    get: function () { return real ? makePatched() : undefined; },
-    set: function (v) { real = v; patchedCache = null; }
+    get: function () {
+      __yga_get_count__++;
+      if (__yga_get_count__ <= 3) {
+        ylog('sdk', 'YaGames get #' + __yga_get_count__ + ' real=' + (real ? typeof real : 'null') +
+                    ' init=' + (real && typeof real.init));
+      }
+      return real ? makePatched() : undefined;
+    },
+    set: function (v) {
+      var t = (v && typeof v) || 'null';
+      var hasInit = !!(v && typeof v.init === 'function');
+      ylog('sdk', 'YaGames set: ' + t + ' hasInit=' + hasInit);
+      real = v;
+      patchedCache = null;
+    },
   });
 })();

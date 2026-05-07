@@ -295,7 +295,7 @@ final class CatalogService: ObservableObject {
         }
     }
 
-    private func fetchSearch(query: String, lang: String = "en") async throws -> [Game] {
+    func fetchSearch(query: String, lang: String = "en") async throws -> [Game] {
         var components = URLComponents(string: "https://yandex.com/games/search")!
         components.queryItems = [
             URLQueryItem(name: "query", value: query),

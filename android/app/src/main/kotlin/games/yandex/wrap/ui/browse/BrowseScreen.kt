@@ -42,10 +42,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -74,6 +77,19 @@ fun BrowseScreen(
     val gridState = rememberLazyGridState()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
+    val searchFocusRequester = remember { FocusRequester() }
+    val searchFocusRequest by viewModel.searchFocusRequest.collectAsState()
+
+    LaunchedEffect(searchFocusRequest) {
+        if (searchFocusRequest != 0L) {
+            // Tiny delay so the LazyVerticalGrid has finished its initial
+            // composition — requesting focus mid-compose can be dropped by
+            // the IME on some devices.
+            kotlinx.coroutines.delay(150)
+            runCatching { searchFocusRequester.requestFocus() }
+            keyboardController?.show()
+        }
+    }
 
     LaunchedEffect(gridState) {
         snapshotFlow {
@@ -120,6 +136,7 @@ fun BrowseScreen(
                 onQueryChange = viewModel::onSearchChange,
                 onSubmit = viewModel::submitSearch,
                 onProfileClick = onProfileClick,
+                searchFocusRequester = searchFocusRequester,
             )
             if (state.mode == BrowseMode.Feed && state.genres.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
@@ -172,13 +189,13 @@ fun BrowseScreen(
                             state = gridState,
                             columns = GridCells.Adaptive(minSize = 160.dp),
                             contentPadding = PaddingValues(
-                                start = 12.dp,
-                                end = 12.dp,
+                                start = 14.dp,
+                                end = 14.dp,
                                 top = 4.dp,
                                 bottom = 96.dp,
                             ),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(18.dp),
                             modifier = Modifier.fillMaxSize(),
                         ) {
                             items(visible, key = { it.appId }) { game ->
@@ -212,6 +229,7 @@ private fun BrowseTopBar(
     onQueryChange: (String) -> Unit,
     onSubmit: () -> Unit,
     onProfileClick: () -> Unit,
+    searchFocusRequester: FocusRequester,
 ) {
     Row(
         modifier = Modifier
@@ -222,7 +240,7 @@ private fun BrowseTopBar(
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f).focusRequester(searchFocusRequester),
             placeholder = { Text("Search games", color = UGColors.TextMuted, style = UGType.BodyS) },
             leadingIcon = {
                 Icon(Icons.Filled.Search, null, tint = UGColors.TextSecondary)

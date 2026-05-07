@@ -1,5 +1,6 @@
 package games.yandex.wrap.ui.profile
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.filled.AccountCircle
@@ -28,6 +30,7 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -54,19 +57,34 @@ import games.yandex.wrap.ui.theme.UGType
 @Composable
 fun ProfileScreen(
     viewModel: ProfileViewModel,
+    onBack: () -> Unit,
     onLoginClick: () -> Unit,
     onLogsClick: () -> Unit,
     onAboutClick: () -> Unit,
 ) {
+    BackHandler(onBack = onBack)
     val profile by viewModel.profile.collectAsState()
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(UGColors.Bg0)
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(horizontal = 18.dp),
+            .windowInsetsPadding(WindowInsets.statusBars),
     ) {
-        Spacer(Modifier.height(24.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = UGColors.TextPrimary,
+                )
+            }
+            Text(text = "Profile", color = UGColors.TextPrimary, style = UGType.TitleM)
+        }
+        Column(modifier = Modifier.padding(horizontal = 18.dp)) {
+        Spacer(Modifier.height(8.dp))
         ProfileHero(profile = profile, onAvatarLongPress = onLogsClick)
         Spacer(Modifier.height(28.dp))
         Column(
@@ -101,6 +119,7 @@ fun ProfileScreen(
                 label = "About",
                 onClick = onAboutClick,
             )
+        }
         }
     }
 }

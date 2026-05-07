@@ -28,6 +28,7 @@ sealed interface TabPushed {
     data object Auth : TabPushed
     data object Logs : TabPushed
     data object About : TabPushed
+    data object Profile : TabPushed
 }
 
 private data class TabState(
@@ -35,11 +36,13 @@ private data class TabState(
     val tab: UGTab,
 )
 
+/// Phase-2.1: Profile lives behind the avatar in Home/Browse, not in the
+/// tab-bar. Three tabs leave more room for breathing space and align with
+/// the cleaned-up Home (no Favorites row).
 private val TABS = listOf(
     TabState("home", UGTab("home", "Home", Icons.Filled.Home)),
     TabState("browse", UGTab("browse", "Browse", Icons.Filled.GridView)),
     TabState("favorites", UGTab("favorites", "Favorites", Icons.Filled.Favorite)),
-    TabState("profile", UGTab("profile", "Profile", Icons.Filled.AccountCircle)),
 )
 
 /**
@@ -67,8 +70,11 @@ fun TabContainer(
     home: TabContent,
     browse: TabContent,
     favorites: TabContent,
-    profile: TabContent,
-    pushedHost: @Composable (TabPushed, onPop: () -> Unit) -> Unit,
+    pushedHost: @Composable (
+        pushed: TabPushed,
+        onPop: () -> Unit,
+        replace: (TabPushed) -> Unit,
+    ) -> Unit,
     initialTab: String = "home",
     initialPushed: TabPushed = TabPushed.None,
 ) {
@@ -82,15 +88,11 @@ fun TabContainer(
     var favoritesPushed by remember {
         mutableStateOf(if (initialTab == "favorites") initialPushed else TabPushed.None)
     }
-    var profilePushed by remember {
-        mutableStateOf(if (initialTab == "profile") initialPushed else TabPushed.None)
-    }
 
     val activePushed: TabPushed = when (selected) {
         "home" -> homePushed
         "browse" -> browsePushed
-        "favorites" -> favoritesPushed
-        else -> profilePushed
+        else -> favoritesPushed
     }
 
     val switchTab: (String) -> Unit = { selected = it }
@@ -98,13 +100,23 @@ fun TabContainer(
     Box(modifier = Modifier.fillMaxSize()) {
         when (selected) {
             "home" -> if (homePushed is TabPushed.None) home({ homePushed = it }, switchTab)
-                       else pushedHost(homePushed) { homePushed = TabPushed.None }
+                       else pushedHost(
+                           homePushed,
+                           { homePushed = TabPushed.None },
+                           { homePushed = it },
+                       )
             "browse" -> if (browsePushed is TabPushed.None) browse({ browsePushed = it }, switchTab)
-                         else pushedHost(browsePushed) { browsePushed = TabPushed.None }
+                         else pushedHost(
+                             browsePushed,
+                             { browsePushed = TabPushed.None },
+                             { browsePushed = it },
+                         )
             "favorites" -> if (favoritesPushed is TabPushed.None) favorites({ favoritesPushed = it }, switchTab)
-                            else pushedHost(favoritesPushed) { favoritesPushed = TabPushed.None }
-            "profile" -> if (profilePushed is TabPushed.None) profile({ profilePushed = it }, switchTab)
-                          else pushedHost(profilePushed) { profilePushed = TabPushed.None }
+                            else pushedHost(
+                                favoritesPushed,
+                                { favoritesPushed = TabPushed.None },
+                                { favoritesPushed = it },
+                            )
         }
         if (activePushed is TabPushed.None) {
             Box(

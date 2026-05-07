@@ -31,6 +31,13 @@ class BrowseViewModel(private val repository: CatalogRepository) : ViewModel() {
     val favoriteIds: StateFlow<Set<Long>> = repository.favoriteIds()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
+    /// One-shot signal: BrowseScreen reads this and calls
+    /// FocusRequester.requestFocus on the search field, then resets it.
+    /// Used by HomeScreen's search-stub click so the user lands inside an
+    /// already-focused search input.
+    private val _searchFocusRequest = MutableStateFlow(0L)
+    val searchFocusRequest: StateFlow<Long> = _searchFocusRequest.asStateFlow()
+
     private var searchDebounceJob: Job? = null
 
     init {
@@ -120,6 +127,10 @@ class BrowseViewModel(private val repository: CatalogRepository) : ViewModel() {
 
     fun setGenre(genre: String?) {
         _state.update { it.copy(selectedGenre = genre) }
+    }
+
+    fun requestSearchFocus() {
+        _searchFocusRequest.value = System.currentTimeMillis()
     }
 
     fun toggleFavorite(game: Game) {

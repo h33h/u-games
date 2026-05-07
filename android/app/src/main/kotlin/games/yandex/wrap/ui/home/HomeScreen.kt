@@ -106,13 +106,6 @@ fun HomeScreen(
                     }
                 }
             }
-            if (state.favoritesRow.isNotEmpty()) {
-                item("favorites") {
-                    HomeRowSection(title = "Your favorites", showAll = false, onSeeAll = {}) {
-                        WideRow(games = state.favoritesRow, onClick = onGameClick)
-                    }
-                }
-            }
             state.spotlight?.let { spot ->
                 item("spotlight") {
                     StoryCard(

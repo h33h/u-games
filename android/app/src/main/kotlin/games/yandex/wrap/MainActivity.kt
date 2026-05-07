@@ -79,22 +79,25 @@ class MainActivity : ComponentActivity() {
                         HomeScreen(
                             viewModel = homeVm,
                             onGameClick = { game -> openGame(game, push) },
-                            onOpenBrowse = { switchTab("browse") },
+                            onOpenBrowse = {
+                                browseVm.requestSearchFocus()
+                                switchTab("browse")
+                            },
                             onOpenBrowseFiltered = { genre ->
                                 browseVm.setGenre(genre)
                                 switchTab("browse")
                             },
-                            onProfileClick = { switchTab("profile") },
+                            onProfileClick = { push(TabPushed.Profile) },
                             onProfileLongPress = { push(TabPushed.Logs) },
                             onShareGame = openShare,
                         )
                     },
-                    browse = { push, switchTab ->
+                    browse = { push, _ ->
                         BrowseScreen(
                             viewModel = browseVm,
                             profile = homeState.profile,
                             onGameClick = { game -> openGame(game, push) },
-                            onProfileClick = { switchTab("profile") },
+                            onProfileClick = { push(TabPushed.Profile) },
                         )
                     },
                     favorites = { push, switchTab ->
@@ -105,15 +108,7 @@ class MainActivity : ComponentActivity() {
                             onBrowse = { switchTab("browse") },
                         )
                     },
-                    profile = { push, _ ->
-                        ProfileScreen(
-                            viewModel = profileVm,
-                            onLoginClick = { push(TabPushed.Auth) },
-                            onLogsClick = { push(TabPushed.Logs) },
-                            onAboutClick = { push(TabPushed.About) },
-                        )
-                    },
-                    pushedHost = { pushed, onPop ->
+                    pushedHost = { pushed, onPop, replace ->
                         when (pushed) {
                             is TabPushed.Game -> GameScreen(
                                 appId = pushed.appId,
@@ -129,6 +124,13 @@ class MainActivity : ComponentActivity() {
                             })
                             TabPushed.Logs -> LogsScreen(onClose = onPop)
                             TabPushed.About -> AboutScreen(onBack = onPop)
+                            TabPushed.Profile -> ProfileScreen(
+                                viewModel = profileVm,
+                                onBack = onPop,
+                                onLoginClick = { replace(TabPushed.Auth) },
+                                onLogsClick = { replace(TabPushed.Logs) },
+                                onAboutClick = { replace(TabPushed.About) },
+                            )
                             TabPushed.None -> {}
                         }
                     },

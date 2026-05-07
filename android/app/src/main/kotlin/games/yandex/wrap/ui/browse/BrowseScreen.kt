@@ -75,7 +75,7 @@ fun BrowseScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
-    val visible = viewModel.visibleGames(state)
+    val visible = state.games
     val gridState = rememberLazyGridState()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -110,8 +110,7 @@ fun BrowseScreen(
             .distinctUntilChanged()
             .collect { (total, last, _) ->
                 val current = viewModel.state.value
-                if (current.mode == BrowseMode.Feed
-                    && current.hasMore
+                if (current.hasMore
                     && !current.isLoadingMore
                     && !current.isLoading
                     && total > 0
@@ -149,12 +148,16 @@ fun BrowseScreen(
                 onProfileClick = onProfileClick,
                 searchFocusRequester = searchFocusRequester,
             )
-            if (state.mode == BrowseMode.Feed && state.genres.isNotEmpty()) {
+            if (state.mode == BrowseMode.Feed && state.categories.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 GenreChipRow(
-                    genres = state.genres,
-                    selected = state.selectedGenre,
-                    onSelect = viewModel::setGenre,
+                    genres = state.categories.map { it.title },
+                    selected = state.selectedCategory?.title,
+                    onSelect = { sel ->
+                        val cat = if (sel == null) null
+                        else state.categories.firstOrNull { it.title == sel }
+                        viewModel.setCategory(cat)
+                    },
                 )
             }
             Spacer(Modifier.height(12.dp))
@@ -225,14 +228,15 @@ fun BrowseScreen(
                                     ) { CircularProgressIndicator(color = UGColors.TextPrimary) }
                                 }
                             }
-                            if (state.mode == BrowseMode.Search && visible.isNotEmpty()) {
+                            if (visible.isNotEmpty() && !state.hasMore && !state.isLoading && !state.isLoadingMore) {
                                 item(span = { GridItemSpan(maxLineSpan) }) {
                                     Box(
                                         modifier = Modifier.fillMaxWidth().padding(20.dp),
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Text(
-                                            text = "End of search results",
+                                            text = if (state.mode == BrowseMode.Search) "End of search results"
+                                                   else "End of catalog",
                                             color = UGColors.TextMuted,
                                             style = UGType.Caption,
                                         )

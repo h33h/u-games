@@ -84,7 +84,7 @@ class MainActivity : ComponentActivity() {
                                 switchTab("browse")
                             },
                             onOpenBrowseFiltered = { genre ->
-                                browseVm.setGenre(genre)
+                                browseVm.setCategoryByName(genre)
                                 switchTab("browse")
                             },
                             onProfileClick = { push(TabPushed.Profile) },

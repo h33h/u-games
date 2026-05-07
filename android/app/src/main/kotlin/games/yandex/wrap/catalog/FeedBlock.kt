@@ -17,15 +17,28 @@ data class FeedBlock(
 )
 
 /**
- * Result of [CatalogApi.firstFeedPageWithBlocks]: both the raw blocks (for
- * Home's editorial layout) and the deduped flat list (for Browse / cache).
- * [genres] is harvested from the feed's `siteNavigationLinks.categories`
- * so Browse chips don't need a separate request.
+ * Result of [CatalogApi.firstFeedPageWithBlocks]: blocks (Home editorial),
+ * deduped flat list (Browse), and the server-side `recentGames` top-level
+ * array. [genres] stays empty here — Yandex's JSON response doesn't include
+ * navigation categories on mobile platforms, so [CatalogApi.fetchCategories]
+ * scrapes them from the SSR HTML separately.
  */
 data class FeedWithBlocks(
     val blocks: List<FeedBlock>,
     val flatGames: List<Game>,
+    val recentGames: List<Game>,
     val genres: List<String>,
     val nextPageId: String?,
     val hasNext: Boolean,
+)
+
+/**
+ * One category tab parsed from the SSR `__appData__.categoriesForTabs`.
+ * [name] is the slug used as the `tab=` query param on `/feed/`; [title]
+ * is the localized label shown on chips.
+ */
+data class GameCategory(
+    val name: String,
+    val title: String,
+    val gamesCount: Int,
 )

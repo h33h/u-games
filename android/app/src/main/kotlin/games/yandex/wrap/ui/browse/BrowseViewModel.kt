@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import games.yandex.wrap.catalog.CatalogRepository
 import games.yandex.wrap.catalog.Game
+import games.yandex.wrap.catalog.GameCategory
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,11 +16,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * Backs BrowseScreen — feed pagination + client-side genre filter + search.
- *
- * Hooks into the same [CatalogRepository] as Home so cached covers stay
- * warm. The first `firstFeedWithBlocks` call doubles as the source of the
- * genre vocabulary; subsequent pages use the legacy flat pagination.
+ * Backs BrowseScreen — feed pagination + server-side category filter via
+ * `?tab=<name>` + paginated REST search. Categories load once per session
+ * from the SSR catalog HTML.
  */
 class BrowseViewModel(private val repository: CatalogRepository) : ViewModel() {
 
@@ -31,10 +30,6 @@ class BrowseViewModel(private val repository: CatalogRepository) : ViewModel() {
     val favoriteIds: StateFlow<Set<Long>> = repository.favoriteIds()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptySet())
 
-    /// One-shot signal: BrowseScreen reads this and calls
-    /// FocusRequester.requestFocus on the search field, then resets it.
-    /// Used by HomeScreen's search-stub click so the user lands inside an
-    /// already-focused search input.
     private val _searchFocusRequest = MutableStateFlow(0L)
     val searchFocusRequest: StateFlow<Long> = _searchFocusRequest.asStateFlow()
 
@@ -44,20 +39,22 @@ class BrowseViewModel(private val repository: CatalogRepository) : ViewModel() {
         viewModelScope.launch {
             val cached = repository.cachedFeed()
             if (cached.isNotEmpty()) _state.update { it.copy(games = cached) }
+            ensureCategories()
             refresh()
         }
     }
 
     fun refresh() {
         viewModelScope.launch {
+            val tab = _state.value.selectedCategory?.name
             _state.update { it.copy(isLoading = true, error = null, mode = BrowseMode.Feed) }
-            val result = runCatching { repository.firstFeedWithBlocks(gamesPerPage = pageSize) }
+            ensureCategories()
+            val result = runCatching { repository.firstFeedWithBlocks(gamesPerPage = pageSize, tab = tab) }
             _state.update { current ->
                 result.fold(
                     onSuccess = { feed ->
                         current.copy(
                             games = feed.flatGames,
-                            genres = feed.genres,
                             isLoading = false,
                             isLoadingMore = false,
                             hasMore = feed.hasNext && feed.nextPageId != null,
@@ -79,19 +76,23 @@ class BrowseViewModel(private val repository: CatalogRepository) : ViewModel() {
 
     fun loadMore() {
         val current = _state.value
-        if (current.mode != BrowseMode.Feed) return
         if (current.isLoading || current.isLoadingMore || !current.hasMore) return
         val pageId = current.nextPageId ?: return
-
+        val mode = current.mode
+        val query = current.searchQuery
+        val known = current.games.map { it.appId }.toSet()
         _state.update { it.copy(isLoadingMore = true) }
         viewModelScope.launch {
-            val result = runCatching { repository.nextFeedPage(pageId, pageSize) }
+            val result = runCatching {
+                if (mode == BrowseMode.Search) repository.searchPaginated(query, pageId)
+                else repository.nextFeedPage(pageId, pageSize)
+            }
             _state.update { state ->
                 result.fold(
                     onSuccess = { page ->
-                        val merged = (state.games + page.games).distinctBy { it.appId }
+                        val merged = state.games + page.games.filter { it.appId !in known }
                         state.copy(
-                            games = merged,
+                            games = merged.distinctBy { it.appId },
                             isLoadingMore = false,
                             hasMore = page.hasNext && page.nextPageId != null,
                             nextPageId = page.nextPageId,
@@ -125,42 +126,51 @@ class BrowseViewModel(private val repository: CatalogRepository) : ViewModel() {
         if (q.isBlank()) refresh() else viewModelScope.launch { performSearch(q) }
     }
 
-    fun setGenre(genre: String?) {
-        _state.update { it.copy(selectedGenre = genre) }
+    fun setCategory(category: GameCategory?) {
+        _state.update { it.copy(selectedCategory = category) }
+        refresh()
     }
 
-    fun requestSearchFocus() {
-        _searchFocusRequest.value = System.currentTimeMillis()
+    /// Resolve a raw name OR localized title against the loaded categories
+    /// — used by HomeView's "See all" handler that only knows row.title /
+    /// row.categoryName.
+    fun setCategoryByName(raw: String) {
+        viewModelScope.launch {
+            ensureCategories()
+            val cats = _state.value.categories
+            val match = cats.firstOrNull { it.name == raw }
+                ?: cats.firstOrNull { it.title.equals(raw, ignoreCase = true) }
+            _state.update { it.copy(selectedCategory = match) }
+            refresh()
+        }
     }
 
     fun toggleFavorite(game: Game) {
         viewModelScope.launch { runCatching { repository.toggleFavorite(game) } }
     }
 
-    /// Client-side filter applied at render time. The grid asks for
-    /// `visibleGames(state)` instead of `state.games` so chip switching
-    /// stays instant — paginated network fetches still cover *all* games
-    /// under the hood, the chip just narrows the view.
-    fun visibleGames(state: BrowseUiState): List<Game> {
-        if (state.mode == BrowseMode.Search) return state.games
-        val sel = state.selectedGenre ?: return state.games
-        return state.games.filter { g ->
-            g.categories.any { it.equals(sel, ignoreCase = true) }
-        }
+    fun requestSearchFocus() {
+        _searchFocusRequest.value = System.currentTimeMillis()
+    }
+
+    private suspend fun ensureCategories() {
+        if (_state.value.categories.isNotEmpty()) return
+        val cats = runCatching { repository.categories() }.getOrNull().orEmpty()
+        if (cats.isNotEmpty()) _state.update { it.copy(categories = cats) }
     }
 
     private suspend fun performSearch(query: String) {
         _state.update { it.copy(isLoading = true, error = null, mode = BrowseMode.Search) }
-        val result = runCatching { repository.search(query) }
+        val result = runCatching { repository.searchPaginated(query) }
         _state.update { state ->
             result.fold(
-                onSuccess = { hits ->
+                onSuccess = { page ->
                     state.copy(
-                        games = hits,
+                        games = page.games,
                         isLoading = false,
                         isLoadingMore = false,
-                        hasMore = false,
-                        nextPageId = null,
+                        hasMore = page.hasNext && page.nextPageId != null,
+                        nextPageId = page.nextPageId,
                         error = null,
                         mode = BrowseMode.Search,
                     )

@@ -4,7 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import games.yandex.wrap.catalog.CatalogRepository
 import games.yandex.wrap.catalog.FeedBlock
+import games.yandex.wrap.catalog.FeedWithBlocks
+import games.yandex.wrap.catalog.GameCategory
 import games.yandex.wrap.catalog.Game
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -15,12 +20,15 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * Backs HomeScreen. Loads the editorial feed once on init, derives hero /
- * spotlight / per-genre rows by [digest], and live-merges Continue (recents)
- * and Favorites rows from local stores so they update without a refetch.
+ * Backs HomeScreen. Loads:
+ * 1. main feed → hero + spotlight + a "fresh today" suggested row,
+ * 2. server-side `recentGames` → Continue row (overrides local recents),
+ * 3. top N categories from SSR + per-category feed → genre rows.
  *
- * Profile is fetched best-effort — Home shows the avatar but Profile-tab
- * owns the full profile lifecycle.
+ * Yandex's JSON feed only ever returns 1–4 untitled `suggested` blocks for
+ * mobile platforms, so the only way to get distinct, titled rows on Home
+ * is to fan out one feed call per top category. Done in parallel once and
+ * cached for the session.
  */
 class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
 
@@ -32,6 +40,8 @@ class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
 
     val favorites: StateFlow<List<Game>> = repository.favoritesAsGames()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    private val categoryRowLimit = 6
 
     init {
         refresh()
@@ -45,20 +55,23 @@ class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
     fun refresh() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
-            val result = runCatching { repository.firstFeedWithBlocks() }
-            result.fold(
+            val mainResult = runCatching { repository.firstFeedWithBlocks() }
+            mainResult.fold(
                 onSuccess = { feed ->
-                    val digested = digest(feed.blocks, feed.flatGames)
+                    val (hero, spotlight, freshRow) = digestMain(feed)
                     _state.update {
                         it.copy(
                             isLoading = false,
                             error = null,
-                            hero = digested.hero,
-                            feedRecent = digested.feedRecent,
-                            spotlight = digested.spotlight,
-                            genreRows = digested.genreRows,
+                            hero = hero,
+                            spotlight = spotlight,
+                            feedRecent = feed.recentGames.take(12),
+                            // Initial rows = "Fresh today" only; per-category rows
+                            // arrive incrementally as fan-out finishes.
+                            genreRows = listOfNotNull(freshRow),
                         )
                     }
+                    fanOutGenreRows(excludeAppId = hero?.appId, prefix = listOfNotNull(freshRow))
                 },
                 onFailure = { err ->
                     _state.update { it.copy(isLoading = false, error = err.message) }
@@ -79,48 +92,45 @@ class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
         }
     }
 
-    private data class Digest(
-        val hero: Game?,
-        val feedRecent: List<Game>,
-        val spotlight: SpotlightBlock?,
-        val genreRows: List<GenreRow>,
-    )
-
-    /// Picks Hero / Spotlight / per-genre rows + server-side recents from the
-    /// editorial blocks. Hero falls back to the highest-rated flat game so
-    /// the page never renders without one. Genre rows include any non-promo,
-    /// non-recent block with a non-empty title and ≥3 items so the layout
-    /// stays full even when the feed only marks one block `categorized`.
-    private fun digest(blocks: List<FeedBlock>, flat: List<Game>): Digest {
-        fun isRecent(b: FeedBlock) = b.type.contains("recent", ignoreCase = true)
-        fun isPromo(b: FeedBlock) = b.type.equals("promo", ignoreCase = true)
-
-        val recentBlock = blocks.firstOrNull(::isRecent)
-        val heroBlock = blocks.firstOrNull {
-            !isRecent(it) && !isPromo(it) && it.size == "l"
-        } ?: blocks.firstOrNull { !isRecent(it) && !isPromo(it) && it.items.isNotEmpty() }
-        val hero = heroBlock?.items?.firstOrNull() ?: flat.maxByOrNull { it.ratingCount }
-
-        val spotlightBlock = blocks.firstOrNull {
-            !isRecent(it) && !isPromo(it) && it !== heroBlock
-                && it.size == "s" && it.items.size >= 5 && it.title.isNotEmpty()
+    /// Picks Hero + Spotlight + a "Fresh today" row from the main feed.
+    /// Genre rows come from `fanOutGenreRows` because mobile-platform feeds
+    /// don't carry titled `categorized` blocks.
+    private fun digestMain(feed: FeedWithBlocks): Triple<Game?, SpotlightBlock?, GenreRow?> {
+        fun isPromo(b: FeedBlock) =
+            b.type.equals("promo", ignoreCase = true) || b.type.equals("adv", ignoreCase = true)
+        val heroBlock = feed.blocks.firstOrNull { !isPromo(it) && it.items.isNotEmpty() }
+        val hero = heroBlock?.items?.firstOrNull() ?: feed.flatGames.maxByOrNull { it.ratingCount }
+        val spotlightBlock = feed.blocks.firstOrNull {
+            !isPromo(it) && it !== heroBlock && it.items.size >= 5
         }
-        val spotlight = spotlightBlock?.let { SpotlightBlock(it.title, it.items) }
+        val spotlight = spotlightBlock?.let {
+            SpotlightBlock(it.title.ifEmpty { "Featured" }, it.items)
+        }
+        val freshRow = heroBlock?.items?.drop(1)?.takeIf { it.isNotEmpty() }?.let {
+            GenreRow(title = "Fresh today", categoryName = null, games = it)
+        }
+        return Triple(hero, spotlight, freshRow)
+    }
 
-        val excluded = setOfNotNull(heroBlock, spotlightBlock, recentBlock)
-        val genreRows = blocks
-            .asSequence()
-            .filter { !isRecent(it) && !isPromo(it) && it !in excluded }
-            .filter { it.title.isNotEmpty() && it.items.size >= 3 }
-            .take(8)
-            .map { GenreRow(it.title, it.items) }
-            .toList()
-
-        return Digest(
-            hero = hero,
-            feedRecent = recentBlock?.items.orEmpty().take(12),
-            spotlight = spotlight,
-            genreRows = genreRows,
-        )
+    /// Fans out one feed call per top category and merges results into
+    /// `genreRows`. Done in parallel; results are reordered to match the
+    /// original category list before being published.
+    private suspend fun fanOutGenreRows(excludeAppId: Long?, prefix: List<GenreRow>) {
+        val categories = runCatching { repository.categories() }.getOrNull().orEmpty()
+        if (categories.isEmpty()) return
+        val pick = categories.take(categoryRowLimit)
+        val rows: List<Pair<GameCategory, List<Game>>> = coroutineScope {
+            pick.map { cat ->
+                async {
+                    val feed = runCatching { repository.firstFeedWithBlocks(tab = cat.name) }.getOrNull()
+                    val items = (feed?.flatGames.orEmpty()).filter { it.appId != excludeAppId }
+                    cat to items.take(15)
+                }
+            }.awaitAll()
+        }
+        val ordered = rows
+            .filter { it.second.isNotEmpty() }
+            .map { (cat, items) -> GenreRow(title = cat.title, categoryName = cat.name, games = items) }
+        _state.update { it.copy(genreRows = prefix + ordered) }
     }
 }

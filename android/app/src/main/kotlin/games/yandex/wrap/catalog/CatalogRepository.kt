@@ -32,13 +32,18 @@ class CatalogRepository(
      * Browse cold-start (which calls [cachedFeed]) stays warm even when the
      * user lands on Home first.
      */
-    suspend fun firstFeedWithBlocks(gamesPerPage: Int = 24): FeedWithBlocks {
-        val resp = api.firstFeedPageWithBlocks(gamesPerPage = gamesPerPage)
+    suspend fun firstFeedWithBlocks(gamesPerPage: Int = 24, tab: String? = null): FeedWithBlocks {
+        val resp = api.firstFeedPageWithBlocks(gamesPerPage = gamesPerPage, tab = tab)
         if (resp.flatGames.isNotEmpty()) {
             cache.upsertAll(resp.flatGames.map { it.toEntity() })
         }
         return resp
     }
+
+    suspend fun searchPaginated(query: String, pageId: String? = null): FeedPage =
+        api.searchPaginated(query = query, pageId = pageId)
+
+    suspend fun categories(): List<GameCategory> = api.fetchCategories()
 
     suspend fun cachedFeed(limit: Int = 50): List<Game> =
         cache.latest(limit).map { it.toGame() }

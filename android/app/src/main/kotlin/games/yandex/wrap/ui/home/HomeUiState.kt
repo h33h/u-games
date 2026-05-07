@@ -25,4 +25,4 @@ data class HomeUiState(
 )
 
 data class SpotlightBlock(val title: String, val games: List<Game>)
-data class GenreRow(val title: String, val games: List<Game>)
+data class GenreRow(val title: String, val categoryName: String?, val games: List<Game>)

@@ -190,25 +190,34 @@ final class CatalogService: ObservableObject {
     /// `siteNavigationLinks.categories`. Same query params as `fetchFeed` so
     /// the response shape matches; the only difference is preservation of
     /// block structure on the client side.
-    func fetchFeedWithBlocks(gamesPerPage: Int = 24, lang: String = "en") async throws -> FeedWithBlocks {
+    func fetchFeedWithBlocks(
+        gamesPerPage: Int = 24,
+        lang: String = "en",
+        tab: String? = nil,
+    ) async throws -> FeedWithBlocks {
         var components = URLComponents(string: "https://yandex.com/games/api/catalogue/v2/feed/")!
-        components.queryItems = [
+        var items = [
             URLQueryItem(name: "with_promos", value: "true"),
             URLQueryItem(name: "lang", value: lang),
             URLQueryItem(name: "games_count", value: String(gamesPerPage)),
-            URLQueryItem(name: "categorized_size", value: "5"),
+            URLQueryItem(name: "suggested_width", value: "3"),
+            URLQueryItem(name: "suggested_rows", value: "8"),
             URLQueryItem(name: "with_recent_games", value: "true"),
             URLQueryItem(name: "platform", value: "ios"),
             URLQueryItem(name: "client_width", value: "390"),
             URLQueryItem(name: "client_height", value: "844"),
         ]
+        if let tab = tab, !tab.isEmpty {
+            items.append(URLQueryItem(name: "tab", value: tab))
+        }
+        components.queryItems = items
         var request = URLRequest(url: components.url!)
         request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (data, _) = try await URLSession.shared.data(for: request)
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let feed = root["feed"] as? [[String: Any]]
-        else { return FeedWithBlocks(blocks: [], flatGames: [], genres: [], nextPageId: nil, hasNext: false) }
+        else { return FeedWithBlocks(blocks: [], flatGames: [], recentGames: [], genres: [], nextPageId: nil, hasNext: false) }
         var blocks: [FeedBlock] = []
         var seen = Set<Int64>()
         var flat: [Game] = []
@@ -224,17 +233,82 @@ final class CatalogService: ObservableObject {
         let pageInfo = root["pageInfo"] as? [String: Any]
         let nextPageId = pageInfo?["nextPageId"] as? String
         let hasNext = (pageInfo?["hasNextPage"] as? Bool) ?? (nextPageId != nil)
-        let nav = root["siteNavigationLinks"] as? [String: Any]
-        let cats = ((nav?["categories"] as? [[String: Any]]) ?? []).compactMap {
-            ($0["title"] as? String) ?? ($0["name"] as? String)
-        }
+        // Server-side recents live at the response root, not inside feed[].
+        let recentGames = ((root["recentGames"] as? [[String: Any]]) ?? [])
+            .compactMap(GameDecoder.parse)
+        // siteNavigationLinks.categories is empty in the JSON response;
+        // categories are only available via the SSR HTML __appData__.
+        // fetchCategories() is the right place to load them.
         return FeedWithBlocks(
             blocks: blocks,
             flatGames: flat,
-            genres: cats,
+            recentGames: recentGames,
+            genres: [],
             nextPageId: nextPageId,
             hasNext: hasNext,
         )
+    }
+
+    /// REST search endpoint. Returns a paginated `FeedPage`-shaped response
+    /// (the same JSON shape as `/feed/`) so BrowseViewModel can drive paging
+    /// through `nextPageId`. The previous HTML-scrape path silently capped
+    /// at one page of ~24 results — that's why search looked broken.
+    func fetchSearchPaginated(
+        query: String,
+        pageId: String? = nil,
+        gamesPerPage: Int = 24,
+        lang: String = "en",
+    ) async throws -> FeedPage {
+        var components = URLComponents(string: "https://yandex.com/games/api/catalogue/v2/search/")!
+        var items = [
+            URLQueryItem(name: "query", value: query),
+            URLQueryItem(name: "lang", value: lang),
+            URLQueryItem(name: "platform", value: "ios"),
+            URLQueryItem(name: "games_count", value: String(gamesPerPage)),
+        ]
+        if let pageId = pageId {
+            items.append(URLQueryItem(name: "page_id", value: pageId))
+        }
+        components.queryItems = items
+        var request = URLRequest(url: components.url!)
+        request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        let (data, _) = try await URLSession.shared.data(for: request)
+        guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let feed = root["feed"] as? [[String: Any]]
+        else { return FeedPage(games: [], nextPageId: nil, hasNext: false) }
+        let games = GameDecoder.flatten(feed)
+        let pageInfo = root["pageInfo"] as? [String: Any]
+        let nextPageId = pageInfo?["nextPageId"] as? String
+        let hasNext = (pageInfo?["hasNextPage"] as? Bool) ?? (nextPageId != nil)
+        return FeedPage(games: games, nextPageId: nextPageId, hasNext: hasNext)
+    }
+
+    /// Fetches the localized list of category tabs by scraping the SSR
+    /// `__appData__.categoriesForTabs` from the catalog landing page. Yandex
+    /// does NOT expose this list via JSON; the only stable source is the
+    /// HTML root document. Each entry is `(name, title, gamesCount)`.
+    func fetchCategories(lang: String = "en") async throws -> [GameCategory] {
+        let host = Self.preferredYandexHost
+        let preferredLang = host == "yandex.ru" ? "ru" : lang
+        var components = URLComponents(string: "https://\(host)/games/")!
+        components.queryItems = [URLQueryItem(name: "lang", value: preferredLang)]
+        var request = URLRequest(url: components.url!)
+        request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("text/html", forHTTPHeaderField: "Accept")
+        let (data, _) = try await URLSession.shared.data(for: request)
+        guard let html = String(data: data, encoding: .utf8),
+              let json = extractAppData(html),
+              let parsed = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
+              let raw = parsed["categoriesForTabs"] as? [[String: Any]]
+        else { return [] }
+        return raw.compactMap { d in
+            guard let name = d["name"] as? String, !name.isEmpty,
+                  let title = d["title"] as? String, !title.isEmpty
+            else { return nil }
+            let count = (d["gamesCount"] as? Int) ?? 0
+            return GameCategory(name: name, title: title, gamesCount: count)
+        }
     }
 
     /// Pulls a single feed page in legacy (flat) form. Phase 2 keeps this for
@@ -314,7 +388,7 @@ final class CatalogService: ObservableObject {
         return GameDecoder.flatten(blocks)
     }
 
-    private static var preferredYandexHost: String {
+    static var preferredYandexHost: String {
         let lang = Locale.preferredLanguages.first ?? Locale.current.identifier
         return lang.hasPrefix("ru") ? "yandex.ru" : "yandex.com"
     }
@@ -397,7 +471,7 @@ final class CatalogService: ObservableObject {
         )
     }
 
-    private func extractAppData(_ html: String) -> String? {
+    func extractAppData(_ html: String) -> String? {
         guard let markerRange = html.range(of: "id=\"__appData__\"") else { return nil }
         guard let openIdx = html.range(of: ">", range: markerRange.upperBound..<html.endIndex) else { return nil }
         guard let closeIdx = html.range(of: "</script>", range: openIdx.upperBound..<html.endIndex) else { return nil }

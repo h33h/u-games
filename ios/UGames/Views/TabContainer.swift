@@ -103,11 +103,16 @@ struct TabContainer: View {
                 viewModel: homeVM,
                 onGameClick: onGameOpen,
                 onOpenBrowse: {
-                    browseVM.requestSearchFocus()
                     selected = "browse"
+                    // Bump focus AFTER the tab switch so BrowseView is on
+                    // screen by the time @FocusState becomes true.
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 100_000_000)
+                        browseVM.requestSearchFocus()
+                    }
                 },
-                onOpenBrowseFiltered: { genre in
-                    browseVM.setGenre(genre)
+                onOpenBrowseFiltered: { rawCategory in
+                    browseVM.setCategoryByName(rawCategory)
                     selected = "browse"
                 },
                 onProfileClick: { profilePresented = true },

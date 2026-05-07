@@ -1,9 +1,7 @@
 import Foundation
 
-/// Backs `BrowseView` — feed pagination + client-side genre filter +
-/// search. Mirrors `BrowseViewModel.kt` on Android: chip switching is
-/// instant (visibleGames filters on the loaded list), pagination feeds
-/// more pages into `games` under the hood.
+/// Backs `BrowseView` — feed pagination + category filter (server-side
+/// via `?tab=<name>`) + paginated REST search.
 @MainActor
 final class BrowseViewModel: ObservableObject {
     enum Mode { case feed, search }
@@ -14,8 +12,8 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var hasMore: Bool = false
     @Published private(set) var error: String?
     @Published var searchQuery: String = "" { didSet { onQueryChanged(searchQuery) } }
-    @Published private(set) var genres: [String] = []
-    @Published var selectedGenre: String? = nil
+    @Published private(set) var categories: [GameCategory] = []
+    @Published var selectedCategory: GameCategory? = nil
     @Published private(set) var mode: Mode = .feed
     /// Monotonically increasing tick. BrowseView reads it via .onChange to
     /// pull keyboard focus into the search field — used by HomeView's
@@ -32,13 +30,7 @@ final class BrowseViewModel: ObservableObject {
         self.service = service
     }
 
-    /// Filters `games` by `selectedGenre` so chip flips don't await the
-    /// network. The full `games` list keeps growing as pagination runs;
-    /// the chip only narrows what's visible.
-    var visibleGames: [Game] {
-        guard mode == .feed, let g = selectedGenre, !g.isEmpty else { return games }
-        return games.filter { $0.categories.contains { $0.localizedCaseInsensitiveCompare(g) == .orderedSame } }
-    }
+    var visibleGames: [Game] { games }
 
     func loadInitialIfNeeded() async {
         if loaded { return }
@@ -53,10 +45,13 @@ final class BrowseViewModel: ObservableObject {
         isLoading = true
         error = nil
         defer { isLoading = false }
+        // Categories load once per session.
+        if categories.isEmpty {
+            categories = (try? await service.fetchCategories()) ?? []
+        }
         do {
-            let feed = try await service.fetchFeedWithBlocks()
+            let feed = try await service.fetchFeedWithBlocks(tab: selectedCategory?.name)
             games = feed.flatGames
-            genres = feed.genres
             hasMore = feed.hasNext && feed.nextPageId != nil
             nextPageId = feed.nextPageId
         } catch {
@@ -65,15 +60,22 @@ final class BrowseViewModel: ObservableObject {
     }
 
     func loadMore() {
-        guard mode == .feed, hasMore, !isLoading, !isLoadingMore, let pageId = nextPageId else { return }
+        guard hasMore, !isLoading, !isLoadingMore, let pageId = nextPageId else { return }
+        let modeSnapshot = mode
+        let querySnapshot = searchQuery
+        let knownSnapshot = Set(games.map { $0.appId })
         isLoadingMore = true
         loadTask = Task { [weak self] in
             guard let self = self else { return }
             defer { Task { @MainActor in self.isLoadingMore = false } }
             do {
-                let page = try await self.service.fetchFeed(pageId: pageId)
-                let known = Set(self.games.map { $0.appId })
-                let dedup = page.games.filter { !known.contains($0.appId) }
+                let page: CatalogService.FeedPage
+                if modeSnapshot == .search {
+                    page = try await self.service.fetchSearchPaginated(query: querySnapshot, pageId: pageId)
+                } else {
+                    page = try await self.service.fetchFeed(pageId: pageId)
+                }
+                let dedup = page.games.filter { !knownSnapshot.contains($0.appId) }
                 await MainActor.run {
                     self.games.append(contentsOf: dedup)
                     self.hasMore = page.hasNext && page.nextPageId != nil
@@ -95,8 +97,26 @@ final class BrowseViewModel: ObservableObject {
         }
     }
 
-    func setGenre(_ g: String?) {
-        selectedGenre = g
+    func setCategory(_ c: GameCategory?) {
+        selectedCategory = c
+        Task { await refresh() }
+    }
+
+    /// Convenience for callers that only know the name or localized title
+    /// of a category (e.g. HomeView's "See all" handler). Loads categories
+    /// if not yet cached, then matches by `name` first then `title`.
+    func setCategoryByName(_ raw: String) {
+        Task {
+            if categories.isEmpty {
+                categories = (try? await service.fetchCategories()) ?? []
+            }
+            let match = categories.first(where: { $0.name == raw })
+                ?? categories.first(where: { $0.title.localizedCaseInsensitiveCompare(raw) == .orderedSame })
+            await MainActor.run {
+                selectedCategory = match
+            }
+            await refresh()
+        }
     }
 
     func requestSearchFocus() {
@@ -122,10 +142,10 @@ final class BrowseViewModel: ObservableObject {
         error = nil
         defer { isLoading = false }
         do {
-            let hits = try await service.fetchSearch(query: q)
-            games = hits
-            hasMore = false
-            nextPageId = nil
+            let page = try await service.fetchSearchPaginated(query: q, pageId: nil)
+            games = page.games
+            hasMore = page.hasNext && page.nextPageId != nil
+            nextPageId = page.nextPageId
         } catch {
             self.error = error.localizedDescription
         }

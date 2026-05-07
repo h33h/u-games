@@ -64,7 +64,7 @@ struct HomeView: View {
                         sectionHeader(
                             title: row.title,
                             showAll: true,
-                            onSeeAll: { onOpenBrowseFiltered(row.title) },
+                            onSeeAll: { onOpenBrowseFiltered(row.categoryName ?? row.title) },
                         )
                         squareRow(games: row.games)
                     }

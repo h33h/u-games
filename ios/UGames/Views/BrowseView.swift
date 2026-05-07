@@ -17,11 +17,17 @@ struct BrowseView: View {
             UGColor.bg0.ignoresSafeArea()
             VStack(spacing: 0) {
                 topBar
-                if viewModel.mode == .feed && !viewModel.genres.isEmpty {
+                if viewModel.mode == .feed && !viewModel.categories.isEmpty {
                     GenreChipRow(
-                        genres: viewModel.genres,
-                        selected: viewModel.selectedGenre,
-                        onSelect: { viewModel.setGenre($0) },
+                        genres: viewModel.categories.map(\.title),
+                        selected: viewModel.selectedCategory?.title,
+                        onSelect: { sel in
+                            if let sel = sel {
+                                viewModel.setCategory(viewModel.categories.first(where: { $0.title == sel }))
+                            } else {
+                                viewModel.setCategory(nil)
+                            }
+                        },
                     )
                     .padding(.top, 8)
                 }
@@ -31,10 +37,13 @@ struct BrowseView: View {
         }
         .task { await viewModel.loadInitialIfNeeded() }
         .onChange(of: viewModel.searchFocusRequest) { _ in
-            // Tiny delay so the field is laid out before iOS will accept
-            // first-responder focus.
-            Task {
-                try? await Task.sleep(nanoseconds: 150_000_000)
+            // Two-step: drop focus first, then set it on the next runloop
+            // tick. iOS won't refocus a field that's already considered
+            // focused, and the @FocusState can desync after a tab switch
+            // — toggling forces an actual first-responder change.
+            searchFocused = false
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 250_000_000)
                 searchFocused = true
             }
         }
@@ -112,11 +121,8 @@ struct BrowseView: View {
                             onFavoriteToggle: { favoritesStore.toggle(game) },
                         )
                         .onAppear {
-                            // Pagination guard: only fire if the underlying
-                            // games list grew since the last trigger.
-                            // Otherwise a chip filter that hides every new
-                            // page would keep firing loadMore on every tile
-                            // tap.
+                            // Trigger pagination once we render the last
+                            // tile; the VM guards against duplicate calls.
                             if let last = visible.last, game.id == last.id,
                                viewModel.games.count != lastTriggerGamesCount {
                                 lastTriggerGamesCount = viewModel.games.count
@@ -127,8 +133,8 @@ struct BrowseView: View {
                     if viewModel.isLoadingMore {
                         ProgressView().tint(UGColor.textPrimary).padding(16)
                     }
-                    if viewModel.mode == .search && !visible.isEmpty {
-                        Text("End of search results")
+                    if !visible.isEmpty && !viewModel.hasMore && !viewModel.isLoading {
+                        Text(viewModel.mode == .search ? "End of search results" : "End of catalog")
                             .font(UGFont.caption)
                             .foregroundColor(UGColor.textMuted)
                             .padding(20)

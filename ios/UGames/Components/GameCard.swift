@@ -12,22 +12,18 @@ struct TileGameCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .topTrailing) {
+            // Cover ZStack: placeholder + image share the same clip + stroke,
+            // so the image never bleeds past the rounded border. Heart and
+            // rating pill are siblings inside the same ZStack so they
+            // overlap the cover, not the surrounding shadow.
+            ZStack {
                 placeholder
-                    .aspectRatio(16.0/10.0, contentMode: .fit)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-                    .overlay(
-                        AsyncImage(url: URL(string: game.coverUrl)) { phase in
-                            switch phase {
-                            case .success(let img): img.resizable().scaledToFill()
-                            default: Color.clear
-                            }
-                        }
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                    )
-                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(halo.opacity(UGColor.haloBorderAlpha)))
-                    .shadow(color: halo.opacity(UGColor.haloAlpha), radius: 14, x: 0, y: 12)
-
+                AsyncImage(url: URL(string: game.coverUrl)) { phase in
+                    switch phase {
+                    case .success(let img): img.resizable().scaledToFill()
+                    default: Color.clear
+                    }
+                }
                 Button(action: onFavoriteToggle) {
                     Image(systemName: isFavorite ? "heart.fill" : "heart")
                         .font(.system(size: 14, weight: .semibold))
@@ -37,37 +33,46 @@ struct TileGameCard: View {
                         .clipShape(Circle())
                 }
                 .buttonStyle(.borderless)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 .padding(8)
 
                 if game.ratingCount > 0 {
-                    HStack {
-                        Text(String(format: "★ %.1f", game.rating))
-                            .font(UGFont.caption)
-                            .foregroundColor(UGColor.accent)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 3)
-                            .background(Color.black.opacity(0.55))
-                            .clipShape(Capsule())
-                        Spacer()
-                    }
-                    .padding(8)
-                    .frame(maxHeight: .infinity, alignment: .bottomLeading)
+                    Text(String(format: "★ %.1f", game.rating))
+                        .font(UGFont.caption)
+                        .foregroundColor(UGColor.accent)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.black.opacity(0.55))
+                        .clipShape(Capsule())
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                        .padding(8)
                 }
             }
-            Text(game.title)
-                .font(UGFont.bodyS)
-                .foregroundColor(UGColor.textPrimary)
-                .lineLimit(2)
-            let meta = [
-                game.categories.first,
-                game.ratingCount > 0 ? "\(game.ratingCount) ratings" : nil,
-            ].compactMap { $0 }.joined(separator: " · ")
-            if !meta.isEmpty {
-                Text(meta)
+            .aspectRatio(16.0/10.0, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(halo.opacity(UGColor.haloBorderAlpha)))
+            .shadow(color: halo.opacity(UGColor.haloAlpha), radius: 14, x: 0, y: 12)
+
+            // Title + meta wrapped in a fixed-height block so cards in the
+            // same row don't end up at different heights when one has a
+            // 1-line title and the next has 2 lines / no meta.
+            VStack(alignment: .leading, spacing: 2) {
+                Text(game.title)
+                    .font(UGFont.bodyS)
+                    .foregroundColor(UGColor.textPrimary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                let meta = [
+                    game.categories.first,
+                    game.ratingCount > 0 ? "\(game.ratingCount) ratings" : nil,
+                ].compactMap { $0 }.joined(separator: " · ")
+                Text(meta.isEmpty ? " " : meta)
                     .font(UGFont.caption)
                     .foregroundColor(UGColor.textMuted)
                     .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(height: 48, alignment: .topLeading)
         }
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)

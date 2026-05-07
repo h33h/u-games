@@ -214,8 +214,18 @@ struct GameWebView: UIViewRepresentable {
             scripts: InjectedScripts
         ) {
             var prefetchRequest = request
-            // identity encoding: we need to read the body unmodified to splice
-            prefetchRequest.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+            // DON'T force `identity` here. Yandex's SSR uses the request's
+            // Accept-Encoding to decide which CDN mirror to embed into
+            // __playPageData__.gameSrc. With `identity` it serves the
+            // non-brotli mirror, whose iframe HTML is missing the
+            // `<script src="/sdk/_/v2.xxx.js">` tag — the result is
+            // window.YaGames never gets defined and Construct 3 / GamePush
+            // titles (e.g. game id 388978) trip on
+            //   GamePush Initialization Yandex SDK failed:
+            //   TypeError: undefined is not an object (evaluating 'window.YaGames.init')
+            // URLSession decompresses gzip/br automatically, so the body
+            // we receive is already plain UTF-8 HTML — no need to ask the
+            // server for uncompressed bytes.
             prefetchRequest.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
             URLSession.shared.dataTask(with: prefetchRequest) { [weak webView] data, response, _ in
                 guard let webView = webView else { return }

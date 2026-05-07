@@ -45,18 +45,14 @@ func parseDeepLink(_ url: URL) -> Int64? {
 }
 
 struct RootView: View {
-    @State private var routeStack: [Route] = []
+    @State private var gameSession: GameSession?
+    @State private var authPresented: Bool = false
+    @State private var logsPresented: Bool = false
     @State private var sharePayload: SharePayload?
     @StateObject private var catalogService = CatalogService()
     @StateObject private var favoritesStore = FavoritesStore.shared
     private let injectedScripts = InjectedScripts.load()
     private let blockList = BlockList.load()
-
-    private var currentRoute: Route { routeStack.last ?? .catalog }
-
-    private func push(_ route: Route) { routeStack.append(route) }
-    private func pop() { _ = routeStack.popLast() }
-    private func reset(to route: Route) { routeStack = [route] }
 
     var body: some View {
         ZStack {
@@ -64,90 +60,55 @@ struct RootView: View {
             TabContainer(
                 catalogService: catalogService,
                 favoritesStore: favoritesStore,
-                onLogsRequest: { push(.logs) },
-                onGameOpen: { game in push(.gameDetail(game)) },
-                onLoginClick: { push(.auth) },
+                onPlayGame: { game in
+                    gameSession = GameSession(appId: game.appId, title: game.title)
+                },
+                onLoginClick: { authPresented = true },
+                onLogsRequest: { logsPresented = true },
                 onSignOut: {
                     Task { await catalogService.clearSession() }
                 },
                 onShareGame: { game in
                     sharePayload = SharePayload(title: game.title, url: game.playUrl)
-                },
+                }
             )
-            if let route = routeStack.last {
-                routeOverlay(for: route)
-                    .background(UGColor.Surface.base.ignoresSafeArea())
-                    .id(routeId(route))
-                    .transition(.opacity)
-            }
         }
-        .animation(.easeInOut(duration: 0.18), value: routeStack.count)
+        .fullScreenCover(item: $gameSession) { session in
+            GameView(
+                appId: session.appId,
+                title: session.title,
+                scripts: injectedScripts,
+                blockList: blockList,
+                onBack: {
+                    gameSession = nil
+                    catalogService.notifyGameSessionEnded()
+                }
+            )
+        }
+        .fullScreenCover(isPresented: $authPresented) {
+            AuthView(onClose: {
+                authPresented = false
+                Task { await catalogService.refreshProfile() }
+            })
+        }
+        .sheet(isPresented: $logsPresented) {
+            LogsView(onClose: { logsPresented = false })
+        }
         .sheet(item: $sharePayload) { payload in
             ShareSheet(payload: payload)
         }
         .onOpenURL { url in
             if let appId = parseDeepLink(url) {
-                reset(to: .game(appId: appId, title: ""))
+                gameSession = GameSession(appId: appId, title: "")
             }
-        }
-    }
-
-    @ViewBuilder
-    private func routeOverlay(for route: Route) -> some View {
-        switch route {
-        case .catalog:
-            EmptyView()
-        case .gameDetail(let game):
-            GameDetailHost(
-                game: game,
-                catalogService: catalogService,
-                favoritesStore: favoritesStore,
-                onBack: { pop() },
-                onPlay: { g in push(.game(appId: g.appId, title: g.title)) },
-                onShare: { g in
-                    sharePayload = SharePayload(title: g.title, url: g.playUrl)
-                },
-                onSimilarClick: { g in push(.gameDetail(g)) }
-            )
-        case .game(let appId, let title):
-            GameView(
-                appId: appId,
-                title: title,
-                scripts: injectedScripts,
-                blockList: blockList,
-                onBack: {
-                    pop()
-
-                    catalogService.notifyGameSessionEnded()
-                },
-            )
-        case .auth:
-            AuthView(onClose: {
-                pop()
-                Task { await catalogService.refreshProfile() }
-            })
-        case .logs:
-            LogsView(onClose: { pop() })
-        }
-    }
-
-    private func routeId(_ route: Route) -> String {
-        switch route {
-        case .catalog: return "catalog"
-        case .gameDetail(let g): return "detail-\(g.appId)"
-        case .game(let id, _): return "game-\(id)"
-        case .auth: return "auth"
-        case .logs: return "logs"
         }
     }
 }
 
-enum Route: Equatable {
-    case catalog
-    case gameDetail(Game)
-    case game(appId: Int64, title: String)
-    case auth
-    case logs
+struct GameSession: Identifiable, Equatable {
+    let id = UUID()
+    let appId: Int64
+    let title: String
 }
 
 struct SharePayload: Identifiable, Equatable {
@@ -156,22 +117,21 @@ struct SharePayload: Identifiable, Equatable {
     let url: URL?
 }
 
-private struct GameDetailHost: View {
+struct GameDetailHost: View {
     let game: Game
     @ObservedObject var catalogService: CatalogService
     @ObservedObject var favoritesStore: FavoritesStore
-    let onBack: () -> Void
     let onPlay: (Game) -> Void
     let onShare: (Game) -> Void
     let onSimilarClick: (Game) -> Void
 
     @StateObject private var viewModel: GameDetailViewModel
+    @Environment(\.dismiss) private var dismiss
 
     init(
         game: Game,
         catalogService: CatalogService,
         favoritesStore: FavoritesStore,
-        onBack: @escaping () -> Void,
         onPlay: @escaping (Game) -> Void,
         onShare: @escaping (Game) -> Void,
         onSimilarClick: @escaping (Game) -> Void
@@ -179,7 +139,6 @@ private struct GameDetailHost: View {
         self.game = game
         self.catalogService = catalogService
         self.favoritesStore = favoritesStore
-        self.onBack = onBack
         self.onPlay = onPlay
         self.onShare = onShare
         self.onSimilarClick = onSimilarClick
@@ -192,11 +151,12 @@ private struct GameDetailHost: View {
         GameDetailView(
             viewModel: viewModel,
             favorites: favoritesStore,
-            onBack: onBack,
+            onBack: { dismiss() },
             onPlay: onPlay,
             onShare: onShare,
-            onSimilarClick: onSimilarClick,
+            onSimilarClick: onSimilarClick
         )
+        .toolbar(.hidden, for: .navigationBar)
     }
 }
 

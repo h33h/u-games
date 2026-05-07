@@ -6,8 +6,10 @@ struct HomeView: View {
     let onOpenBrowse: () -> Void
     let onOpenBrowseFiltered: (String) -> Void
     let onProfileClick: () -> Void
-    let onProfileLongPress: () -> Void
+    let onLogsRequest: () -> Void
     let onShareGame: (Game) -> Void
+
+    @State private var showAvatarMenu: Bool = false
 
     var body: some View {
         ZStack {
@@ -17,7 +19,7 @@ struct HomeView: View {
                     HomeHeader(
                         profile: viewModel.profile,
                         onProfileClick: onProfileClick,
-                        onProfileLongPress: onProfileLongPress,
+                        onProfileLongPress: { showAvatarMenu = true }
                     )
                     .padding(.horizontal, UGSpace.l)
 
@@ -82,6 +84,11 @@ struct HomeView: View {
             .refreshable { await viewModel.refresh() }
         }
         .task { await viewModel.loadInitialIfNeeded() }
+        .confirmationDialog("Profile", isPresented: $showAvatarMenu, titleVisibility: .hidden) {
+            Button("View profile") { onProfileClick() }
+            Button("Diagnostic logs") { onLogsRequest() }
+            Button("Cancel", role: .cancel) {}
+        }
     }
 
     @ViewBuilder

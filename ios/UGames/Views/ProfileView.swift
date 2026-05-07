@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ProfileView: View {
     @ObservedObject var service: CatalogService
+    var showsBackButton: Bool = true
     let onBack: () -> Void
     let onLoginClick: () -> Void
     let onLogsClick: () -> Void
@@ -12,7 +13,18 @@ struct ProfileView: View {
         ZStack(alignment: .top) {
             UGColor.Surface.base.ignoresSafeArea()
             VStack(alignment: .leading, spacing: 0) {
-                UGTopBar(title: "Profile", onBack: onBack)
+                if showsBackButton {
+                    UGTopBar(title: "Profile", onBack: onBack)
+                } else {
+                    HStack {
+                        Text("Profile")
+                            .font(UGFont.titleL)
+                            .foregroundColor(UGColor.Text.primary)
+                        Spacer()
+                    }
+                    .padding(.horizontal, UGSpace.l)
+                    .padding(.top, UGSpace.l)
+                }
                 Spacer().frame(height: UGSpace.l)
                 hero
                     .padding(.horizontal, UGSpace.l)

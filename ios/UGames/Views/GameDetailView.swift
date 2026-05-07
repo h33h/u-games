@@ -43,31 +43,43 @@ struct GameDetailView: View {
     private var placeholder: Color { Color(hex: viewModel.game.mainColor) ?? UGColor.elevated }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            UGColor.bg0.ignoresSafeArea()
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    hero
-                    Spacer().frame(height: 20)
-                    titleBlock
-                    Spacer().frame(height: 24)
-                    aboutSection
-                    screenshotsRow
-                    Spacer().frame(height: 24)
-                    sectionHeader("More like this")
-                    Spacer().frame(height: 12)
-                    similarRow
-                    Spacer().frame(height: 24)
-                    informationBlock
-                    // Bottom inset matches the sticky CTA strip so the
-                    // Information block can scroll fully into view
-                    // above the gradient instead of fading under it.
-                    Spacer().frame(height: ctaStripHeight)
+        // GeometryReader extends past the bottom safe area so that
+        // (a) `proxy.safeAreaInsets.bottom` reports the home-indicator
+        //     height (without `.ignoresSafeArea` on the reader, the
+        //     reader sits inside the safe area and reports 0), and
+        // (b) the gradient strip can fill the entire bottom region
+        //     including the home-indicator zone, hiding overscrolled
+        //     content that would otherwise show through.
+        GeometryReader { proxy in
+            let safeBottom = proxy.safeAreaInsets.bottom
+            ZStack(alignment: .bottom) {
+                UGColor.bg0
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        hero
+                        Spacer().frame(height: 20)
+                        titleBlock
+                        Spacer().frame(height: 24)
+                        aboutSection
+                        screenshotsRow
+                        Spacer().frame(height: 24)
+                        sectionHeader("More like this")
+                        Spacer().frame(height: 12)
+                        similarRow
+                        Spacer().frame(height: 24)
+                        informationBlock
+                        // Bottom inset matches the sticky CTA strip
+                        // (gradient + safe area) so the Information
+                        // block can scroll fully into view above the
+                        // gradient instead of fading under it.
+                        Spacer().frame(height: ctaStripHeight + safeBottom)
+                    }
                 }
+                .ignoresSafeArea(edges: .top)
+                stickyCta(safeBottom: safeBottom)
             }
-            .ignoresSafeArea(edges: .top)
-            stickyCta
         }
+        .ignoresSafeArea(.container, edges: .bottom)
         .onAppear {
             // Pulse 3 times after appearance: each cycle 1.2s up + 1.2s
             // down, so total ≈ 7.2s. Repeat count = 6 reverse animations
@@ -440,23 +452,23 @@ struct GameDetailView: View {
 
     // MARK: Sticky CTA
 
-    private var stickyCta: some View {
-        // Single full-width gradient strip. `0.55` for the bg0 stop
-        // means the fade is complete just above the button — so the
-        // button area, home-indicator zone, and safe-area inset all
-        // sit in the already-opaque tail of the same gradient. No
-        // visible "rectangle" seam, no abrupt flat panel.
+    private func stickyCta(safeBottom: CGFloat) -> some View {
+        // Single full-width gradient strip whose total height = the
+        // editorial fade (170pt) + the home-indicator inset, so it
+        // covers the entire bottom of the screen including the safe
+        // area. `0.45` for the bg0 stop puts the opaque region right
+        // above where the button sits — the button + home-indicator
+        // zone share the same continuous fade, no panel seam.
         ZStack(alignment: .bottom) {
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0.00),
-                    .init(color: UGColor.bg0, location: 0.55),
+                    .init(color: UGColor.bg0, location: 0.45),
                     .init(color: UGColor.bg0, location: 1.00),
                 ],
                 startPoint: .top, endPoint: .bottom
             )
-            .frame(height: ctaStripHeight)
-            .ignoresSafeArea(edges: .bottom)
+            .frame(height: ctaStripHeight + safeBottom)
             .allowsHitTesting(false)
             Button(action: { onPlay(viewModel.game) }) {
                 Text("▶ Play now")
@@ -470,7 +482,9 @@ struct GameDetailView: View {
                     .scaleEffect(ctaScale)
             }
             .buttonStyle(.borderless)
-            .padding(.bottom, 22)
+            // Lift the button above the home-indicator inset so it's
+            // never tap-blocked by the system gesture zone.
+            .padding(.bottom, safeBottom + 22)
         }
         .frame(maxWidth: .infinity)
     }

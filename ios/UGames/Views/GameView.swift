@@ -38,10 +38,12 @@ struct GameView: View {
                 .frame(width: 64, height: 64)
                 .contentShape(Rectangle())
                 .onTapGesture { revision += 1 }
+                .accessibilityHidden(true)
 
             if showBack {
                 UGCircleIconButton(
                     systemName: "chevron.left",
+                    accessibilityLabel: "Back to catalog",
                     tint: .white,
                     diameter: 40,
                     iconSize: 18,
@@ -121,8 +123,11 @@ private struct RotateDeviceOverlay: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, UGSpace.huge)
 
-                Button(action: onBack) {
-                    Text("Назад в каталог")
+                Button {
+                    UGHaptics.tap()
+                    onBack()
+                } label: {
+                    Text("Back to catalog")
                         .font(.callout)
                         .foregroundColor(.white)
                         .padding(.horizontal, UGSpace.xxl)
@@ -139,11 +144,11 @@ private struct RotateDeviceOverlay: View {
     }
 
     private var headline: String {
-        target == .landscape ? "Поверните устройство" : "Поверните в портрет"
+        target == .landscape ? "Rotate your device" : "Rotate to portrait"
     }
     private var subheadline: String {
         target == .landscape
-            ? "Эта игра работает в горизонтальной ориентации."
-            : "Эта игра работает в вертикальной ориентации."
+            ? "This game runs in landscape."
+            : "This game runs in portrait."
     }
 }

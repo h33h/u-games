@@ -7,7 +7,7 @@ enum UGColor {
     static let divider = Color(red: 0x1F / 255.0, green: 0x1F / 255.0, blue: 0x22 / 255.0)
     static let textPrimary = Color.white
     static let textSecondary = Color(red: 0xC8 / 255.0, green: 0xC8 / 255.0, blue: 0xD0 / 255.0)
-    static let textMuted = Color(red: 0x7A / 255.0, green: 0x7A / 255.0, blue: 0x82 / 255.0)
+    static let textMuted = Color(red: 0x8E / 255.0, green: 0x8E / 255.0, blue: 0x96 / 255.0)
     static let accent = Color(red: 1.0, green: 0xC7 / 255.0, blue: 0)
     static let accentEnd = Color(red: 1.0, green: 0x7E / 255.0, blue: 0)
     static let danger = Color(red: 1.0, green: 0x4D / 255.0, blue: 0x6A / 255.0)

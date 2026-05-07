@@ -127,9 +127,19 @@ private struct HomeHeader: View {
                     .foregroundColor(UGColor.textPrimary)
                 Spacer()
                 UGAvatar(profile: profile)
-                    .contentShape(Circle())
-                    .onTapGesture(perform: onProfileClick)
-                    .onLongPressGesture(minimumDuration: 0.7, perform: onProfileLongPress)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        UGHaptics.tap()
+                        onProfileClick()
+                    }
+                    .onLongPressGesture(minimumDuration: 0.7) {
+                        UGHaptics.selection()
+                        onProfileLongPress()
+                    }
+                    .accessibilityLabel("Open profile")
+                    .accessibilityHint("Long press for diagnostic logs")
+                    .accessibilityAddTraits(.isButton)
             }
         }
     }

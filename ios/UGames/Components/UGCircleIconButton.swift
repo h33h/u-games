@@ -2,6 +2,7 @@ import SwiftUI
 
 struct UGCircleIconButton: View {
     let systemName: String
+    let accessibilityLabel: String
     var tint: Color = UGColor.textPrimary
 
     var diameter: CGFloat = UGSize.buttonL
@@ -12,15 +13,21 @@ struct UGCircleIconButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            UGHaptics.tap()
+            action()
+        } label: {
             Image(systemName: systemName)
                 .font(.system(size: iconSize, weight: iconWeight))
                 .foregroundColor(tint)
                 .frame(width: diameter, height: diameter)
                 .background(background)
                 .clipShape(Circle())
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
@@ -29,10 +36,10 @@ struct UGCircleIconButton: View {
     ZStack {
         Color.gray.ignoresSafeArea()
         HStack(spacing: 12) {
-            UGCircleIconButton(systemName: "chevron.left", action: {})
-            UGCircleIconButton(systemName: "heart.fill", tint: UGColor.danger, action: {})
-            UGCircleIconButton(systemName: "square.and.arrow.up", action: {})
-            UGCircleIconButton(systemName: "xmark", action: {})
+            UGCircleIconButton(systemName: "chevron.left", accessibilityLabel: "Back", action: {})
+            UGCircleIconButton(systemName: "heart.fill", accessibilityLabel: "Remove from favorites", tint: UGColor.danger, action: {})
+            UGCircleIconButton(systemName: "square.and.arrow.up", accessibilityLabel: "Share", action: {})
+            UGCircleIconButton(systemName: "xmark", accessibilityLabel: "Close", action: {})
         }
     }
 }

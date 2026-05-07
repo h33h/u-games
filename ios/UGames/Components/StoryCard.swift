@@ -32,7 +32,15 @@ struct StoryCard: View {
         }
         .frame(height: UGSize.storyH)
         .haloChrome(anchor, size: .xl)
-        .onTapGesture(perform: onTap)
+        .pressable()
+        .contentShape(Rectangle())
+        .onTapGesture {
+            UGHaptics.tap()
+            onTap()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel("\(subtitle). \(title)")
     }
 
     private var stackedCovers: some View {

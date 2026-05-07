@@ -12,6 +12,8 @@ struct GameDetailView: View {
 
     @State private var fullscreen: ScreenshotPager?
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     private let ctaStripHeight: CGFloat = 170
 
     private var halo: Color { Color(hex: viewModel.game.mainColor) ?? UGColor.accent }
@@ -52,8 +54,9 @@ struct GameDetailView: View {
         }
         .ignoresSafeArea()
         .onAppear {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                withAnimation(.easeInOut(duration: 1.2).repeatCount(6, autoreverses: true)) {
+            guard !reduceMotion else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                withAnimation(.easeInOut(duration: 1.4).repeatCount(1, autoreverses: true)) {
                     ctaScale = 1.04
                 }
             }
@@ -103,15 +106,25 @@ struct GameDetailView: View {
     }
 
     private var heroTopRow: some View {
-        HStack {
-            UGCircleIconButton(systemName: "chevron.left", action: onBack)
+        let isFav = favorites.contains(viewModel.game.appId)
+        return HStack {
+            UGCircleIconButton(
+                systemName: "chevron.left",
+                accessibilityLabel: "Back",
+                action: onBack
+            )
             Spacer()
             UGCircleIconButton(
-                systemName: favorites.contains(viewModel.game.appId) ? "heart.fill" : "heart",
-                tint: favorites.contains(viewModel.game.appId) ? UGColor.danger : UGColor.textPrimary,
+                systemName: isFav ? "heart.fill" : "heart",
+                accessibilityLabel: isFav ? "Remove from favorites" : "Add to favorites",
+                tint: isFav ? UGColor.danger : UGColor.textPrimary,
                 action: { favorites.toggle(viewModel.game) }
             )
-            UGCircleIconButton(systemName: "square.and.arrow.up", action: { onShare(viewModel.game) })
+            UGCircleIconButton(
+                systemName: "square.and.arrow.up",
+                accessibilityLabel: "Share game",
+                action: { onShare(viewModel.game) }
+            )
         }
     }
 
@@ -431,7 +444,11 @@ struct ScreenshotsFullscreenView: View {
             VStack {
                 HStack {
                     Spacer()
-                    UGCircleIconButton(systemName: "xmark", action: onDismiss)
+                    UGCircleIconButton(
+                        systemName: "xmark",
+                        accessibilityLabel: "Close screenshots",
+                        action: onDismiss
+                    )
                 }
                 .padding(.horizontal, UGSpace.l)
                 Spacer()

@@ -27,7 +27,16 @@ struct FloatingTabBar: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, UGSpace.s)
                 .contentShape(Rectangle())
-                .onTapGesture { onSelect(tab.key) }
+                .onTapGesture {
+                    if !active {
+                        UGHaptics.selection()
+                        onSelect(tab.key)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(tab.label)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAddTraits(active ? .isSelected : [])
             }
         }
         .frame(height: UGSize.tabBarH)

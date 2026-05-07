@@ -16,6 +16,7 @@ struct TileGameCard: View {
 
                 UGCircleIconButton(
                     systemName: isFavorite ? "heart.fill" : "heart",
+                    accessibilityLabel: isFavorite ? "Remove from favorites" : "Add to favorites",
                     tint: isFavorite ? UGColor.danger : UGColor.textPrimary,
                     diameter: UGSize.buttonSm,
                     iconSize: 14,
@@ -51,8 +52,15 @@ struct TileGameCard: View {
             }
             .frame(height: UGSize.tileTitleH, alignment: .topLeading)
         }
+        .pressable()
         .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
+        .onTapGesture {
+            UGHaptics.tap()
+            onTap()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(game.title)
     }
 }
 
@@ -94,8 +102,15 @@ struct WideGameCard: View {
         }
         .frame(width: UGSize.wideCardW, height: UGSize.wideCardH)
         .haloChrome(halo, size: .lg)
+        .pressable()
         .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
+        .onTapGesture {
+            UGHaptics.tap()
+            onTap()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(game.title)
     }
 }
 
@@ -141,8 +156,15 @@ struct SquareGameCard: View {
                 .lineLimit(1)
                 .frame(width: UGSize.squareCard, alignment: .leading)
         }
+        .pressable()
         .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
+        .onTapGesture {
+            UGHaptics.tap()
+            onTap()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(game.title)
     }
 }
 

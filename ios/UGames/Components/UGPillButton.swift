@@ -36,7 +36,10 @@ struct UGPillButton: View {
     }
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            UGHaptics.cta()
+            action()
+        } label: {
             shape.clip(
                 Text(title)
                     .font(UGFont.bodyS.weight(.heavy))

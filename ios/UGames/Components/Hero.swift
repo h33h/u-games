@@ -25,17 +25,35 @@ struct HeroSection: View {
         .frame(height: UGSize.heroH)
         .frame(maxWidth: .infinity)
         .haloChrome(halo, size: .xl)
-
+        .pressable()
         .contentShape(RoundedRectangle(cornerRadius: UGRadius.xl))
-        .onTapGesture { onPlay() }
+        .onTapGesture {
+            UGHaptics.tap()
+            onPlay()
+        }
+        .accessibilityElement(children: .contain)
     }
 
     private var topRow: some View {
         HStack {
             UGChip(text: "✦ FEATURED TODAY", style: .accentSoft)
             Spacer()
-            UGCircleIconButton(systemName: "heart", diameter: UGSize.buttonM, iconSize: 14, background: Color.black.opacity(0.5), action: onFavorite)
-            UGCircleIconButton(systemName: "square.and.arrow.up", diameter: UGSize.buttonM, iconSize: 14, background: Color.black.opacity(0.5), action: onShare)
+            UGCircleIconButton(
+                systemName: "heart",
+                accessibilityLabel: "Add to favorites",
+                diameter: UGSize.buttonM,
+                iconSize: 14,
+                background: Color.black.opacity(0.5),
+                action: onFavorite
+            )
+            UGCircleIconButton(
+                systemName: "square.and.arrow.up",
+                accessibilityLabel: "Share game",
+                diameter: UGSize.buttonM,
+                iconSize: 14,
+                background: Color.black.opacity(0.5),
+                action: onShare
+            )
         }
         .padding(UGSpace.l)
     }

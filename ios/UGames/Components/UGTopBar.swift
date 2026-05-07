@@ -6,12 +6,17 @@ struct UGTopBar: View {
 
     var body: some View {
         HStack {
-            Button(action: onBack) {
+            Button {
+                UGHaptics.tap()
+                onBack()
+            } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 18, weight: .semibold))
                     .foregroundColor(UGColor.textPrimary)
-                    .padding(UGSpace.s)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
+            .accessibilityLabel("Back")
             Text(title)
                 .font(UGFont.titleM)
                 .foregroundColor(UGColor.textPrimary)

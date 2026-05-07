@@ -63,11 +63,15 @@ struct BrowseView: View {
             .focused($searchFocused)
             if !viewModel.searchQuery.isEmpty {
                 Button {
+                    UGHaptics.tap()
                     viewModel.searchQuery = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundColor(UGColor.textSecondary)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
+                .accessibilityLabel("Clear search")
             }
         }
         .padding(.horizontal, UGSpace.m)

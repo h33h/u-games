@@ -390,7 +390,12 @@
       try { p[k] = real[k]; } catch (_) {}
     }
     p.init = function (opts) {
+      var optsDump;
+      try { optsDump = JSON.stringify(opts || {}).slice(0, 120); } catch (_) { optsDump = '<unstringifiable>'; }
+      ylog('sdk', 'YaGames.init begin opts=' + optsDump);
+      var t0 = Date.now();
       return real.init.call(real, opts).then(function (ysdk) {
+        ylog('sdk', 'YaGames.init resolved in ' + (Date.now() - t0) + 'ms');
         try { patchAdv(ysdk && ysdk.adv); } catch (_) {}
         // Wrap getPayments so the returned Payments object grants every
         // purchase for free without a real Yandex Plus / RU Bank check.
@@ -414,15 +419,32 @@
           }
         } catch (_) {}
         return ysdk;
+      }).catch(function (err) {
+        ylog('sdk', 'YaGames.init REJECTED in ' + (Date.now() - t0) + 'ms: ' + (err && err.message || err));
+        throw err;
       });
     };
     patchedCache = p;
     return p;
   }
 
+  var __yga_get_count__ = 0;
   Object.defineProperty(window, 'YaGames', {
     configurable: true,
-    get: function () { return real ? makePatched() : undefined; },
-    set: function (v) { real = v; patchedCache = null; }
+    get: function () {
+      __yga_get_count__++;
+      if (__yga_get_count__ <= 3) {
+        ylog('sdk', 'YaGames get #' + __yga_get_count__ + ' real=' + (real ? typeof real : 'null') +
+                    ' init=' + (real && typeof real.init));
+      }
+      return real ? makePatched() : undefined;
+    },
+    set: function (v) {
+      var t = (v && typeof v) || 'null';
+      var hasInit = !!(v && typeof v.init === 'function');
+      ylog('sdk', 'YaGames set: ' + t + ' hasInit=' + hasInit);
+      real = v;
+      patchedCache = null;
+    },
   });
 })();

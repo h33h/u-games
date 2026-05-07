@@ -20,10 +20,16 @@ struct TileGameCard: View {
                 placeholder
                 AsyncImage(url: URL(string: game.coverUrl)) { phase in
                     switch phase {
-                    case .success(let img): img.resizable().scaledToFill()
-                    default: Color.clear
+                    case .success(let img):
+                        img.resizable().scaledToFill()
+                    default:
+                        Color.clear
                     }
                 }
+                // Same overflow trap as Hero — bound to ZStack bounds.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
+
                 Button(action: onFavoriteToggle) {
                     Image(systemName: isFavorite ? "heart.fill" : "heart")
                         .font(.system(size: 14, weight: .semibold))
@@ -111,10 +117,14 @@ struct WideGameCard: View {
             placeholder
             AsyncImage(url: URL(string: game.coverUrl)) { phase in
                 switch phase {
-                case .success(let img): img.resizable().scaledToFill()
-                default: Color.clear
+                case .success(let img):
+                    img.resizable().scaledToFill()
+                default:
+                    Color.clear
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
             Text(game.title)
                 .font(UGFont.caption)
                 .foregroundColor(UGColor.textPrimary)
@@ -166,10 +176,14 @@ struct SquareGameCard: View {
                 placeholder
                 AsyncImage(url: URL(string: game.iconUrl.isEmpty ? game.coverUrl : game.iconUrl)) { phase in
                     switch phase {
-                    case .success(let img): img.resizable().scaledToFill()
-                    default: Color.clear
+                    case .success(let img):
+                        img.resizable().scaledToFill()
+                    default:
+                        Color.clear
                     }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipped()
             }
             .frame(width: 130, height: 130)
             .clipShape(RoundedRectangle(cornerRadius: 16))

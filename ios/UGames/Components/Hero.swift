@@ -16,10 +16,20 @@ struct HeroSection: View {
             placeholder
             AsyncImage(url: URL(string: game.coverUrl)) { phase in
                 switch phase {
-                case .success(let img): img.resizable().scaledToFill()
-                default: Color.clear
+                case .success(let img):
+                    img.resizable().scaledToFill()
+                default:
+                    Color.clear
                 }
             }
+            // Bound the image to the hero's frame and clip — without this,
+            // `.scaledToFill()` keeps the source image's intrinsic size and
+            // the AsyncImage view overflows its parent (it would bleed past
+            // the rounded corner and even past the card width on portrait
+            // covers).
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+
             LinearGradient(
                 stops: [.init(color: .clear, location: 0.35), .init(color: .black.opacity(0.85), location: 1.0)],
                 startPoint: .top, endPoint: .bottom

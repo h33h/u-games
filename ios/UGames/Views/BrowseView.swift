@@ -27,6 +27,9 @@ struct BrowseView: View {
                         }
                     )
                     .padding(.top, UGSpace.s)
+                } else if viewModel.mode == .feed && viewModel.categories.isEmpty && viewModel.isLoading {
+                    SkeletonChipRow()
+                        .padding(.top, UGSpace.s)
                 }
                 Spacer().frame(height: UGSpace.m)
                 content
@@ -80,7 +83,7 @@ struct BrowseView: View {
     private var content: some View {
         let visible = viewModel.visibleGames
         if visible.isEmpty && viewModel.isLoading {
-            VStack { Spacer(); ProgressView().tint(UGColor.Text.primary); Spacer() }
+            SkeletonTileGrid()
         } else if visible.isEmpty, let err = viewModel.error {
             EmptyState(
                 systemIcon: "wifi.slash",

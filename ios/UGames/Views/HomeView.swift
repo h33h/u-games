@@ -47,27 +47,40 @@ struct HomeView: View {
                             .padding(.horizontal, UGSpace.l)
                     }
 
-                    if !viewModel.feedRecent.isEmpty {
-                        SectionHeader(title: "My games")
-                        wideRow(games: viewModel.feedRecent)
-                    }
+                    if viewModel.hero == nil {
+                        SkeletonSectionHeader()
+                        SkeletonRowWide()
 
-                    if let spotlight = viewModel.spotlight {
-                        StoryCard(
-                            title: spotlight.title,
-                            subtitle: "SPOTLIGHT · \(spotlight.title.uppercased())",
-                            games: Array(spotlight.games.prefix(3)),
-                            onTap: { onOpenBrowseFiltered(spotlight.title) },
-                        )
-                        .padding(.horizontal, UGSpace.l)
-                    }
+                        SkeletonStoryCard()
+                            .padding(.horizontal, UGSpace.l)
 
-                    ForEach(viewModel.genreRows, id: \.title) { row in
-                        SectionHeader(
-                            title: row.title,
-                            seeAllAction: { onOpenBrowseFiltered(row.categoryName ?? row.title) }
-                        )
-                        squareRow(games: row.games)
+                        ForEach(0..<2, id: \.self) { _ in
+                            SkeletonSectionHeader()
+                            SkeletonRowSquare()
+                        }
+                    } else {
+                        if !viewModel.feedRecent.isEmpty {
+                            SectionHeader(title: "My games")
+                            wideRow(games: viewModel.feedRecent)
+                        }
+
+                        if let spotlight = viewModel.spotlight {
+                            StoryCard(
+                                title: spotlight.title,
+                                subtitle: "SPOTLIGHT · \(spotlight.title.uppercased())",
+                                games: Array(spotlight.games.prefix(3)),
+                                onTap: { onOpenBrowseFiltered(spotlight.title) },
+                            )
+                            .padding(.horizontal, UGSpace.l)
+                        }
+
+                        ForEach(viewModel.genreRows, id: \.title) { row in
+                            SectionHeader(
+                                title: row.title,
+                                seeAllAction: { onOpenBrowseFiltered(row.categoryName ?? row.title) }
+                            )
+                            squareRow(games: row.games)
+                        }
                     }
 
                     if let err = viewModel.error, viewModel.hero == nil {

@@ -42,7 +42,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,6 +93,13 @@ fun BrowseScreen(
         }
     }
 
+    // Pagination trigger guard — remembers the games-list size at the
+    // moment of the last loadMore() call. Without it, a genre-filter that
+    // hides every new page (visible.size stays small) would re-trigger
+    // loadMore on every scroll tick. Only fire again once the underlying
+    // games list has actually grown.
+    var lastTriggerGamesSize by remember { mutableStateOf(0) }
+
     LaunchedEffect(gridState) {
         snapshotFlow {
             val info = gridState.layoutInfo
@@ -107,7 +116,9 @@ fun BrowseScreen(
                     && !current.isLoading
                     && total > 0
                     && last >= total - 6
+                    && current.games.size != lastTriggerGamesSize
                 ) {
+                    lastTriggerGamesSize = current.games.size
                     viewModel.loadMore()
                 }
             }
@@ -212,6 +223,20 @@ fun BrowseScreen(
                                         modifier = Modifier.fillMaxWidth().padding(16.dp),
                                         contentAlignment = Alignment.Center,
                                     ) { CircularProgressIndicator(color = UGColors.TextPrimary) }
+                                }
+                            }
+                            if (state.mode == BrowseMode.Search && visible.isNotEmpty()) {
+                                item(span = { GridItemSpan(maxLineSpan) }) {
+                                    Box(
+                                        modifier = Modifier.fillMaxWidth().padding(20.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = "End of search results",
+                                            color = UGColors.TextMuted,
+                                            style = UGType.Caption,
+                                        )
+                                    }
                                 }
                             }
                         }

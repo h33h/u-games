@@ -27,6 +27,19 @@ class CatalogRepository(
     suspend fun nextFeedPage(pageId: String, gamesPerPage: Int = 24): FeedPage =
         api.nextFeedPage(pageId, gamesPerPage)
 
+    /**
+     * Block-aware first page for Home. Caches the deduped flat list so the
+     * Browse cold-start (which calls [cachedFeed]) stays warm even when the
+     * user lands on Home first.
+     */
+    suspend fun firstFeedWithBlocks(gamesPerPage: Int = 24): FeedWithBlocks {
+        val resp = api.firstFeedPageWithBlocks(gamesPerPage = gamesPerPage)
+        if (resp.flatGames.isNotEmpty()) {
+            cache.upsertAll(resp.flatGames.map { it.toEntity() })
+        }
+        return resp
+    }
+
     suspend fun cachedFeed(limit: Int = 50): List<Game> =
         cache.latest(limit).map { it.toGame() }
 

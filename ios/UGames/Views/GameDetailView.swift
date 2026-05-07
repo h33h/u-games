@@ -31,12 +31,13 @@ struct GameDetailView: View {
     /// `.fullScreenCover(item:)` needs that.
     @State private var fullscreen: ScreenshotPager?
 
-    /// Heights for the two stacked CTA strips. The ScrollView's bottom
-    /// inset matches gradient + solid + safe-area-bottom so the
-    /// Information block scrolls fully into view above the gradient
-    /// instead of fading under it.
-    private let ctaGradientHeight: CGFloat = 90
-    private let ctaSolidHeight: CGFloat = 70
+    /// Total height of the CTA gradient strip. ScrollView's bottom
+    /// inset matches this so the Information block scrolls fully into
+    /// view above the strip instead of fading under it. The gradient
+    /// itself fades transparent → bg0 by ~55%, leaving the bottom
+    /// half opaque (covering the button + home-indicator area) but
+    /// without a visible "panel" seam.
+    private let ctaStripHeight: CGFloat = 170
 
     private var halo: Color { Color(hex: viewModel.game.mainColor) ?? UGColor.accent }
     private var placeholder: Color { Color(hex: viewModel.game.mainColor) ?? UGColor.elevated }
@@ -61,7 +62,7 @@ struct GameDetailView: View {
                     // Bottom inset matches the sticky CTA strip so the
                     // Information block can scroll fully into view
                     // above the gradient instead of fading under it.
-                    Spacer().frame(height: ctaGradientHeight + ctaSolidHeight + 8)
+                    Spacer().frame(height: ctaStripHeight)
                 }
             }
             .ignoresSafeArea(edges: .top)
@@ -440,27 +441,23 @@ struct GameDetailView: View {
     // MARK: Sticky CTA
 
     private var stickyCta: some View {
-        // Full-width sandwich:
-        //   1. Gradient strip on top (transparent → bg0)
-        //   2. Solid bg0 strip underneath, including the safe-area
-        //      bottom inset so the home indicator zone is also covered.
-        // The button is overlaid on the solid strip — its accent halo
-        // shadow stays inside the bg0 area on every side, so no
-        // content peeks through "left" or "right" of it.
+        // Single full-width gradient strip. `0.55` for the bg0 stop
+        // means the fade is complete just above the button — so the
+        // button area, home-indicator zone, and safe-area inset all
+        // sit in the already-opaque tail of the same gradient. No
+        // visible "rectangle" seam, no abrupt flat panel.
         ZStack(alignment: .bottom) {
-            VStack(spacing: 0) {
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0.0),
-                        .init(color: UGColor.bg0, location: 1.0),
-                    ],
-                    startPoint: .top, endPoint: .bottom
-                )
-                .frame(height: ctaGradientHeight)
-                .allowsHitTesting(false)
-                UGColor.bg0
-                    .frame(height: ctaSolidHeight)
-            }
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0.00),
+                    .init(color: UGColor.bg0, location: 0.55),
+                    .init(color: UGColor.bg0, location: 1.00),
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+            .frame(height: ctaStripHeight)
+            .ignoresSafeArea(edges: .bottom)
+            .allowsHitTesting(false)
             Button(action: { onPlay(viewModel.game) }) {
                 Text("▶ Play now")
                     .font(UGFont.bodyS.weight(.heavy))
@@ -473,14 +470,9 @@ struct GameDetailView: View {
                     .scaleEffect(ctaScale)
             }
             .buttonStyle(.borderless)
-            // Center the button vertically inside the solid strip.
-            .padding(.bottom, (ctaSolidHeight - 50) / 2)
+            .padding(.bottom, 22)
         }
         .frame(maxWidth: .infinity)
-        // Pull the sandwich down into the home-indicator inset so the
-        // solid strip flush-fills it; SwiftUI's safe-area drawing keeps
-        // the button itself above the inset thanks to ctaSolidHeight.
-        .background(UGColor.bg0.ignoresSafeArea(edges: .bottom))
     }
 
     // MARK: Helpers

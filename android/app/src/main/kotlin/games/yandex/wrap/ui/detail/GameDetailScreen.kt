@@ -107,19 +107,20 @@ fun GameDetailScreen(
     // fullscreen state survives config changes (rotation).
     var fullscreenIndex by rememberSaveable { mutableStateOf(-1) }
 
-    val ctaSolidHeight = 70.dp  // button + 18dp bottom padding cushion
-    val ctaGradientHeight = 90.dp
-    val ctaTotalHeight = ctaSolidHeight + ctaGradientHeight
+    // One continuous CTA gradient (transparent → bg0). Hits opacity
+    // 100% by ~55% of its height so the home-indicator zone sits in
+    // the already-opaque tail end of the same gradient — no visible
+    // "solid panel" seam below the fade.
+    val ctaStripHeight = 170.dp
     Box(modifier = Modifier.fillMaxSize().background(UGColors.Bg0)) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            // Bottom padding = system inset + the entire CTA strip
-            // (solid + gradient). Matches the sticky CTA so the
-            // Information block can scroll fully into view without the
-            // last row hiding under the fade.
+            // Bottom padding = system inset + the full CTA strip so the
+            // Information block can scroll fully into view above where
+            // the gradient starts becoming visible.
             contentPadding = PaddingValues(
                 top = 0.dp,
-                bottom = systemBarsPadding.calculateBottomPadding() + ctaTotalHeight + 8.dp,
+                bottom = systemBarsPadding.calculateBottomPadding() + ctaStripHeight,
             ),
         ) {
             item {
@@ -181,8 +182,7 @@ fun GameDetailScreen(
         StickyPlayCta(
             modifier = Modifier.align(Alignment.BottomCenter),
             bottomInset = systemBarsPadding.calculateBottomPadding(),
-            gradientHeight = ctaGradientHeight,
-            solidHeight = ctaSolidHeight,
+            stripHeight = ctaStripHeight,
             onPlay = { onPlay(game) },
         )
     }
@@ -542,8 +542,7 @@ private fun InformationBlock(game: Game, detail: AppDetail?) {
 private fun StickyPlayCta(
     modifier: Modifier = Modifier,
     bottomInset: androidx.compose.ui.unit.Dp,
-    gradientHeight: androidx.compose.ui.unit.Dp,
-    solidHeight: androidx.compose.ui.unit.Dp,
+    stripHeight: androidx.compose.ui.unit.Dp,
     onPlay: () -> Unit,
 ) {
     val scale = remember { Animatable(1.0f) }
@@ -553,37 +552,26 @@ private fun StickyPlayCta(
             scale.animateTo(1.0f, animationSpec = tween(1200, easing = FastOutSlowInEasing))
         }
     }
-    Box(modifier = modifier.fillMaxWidth()) {
-        // Two stacked, full-width strips — gradient fade on top, solid
-        // black underneath. Together they hide whatever the LazyColumn
-        // is rendering behind the CTA, including the accent shadow's
-        // halo on either side of the button.
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(gradientHeight)
-                    .background(
-                        Brush.verticalGradient(
-                            0.0f to Color.Transparent,
-                            1.0f to UGColors.Bg0,
-                        )
-                    ),
-            )
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(solidHeight + bottomInset)
-                    .background(UGColors.Bg0),
-            )
-        }
-        // Button is centered horizontally, anchored to the solid
-        // strip's vertical middle so it sits cleanly above the
-        // home-indicator inset.
+    // Single full-width gradient strip extending into the system inset.
+    // `0.55f to Bg0` makes the fade complete just above the button so
+    // the area behind the button is solid black; the rest is one
+    // continuous fade. No "rectangle" seam.
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(stripHeight + bottomInset)
+            .background(
+                Brush.verticalGradient(
+                    0.00f to Color.Transparent,
+                    0.55f to UGColors.Bg0,
+                    1.00f to UGColors.Bg0,
+                )
+            ),
+    ) {
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = bottomInset + (solidHeight - 50.dp) / 2)
+                .padding(bottom = bottomInset + 22.dp)
                 .scale(scale.value)
                 .shadow(
                     elevation = 18.dp,

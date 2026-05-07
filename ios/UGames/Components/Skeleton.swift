@@ -4,6 +4,7 @@ struct Skeleton: View {
     var cornerRadius: CGFloat = UGRadius.m
 
     @State private var phase: CGFloat = -0.3
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         RoundedRectangle(cornerRadius: cornerRadius)
@@ -18,10 +19,12 @@ struct Skeleton: View {
                 )
             )
             .onAppear {
+                guard !reduceMotion else { return }
                 withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
                     phase = 1.0
                 }
             }
+            .accessibilityHidden(true)
     }
 }
 

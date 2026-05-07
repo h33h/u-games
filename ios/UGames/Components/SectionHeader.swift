@@ -9,9 +9,13 @@ struct SectionHeader: View {
             Text(title)
                 .font(UGFont.titleM)
                 .foregroundColor(UGColor.Text.primary)
+                .accessibilityAddTraits(.isHeader)
             Spacer()
             if let seeAllAction {
-                Button(action: seeAllAction) {
+                Button {
+                    UGHaptics.tap()
+                    seeAllAction()
+                } label: {
                     HStack(spacing: UGSpace.xs) {
                         Text("See all")
                             .font(UGFont.bodyS)
@@ -22,6 +26,7 @@ struct SectionHeader: View {
                     }
                 }
                 .buttonStyle(.borderless)
+                .accessibilityLabel("See all \(title)")
             }
         }
         .padding(.horizontal, UGSpace.l)
@@ -36,6 +41,7 @@ struct UGEyebrow: View {
             .font(UGFont.label)
             .tracking(1.2)
             .foregroundColor(UGColor.Text.muted)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 

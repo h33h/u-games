@@ -21,6 +21,7 @@ struct UGTopBar<Trailing: View>: View {
             Text(title)
                 .font(UGFont.titleM)
                 .foregroundColor(UGColor.Text.primary)
+                .accessibilityAddTraits(.isHeader)
             Spacer()
             trailing()
         }

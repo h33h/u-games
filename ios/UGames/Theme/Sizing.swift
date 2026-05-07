@@ -41,5 +41,5 @@ enum UGSize {
     static let tabBarInset: CGFloat = 96
     static let storyMiniCover: CGFloat = 42
     static let settingsIconCol: CGFloat = 24
-    static let infoLabelCol: CGFloat = 110
+    static let infoLabelCol: CGFloat = 130
 }

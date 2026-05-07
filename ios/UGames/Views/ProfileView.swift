@@ -20,6 +20,7 @@ struct ProfileView: View {
                         Text("Profile")
                             .font(UGFont.titleL)
                             .foregroundColor(UGColor.Text.primary)
+                            .accessibilityAddTraits(.isHeader)
                         Spacer()
                     }
                     .padding(.horizontal, UGSpace.l)

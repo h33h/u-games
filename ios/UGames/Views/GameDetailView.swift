@@ -306,11 +306,12 @@ struct GameDetailView: View {
                         if idx > 0 {
                             Divider().background(UGColor.Border.divider)
                         }
-                        HStack(alignment: .top) {
+                        HStack(alignment: .firstTextBaseline, spacing: UGSpace.s) {
                             Text(row.label)
                                 .font(UGFont.bodyS)
                                 .foregroundColor(UGColor.Text.muted)
-                                .frame(width: UGSize.infoLabelCol, alignment: .leading)
+                                .frame(minWidth: UGSize.infoLabelCol, alignment: .leading)
+                                .fixedSize(horizontal: true, vertical: false)
                             Text(row.value)
                                 .font(UGFont.bodyS)
                                 .foregroundColor(UGColor.Text.primary)

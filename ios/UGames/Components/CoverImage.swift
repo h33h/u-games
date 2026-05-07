@@ -23,5 +23,6 @@ struct CoverImage: View {
                 }
             }
         }
+        .accessibilityHidden(true)
     }
 }

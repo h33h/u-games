@@ -14,7 +14,7 @@ struct GameDetailView: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let ctaStripHeight: CGFloat = 170
+    private let ctaStripHeight: CGFloat = 120
 
     private var halo: Color { Color(hex: viewModel.game.mainColor) ?? UGColor.Accent.primary }
     private var placeholder: Color { Color(hex: viewModel.game.mainColor) ?? UGColor.Surface.raised }
@@ -65,7 +65,11 @@ struct GameDetailView: View {
             ScreenshotsFullscreenView(
                 screenshots: viewModel.detail?.screenshots ?? [],
                 initialIndex: pager.index,
-                onDismiss: { fullscreen = nil }
+                onDismiss: { fullscreen = nil },
+                onPlay: {
+                    fullscreen = nil
+                    onPlay(viewModel.game)
+                }
             )
         }
     }
@@ -140,7 +144,8 @@ struct GameDetailView: View {
             Text(viewModel.game.title)
                 .font(UGFont.displayXL)
                 .foregroundColor(UGColor.Text.primary)
-                .lineLimit(3)
+                .lineLimit(2)
+                .minimumScaleFactor(0.75)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let author = pickAuthor() {
                 Text("by \(author)")
@@ -157,9 +162,11 @@ struct GameDetailView: View {
     private var chipsRow: some View {
         let chips = buildChips()
         if !chips.isEmpty {
-            HStack(spacing: UGSpace.s) {
-                ForEach(chips, id: \.self) { c in
-                    UGChip(text: c, style: .neutral)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: UGSpace.s) {
+                    ForEach(chips, id: \.self) { c in
+                        UGChip(text: c, style: .neutral)
+                    }
                 }
             }
         }
@@ -297,10 +304,7 @@ struct GameDetailView: View {
                 VStack(spacing: 0) {
                     ForEach(Array(rows.enumerated()), id: \.offset) { idx, row in
                         if idx > 0 {
-                            Rectangle()
-                                .fill(UGColor.Border.divider)
-                                .frame(height: 1)
-                                .frame(maxWidth: .infinity)
+                            Divider().background(UGColor.Border.divider)
                         }
                         HStack(alignment: .top) {
                             Text(row.label)
@@ -313,11 +317,11 @@ struct GameDetailView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                         .padding(.horizontal, UGSpace.l)
-                        .padding(.vertical, UGSpace.m)
+                        .padding(.vertical, UGSpace.l)
                     }
                 }
-                .background(UGColor.Surface.subtle)
-                .clipShape(RoundedRectangle(cornerRadius: UGRadius.m))
+                .background(UGColor.Surface.raised)
+                .clipShape(RoundedRectangle(cornerRadius: UGRadius.l))
             }
             .padding(.horizontal, UGSpace.l)
         }
@@ -340,7 +344,7 @@ struct GameDetailView: View {
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0.00),
-                    .init(color: UGColor.Surface.base, location: 0.45),
+                    .init(color: UGColor.Surface.base, location: 0.35),
                     .init(color: UGColor.Surface.base, location: 1.00),
                 ],
                 startPoint: .top, endPoint: .bottom
@@ -351,8 +355,7 @@ struct GameDetailView: View {
                 onPlay(viewModel.game)
             }
             .scaleEffect(ctaScale)
-
-            .padding(.bottom, safeBottom + UGSpace.xxl)
+            .padding(.bottom, safeBottom + UGSpace.l)
         }
         .frame(maxWidth: .infinity)
     }
@@ -413,35 +416,46 @@ struct ScreenshotsFullscreenView: View {
     let screenshots: [String]
     let initialIndex: Int
     let onDismiss: () -> Void
+    let onPlay: () -> Void
 
     @State private var page: Int
+    @State private var anyZoomed: Bool = false
 
-    init(screenshots: [String], initialIndex: Int, onDismiss: @escaping () -> Void) {
+    init(
+        screenshots: [String],
+        initialIndex: Int,
+        onDismiss: @escaping () -> Void,
+        onPlay: @escaping () -> Void
+    ) {
         self.screenshots = screenshots
         self.initialIndex = initialIndex
         self.onDismiss = onDismiss
+        self.onPlay = onPlay
         _page = State(initialValue: max(0, min(initialIndex, screenshots.count - 1)))
     }
 
     var body: some View {
         ZStack {
             Color.black.opacity(0.95).ignoresSafeArea()
-                .onTapGesture(perform: onDismiss)
+                .onTapGesture { if !anyZoomed { onDismiss() } }
             TabView(selection: $page) {
                 ForEach(Array(screenshots.enumerated()), id: \.offset) { idx, url in
-                    CachedAsyncImage(url: URL(string: upgradeToOrig(url))) { phase in
-                        switch phase {
-                        case .success(let img):
-                            img.resizable().aspectRatio(contentMode: .fit)
-                        default:
-                            Color.clear
-                        }
-                    }
+                    ZoomableImage(
+                        url: URL(string: upgradeToOrig(url)),
+                        isZoomed: Binding(
+                            get: { anyZoomed && page == idx },
+                            set: { newValue in
+                                if page == idx { anyZoomed = newValue }
+                            }
+                        )
+                    )
                     .tag(idx)
                     .padding(.horizontal, UGSpace.m)
                 }
             }
             .tabViewStyle(.page(indexDisplayMode: .never))
+            .onChange(of: page) { _ in anyZoomed = false }
+
             VStack {
                 HStack {
                     Spacer()
@@ -453,16 +467,96 @@ struct ScreenshotsFullscreenView: View {
                 }
                 .padding(.horizontal, UGSpace.l)
                 Spacer()
+                UGPillButton(title: "▶ Play now", glow: true, action: onPlay)
+                    .padding(.bottom, UGSpace.m)
                 if screenshots.count > 1 {
                     UGChip(text: "\(page + 1) / \(screenshots.count)", style: .overlay)
-                        .padding(.bottom, UGSpace.xxxl)
+                        .padding(.bottom, UGSpace.xxl)
                 }
             }
+            .opacity(anyZoomed ? 0.0 : 1.0)
+            .animation(.easeOut(duration: 0.18), value: anyZoomed)
         }
     }
 
     private func upgradeToOrig(_ url: String) -> String {
         guard let lastSlash = url.lastIndex(of: "/"), lastSlash != url.startIndex else { return url }
         return String(url[..<url.index(after: lastSlash)]) + "orig"
+    }
+}
+
+private struct ZoomableImage: View {
+    let url: URL?
+    @Binding var isZoomed: Bool
+
+    @State private var scale: CGFloat = 1.0
+    @State private var lastScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    var body: some View {
+        GeometryReader { geo in
+            CachedAsyncImage(url: url) { phase in
+                Group {
+                    switch phase {
+                    case .success(let img):
+                        img.resizable().aspectRatio(contentMode: .fit)
+                    default:
+                        Color.clear
+                    }
+                }
+                .scaleEffect(scale)
+                .offset(offset)
+                .frame(width: geo.size.width, height: geo.size.height)
+                .gesture(magnification)
+                .simultaneousGesture(panWhenZoomed)
+                .onTapGesture(count: 2) { toggleDoubleTapZoom() }
+            }
+        }
+    }
+
+    private var magnification: some Gesture {
+        MagnificationGesture()
+            .onChanged { val in
+                let newScale = max(1.0, min(5.0, lastScale * val))
+                scale = newScale
+                isZoomed = newScale > 1.05
+            }
+            .onEnded { _ in
+                lastScale = scale
+                if scale <= 1.05 { resetTransform() }
+            }
+    }
+
+    private var panWhenZoomed: some Gesture {
+        DragGesture()
+            .onChanged { val in
+                guard scale > 1.05 else { return }
+                offset = CGSize(
+                    width: lastOffset.width + val.translation.width,
+                    height: lastOffset.height + val.translation.height
+                )
+            }
+            .onEnded { _ in lastOffset = offset }
+    }
+
+    private func toggleDoubleTapZoom() {
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+            if scale > 1.0 {
+                resetTransform()
+            } else {
+                scale = 2.5
+                lastScale = 2.5
+                isZoomed = true
+            }
+        }
+    }
+
+    private func resetTransform() {
+        scale = 1.0
+        lastScale = 1.0
+        offset = .zero
+        lastOffset = .zero
+        isZoomed = false
     }
 }

@@ -32,10 +32,13 @@ fun GenreChipRow(
     modifier: Modifier = Modifier,
 ) {
     val items = listOf<String?>(null) + genres
+    // Vertical contentPadding gives the active chip's accent shadow
+    // halo (8dp elevation) breathing room. Without it the shadow
+    // gets clipped by the LazyRow's measured viewport.
     LazyRow(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        contentPadding = PaddingValues(horizontal = 14.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
     ) {
         items(items) { genre ->
             val active = genre == selected

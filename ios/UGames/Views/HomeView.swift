@@ -107,17 +107,18 @@ struct HomeView: View {
 
     @ViewBuilder
     private func wideRow(games: [Game]) -> some View {
-        // Vertical padding so each card's mainColor halo (12pt shadow)
-        // has breathing room. Without it the halo is vertically
-        // clipped by the row's measured frame.
+        // Per-item vertical padding makes each item's measured frame
+        // include the halo shadow, which is what the parent ScrollView
+        // (and any clipping ancestor) actually respects. Padding on
+        // the HStack alone isn't enough on its own.
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
                 ForEach(games) { g in
                     WideGameCard(game: g, onTap: { onGameClick(g) })
+                        .padding(.vertical, 16)
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 14)
         }
     }
 
@@ -127,10 +128,10 @@ struct HomeView: View {
             HStack(spacing: 12) {
                 ForEach(games) { g in
                     SquareGameCard(game: g, onTap: { onGameClick(g) })
+                        .padding(.vertical, 16)
                 }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 14)
         }
     }
 }

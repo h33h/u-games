@@ -6,6 +6,10 @@ struct GenreChipRow: View {
     let onSelect: (String?) -> Void
 
     var body: some View {
+        // Per-chip vertical padding so each item's measured frame
+        // includes the active chip's accent shadow halo. Plain HStack
+        // padding doesn't keep the halo from getting clipped by the
+        // ScrollView's viewport.
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 chip(label: "All", value: nil)
@@ -25,6 +29,7 @@ struct GenreChipRow: View {
             .clipShape(Capsule())
             .overlay(Capsule().stroke(active ? UGColor.accent : UGColor.divider))
             .shadow(color: active ? UGColor.accent.opacity(0.4) : .clear, radius: 8, x: 0, y: 0)
+            .padding(.vertical, 12)
             .onTapGesture { onSelect(value) }
     }
 }

@@ -43,14 +43,12 @@ struct GameDetailView: View {
     private var placeholder: Color { Color(hex: viewModel.game.mainColor) ?? UGColor.elevated }
 
     var body: some View {
-        // GeometryReader extends past the bottom safe area so that
-        // (a) `proxy.safeAreaInsets.bottom` reports the home-indicator
-        //     height (without `.ignoresSafeArea` on the reader, the
-        //     reader sits inside the safe area and reports 0), and
-        // (b) the gradient strip can fill the entire bottom region
-        //     including the home-indicator zone, hiding overscrolled
-        //     content that would otherwise show through.
+        // GeometryReader extends past the safe area on every edge so
+        // we can read `proxy.safeAreaInsets.{top,bottom}` and lay out
+        // (a) the sticky top icons just below the status bar, and
+        // (b) the gradient strip into the home-indicator zone.
         GeometryReader { proxy in
+            let safeTop = proxy.safeAreaInsets.top
             let safeBottom = proxy.safeAreaInsets.bottom
             ZStack(alignment: .bottom) {
                 UGColor.bg0
@@ -77,9 +75,15 @@ struct GameDetailView: View {
                 }
                 .ignoresSafeArea(edges: .top)
                 stickyCta(safeBottom: safeBottom)
+                // Sticky top controls — anchored to the screen top so
+                // they stay visible/tappable while the hero scrolls.
+                heroTopRow
+                    .padding(.top, safeTop + 10)
+                    .padding(.horizontal, 14)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
         }
-        .ignoresSafeArea(.container, edges: .bottom)
+        .ignoresSafeArea()
         .onAppear {
             // Pulse 3 times after appearance: each cycle 1.2s up + 1.2s
             // down, so total ≈ 7.2s. Repeat count = 6 reverse animations
@@ -106,8 +110,9 @@ struct GameDetailView: View {
         // ScrollView rubber-bands content downward — leaving a gap
         // above the hero. We fill that gap by stretching the cover
         // image upward so the screen always shows artwork instead of
-        // bg0. The gradient + top-row stay anchored to the natural
-        // hero footprint (360pt) so they don't drift on stretch.
+        // bg0. Top controls (Back / Heart / Share) are NOT inside the
+        // hero — they live as a screen-level overlay so they stay
+        // sticky while the hero scrolls.
         ZStack(alignment: .top) {
             stretchyCover
             LinearGradient(
@@ -117,9 +122,6 @@ struct GameDetailView: View {
                 ],
                 startPoint: .top, endPoint: .bottom
             )
-            heroTopRow
-                .padding(.top, 60)
-                .padding(.horizontal, 14)
         }
         .frame(height: 360)
         .frame(maxWidth: .infinity)

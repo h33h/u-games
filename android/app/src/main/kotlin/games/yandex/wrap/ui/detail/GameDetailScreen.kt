@@ -196,12 +196,8 @@ fun GameDetailScreen(
             item {
                 DetailHero(
                     game = game,
-                    isFavorite = state.isFavorite,
                     topInset = statusBarsPadding.calculateTopPadding(),
                     extraHeight = extraDp,
-                    onBack = onBack,
-                    onFavorite = viewModel::toggleFavorite,
-                    onShare = { onShare(game) },
                 )
             }
             item { Spacer(Modifier.height(20.dp)) }
@@ -250,6 +246,20 @@ fun GameDetailScreen(
             item { Spacer(Modifier.height(24.dp)) }
             item { InformationBlock(game = game, detail = state.detail) }
         }
+        // Top controls (Back / Favorite / Share) live OUTSIDE the
+        // LazyColumn so they stay anchored to the screen top while the
+        // hero scrolls. They float over both the hero and any later
+        // sections, with the icons' own dark glass-circle background
+        // keeping them readable on top of light cover artwork.
+        DetailTopBar(
+            modifier = Modifier.align(Alignment.TopCenter),
+            topInset = statusBarsPadding.calculateTopPadding(),
+            isFavorite = state.isFavorite,
+            onBack = onBack,
+            onFavorite = viewModel::toggleFavorite,
+            onShare = { onShare(game) },
+        )
+
         StickyPlayCta(
             modifier = Modifier.align(Alignment.BottomCenter),
             bottomInset = systemBarsPadding.calculateBottomPadding(),
@@ -271,12 +281,8 @@ fun GameDetailScreen(
 @Composable
 private fun DetailHero(
     game: Game,
-    isFavorite: Boolean,
     topInset: androidx.compose.ui.unit.Dp,
     extraHeight: androidx.compose.ui.unit.Dp,
-    onBack: () -> Unit,
-    onFavorite: () -> Unit,
-    onShare: () -> Unit,
 ) {
     val haloColor = parseHexColor(game.mainColor) ?: UGColors.Accent
     val placeholder = parseHexColor(game.mainColor) ?: UGColors.Elevated
@@ -316,23 +322,40 @@ private fun DetailHero(
                     )
                 ),
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = topInset + 10.dp, start = 14.dp, end = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            HeroIcon(icon = Icons.Filled.ArrowBack, contentDescription = "Back", onClick = onBack)
-            Spacer(Modifier.weight(1f))
-            HeroIcon(
-                icon = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
-                contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
-                tint = if (isFavorite) UGColors.Danger else UGColors.TextPrimary,
-                onClick = onFavorite,
-            )
-            Spacer(Modifier.width(8.dp))
-            HeroIcon(icon = Icons.Filled.Share, contentDescription = "Share", onClick = onShare)
-        }
+    }
+}
+
+/**
+ * Sticky top bar of icon buttons (Back / Favorite / Share). Hosted at
+ * the screen level (BoxScope.align(TopCenter)) so it stays anchored
+ * while the hero scrolls beneath it. The icons' own glass-circle
+ * background keeps them readable over both cover artwork and bg0.
+ */
+@Composable
+private fun DetailTopBar(
+    modifier: Modifier = Modifier,
+    topInset: androidx.compose.ui.unit.Dp,
+    isFavorite: Boolean,
+    onBack: () -> Unit,
+    onFavorite: () -> Unit,
+    onShare: () -> Unit,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = topInset + 10.dp, start = 14.dp, end = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        HeroIcon(icon = Icons.Filled.ArrowBack, contentDescription = "Back", onClick = onBack)
+        Spacer(Modifier.weight(1f))
+        HeroIcon(
+            icon = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+            contentDescription = if (isFavorite) "Remove from favorites" else "Add to favorites",
+            tint = if (isFavorite) UGColors.Danger else UGColors.TextPrimary,
+            onClick = onFavorite,
+        )
+        Spacer(Modifier.width(8.dp))
+        HeroIcon(icon = Icons.Filled.Share, contentDescription = "Share", onClick = onShare)
     }
 }
 

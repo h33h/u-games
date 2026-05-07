@@ -14,21 +14,27 @@ struct HeroSection: View {
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             placeholder
-            AsyncImage(url: URL(string: game.coverUrl)) { phase in
-                switch phase {
-                case .success(let img):
-                    img.resizable().scaledToFill()
-                default:
-                    Color.clear
+            // GeometryReader gives the inner Image a *concrete* width/height
+            // to size itself with. `.scaledToFill()` alone uses the source
+            // image's intrinsic dimensions and ignores the parent's
+            // proposed size — that's why the cover was bleeding past the
+            // rounded corner. Explicit `.frame(width:height:)` followed by
+            // `.clipped()` is the only combination that bounds AsyncImage
+            // reliably.
+            GeometryReader { geo in
+                AsyncImage(url: URL(string: game.coverUrl)) { phase in
+                    switch phase {
+                    case .success(let img):
+                        img
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .clipped()
+                    default:
+                        Color.clear
+                    }
                 }
             }
-            // Bound the image to the hero's frame and clip — without this,
-            // `.scaledToFill()` keeps the source image's intrinsic size and
-            // the AsyncImage view overflows its parent (it would bleed past
-            // the rounded corner and even past the card width on portrait
-            // covers).
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
 
             LinearGradient(
                 stops: [.init(color: .clear, location: 0.35), .init(color: .black.opacity(0.85), location: 1.0)],

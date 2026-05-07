@@ -18,17 +18,20 @@ struct TileGameCard: View {
             // overlap the cover, not the surrounding shadow.
             ZStack {
                 placeholder
-                AsyncImage(url: URL(string: game.coverUrl)) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img.resizable().scaledToFill()
-                    default:
-                        Color.clear
+                GeometryReader { geo in
+                    AsyncImage(url: URL(string: game.coverUrl)) { phase in
+                        switch phase {
+                        case .success(let img):
+                            img
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: geo.size.width, height: geo.size.height)
+                                .clipped()
+                        default:
+                            Color.clear
+                        }
                     }
                 }
-                // Same overflow trap as Hero — bound to ZStack bounds.
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
 
                 Button(action: onFavoriteToggle) {
                     Image(systemName: isFavorite ? "heart.fill" : "heart")
@@ -115,16 +118,20 @@ struct WideGameCard: View {
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             placeholder
-            AsyncImage(url: URL(string: game.coverUrl)) { phase in
-                switch phase {
-                case .success(let img):
-                    img.resizable().scaledToFill()
-                default:
-                    Color.clear
+            GeometryReader { geo in
+                AsyncImage(url: URL(string: game.coverUrl)) { phase in
+                    switch phase {
+                    case .success(let img):
+                        img
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .clipped()
+                    default:
+                        Color.clear
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
             Text(game.title)
                 .font(UGFont.caption)
                 .foregroundColor(UGColor.textPrimary)
@@ -174,16 +181,20 @@ struct SquareGameCard: View {
         VStack(alignment: .leading, spacing: 6) {
             ZStack {
                 placeholder
-                AsyncImage(url: URL(string: game.iconUrl.isEmpty ? game.coverUrl : game.iconUrl)) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img.resizable().scaledToFill()
-                    default:
-                        Color.clear
+                GeometryReader { geo in
+                    AsyncImage(url: URL(string: game.iconUrl.isEmpty ? game.coverUrl : game.iconUrl)) { phase in
+                        switch phase {
+                        case .success(let img):
+                            img
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: geo.size.width, height: geo.size.height)
+                                .clipped()
+                        default:
+                            Color.clear
+                        }
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
             }
             .frame(width: 130, height: 130)
             .clipShape(RoundedRectangle(cornerRadius: 16))

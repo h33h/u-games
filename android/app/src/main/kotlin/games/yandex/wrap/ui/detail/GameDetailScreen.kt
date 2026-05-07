@@ -2,6 +2,7 @@ package games.yandex.wrap.ui.detail
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,6 +27,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -40,13 +48,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -107,6 +119,61 @@ fun GameDetailScreen(
     // fullscreen state survives config changes (rotation).
     var fullscreenIndex by rememberSaveable { mutableStateOf(-1) }
 
+    // Stretchy header: capture the pull-down overscroll at the top
+    // of the LazyColumn and apply it (damped) as extra height on the
+    // hero. The image inside the hero stretches to fill the new
+    // bigger frame so the screen never shows bg0 above the cover.
+    val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    var pullDownPx by remember { mutableFloatStateOf(0f) }
+    val canStretch by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex == 0 &&
+                listState.firstVisibleItemScrollOffset == 0
+        }
+    }
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {
+            override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                // While there's accumulated pull, releasing (negative
+                // y) drains it before letting the LazyColumn scroll.
+                if (pullDownPx > 0f && available.y < 0f) {
+                    val consumed = (-available.y).coerceAtMost(pullDownPx)
+                    pullDownPx -= consumed
+                    return Offset(0f, -consumed)
+                }
+                return Offset.Zero
+            }
+
+            override fun onPostScroll(
+                consumed: Offset,
+                available: Offset,
+                source: NestedScrollSource,
+            ): Offset {
+                // After the LazyColumn has consumed everything it can
+                // (which is nothing when at top), capture remaining
+                // downward delta with 0.5 damping so the stretch feels
+                // resistive instead of 1:1 with the finger.
+                if (canStretch && available.y > 0f) {
+                    pullDownPx += available.y * 0.5f
+                    return available
+                }
+                return Offset.Zero
+            }
+
+            override suspend fun onPreFling(available: Velocity): Velocity {
+                if (pullDownPx > 0f) {
+                    val anim = Animatable(pullDownPx)
+                    anim.animateTo(0f, animationSpec = spring()) { pullDownPx = value }
+                    return available
+                }
+                return Velocity.Zero
+            }
+        }
+    }
+    val density = LocalDensity.current
+    val extraDp = with(density) { pullDownPx.toDp() }
+
     // One continuous CTA gradient (transparent → bg0). Hits opacity
     // 100% by ~55% of its height so the home-indicator zone sits in
     // the already-opaque tail end of the same gradient — no visible
@@ -114,7 +181,10 @@ fun GameDetailScreen(
     val ctaStripHeight = 170.dp
     Box(modifier = Modifier.fillMaxSize().background(UGColors.Bg0)) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            modifier = Modifier
+                .fillMaxSize()
+                .nestedScroll(nestedScrollConnection),
             // Bottom padding = system inset + the full CTA strip so the
             // Information block can scroll fully into view above where
             // the gradient starts becoming visible.
@@ -128,6 +198,7 @@ fun GameDetailScreen(
                     game = game,
                     isFavorite = state.isFavorite,
                     topInset = statusBarsPadding.calculateTopPadding(),
+                    extraHeight = extraDp,
                     onBack = onBack,
                     onFavorite = viewModel::toggleFavorite,
                     onShare = { onShare(game) },
@@ -202,16 +273,21 @@ private fun DetailHero(
     game: Game,
     isFavorite: Boolean,
     topInset: androidx.compose.ui.unit.Dp,
+    extraHeight: androidx.compose.ui.unit.Dp,
     onBack: () -> Unit,
     onFavorite: () -> Unit,
     onShare: () -> Unit,
 ) {
     val haloColor = parseHexColor(game.mainColor) ?: UGColors.Accent
     val placeholder = parseHexColor(game.mainColor) ?: UGColors.Elevated
+    // Hero grows by `extraHeight` when the LazyColumn is overscrolled
+    // at the top — the image and gradient stretch to fill the new
+    // bigger frame, keeping the screen artwork-filled instead of
+    // exposing bg0 in the rubber-band gap.
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(360.dp + topInset)
+            .height(360.dp + topInset + extraHeight)
             .background(placeholder)
             .border(
                 width = 1.dp,

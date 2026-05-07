@@ -278,8 +278,11 @@ private fun HomeRowSection(
 
 @Composable
 private fun WideRow(games: List<Game>, onClick: (Game) -> Unit) {
+    // Vertical padding so each WideGameCard's mainColor shadow halo
+    // (12dp shadow + tinted border) has breathing room. Without it
+    // the halo gets vertically clipped by the row's measured height.
     LazyRow(
-        contentPadding = PaddingValues(horizontal = 14.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(games, key = { it.appId }) { g ->
@@ -290,8 +293,10 @@ private fun WideRow(games: List<Game>, onClick: (Game) -> Unit) {
 
 @Composable
 private fun SquareRow(games: List<Game>, onClick: (Game) -> Unit) {
+    // Vertical padding gives the SquareGameCard's icon halo room to
+    // render without vertical clipping by the row's frame.
     LazyRow(
-        contentPadding = PaddingValues(horizontal = 14.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(games, key = { it.appId }) { g ->

@@ -48,6 +48,12 @@ struct HeroSection: View {
         .clipShape(RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(halo.opacity(UGColor.haloBorderAlpha)))
         .shadow(color: halo.opacity(UGColor.haloAlpha), radius: 20, x: 0, y: 14)
+        // Tap anywhere on the card opens the same Detail flow as the
+        // Play button. SwiftUI's button hit-test takes precedence at
+        // the Save / Share / Play-now sub-targets, so they keep
+        // working independently.
+        .contentShape(RoundedRectangle(cornerRadius: 22))
+        .onTapGesture { onPlay() }
     }
 
     private var topRow: some View {

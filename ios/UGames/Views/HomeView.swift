@@ -107,6 +107,9 @@ struct HomeView: View {
 
     @ViewBuilder
     private func wideRow(games: [Game]) -> some View {
+        // Vertical padding so each card's mainColor halo (12pt shadow)
+        // has breathing room. Without it the halo is vertically
+        // clipped by the row's measured frame.
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
                 ForEach(games) { g in
@@ -114,6 +117,7 @@ struct HomeView: View {
                 }
             }
             .padding(.horizontal, 14)
+            .padding(.vertical, 14)
         }
     }
 
@@ -126,6 +130,7 @@ struct HomeView: View {
                 }
             }
             .padding(.horizontal, 14)
+            .padding(.vertical, 14)
         }
     }
 }

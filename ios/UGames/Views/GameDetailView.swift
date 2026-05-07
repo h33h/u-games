@@ -102,25 +102,14 @@ struct GameDetailView: View {
     // MARK: Hero
 
     private var hero: some View {
+        // Stretchy header: when the user pulls down past the top, the
+        // ScrollView rubber-bands content downward — leaving a gap
+        // above the hero. We fill that gap by stretching the cover
+        // image upward so the screen always shows artwork instead of
+        // bg0. The gradient + top-row stay anchored to the natural
+        // hero footprint (360pt) so they don't drift on stretch.
         ZStack(alignment: .top) {
-            placeholder
-            GeometryReader { geo in
-                // Hero is 360pt tall; the feed thumb (`pjpg250x140`)
-                // looked terrible. `pjpg1280x720` is the next-largest
-                // pre-rendered size on Yandex's avatars storage.
-                AsyncImage(url: URL(string: viewModel.game.coverUrl(size: "pjpg1280x720"))) { phase in
-                    switch phase {
-                    case .success(let img):
-                        img
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                            .frame(width: geo.size.width, height: geo.size.height)
-                            .clipped()
-                    default:
-                        Color.clear
-                    }
-                }
-            }
+            stretchyCover
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0.30),
@@ -140,6 +129,34 @@ struct GameDetailView: View {
                 .frame(height: 0.5)
         }
         .shadow(color: halo.opacity(UGColor.haloAlpha), radius: 20, x: 0, y: 14)
+    }
+
+    /// Cover image that grows upward when the parent ScrollView is
+    /// rubber-banded down. `.global` minY of the geometry reader
+    /// equals the hero's screen Y position; when overscrolled at the
+    /// top it becomes positive, and we feed that into the image's
+    /// height + a matching upward offset so the image fills the gap.
+    private var stretchyCover: some View {
+        GeometryReader { geo in
+            let minY = geo.frame(in: .global).minY
+            let stretch = max(0, minY)
+            ZStack {
+                placeholder
+                AsyncImage(url: URL(string: viewModel.game.coverUrl(size: "pjpg1280x720"))) { phase in
+                    switch phase {
+                    case .success(let img):
+                        img
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    default:
+                        Color.clear
+                    }
+                }
+            }
+            .frame(width: geo.size.width, height: geo.size.height + stretch)
+            .clipped()
+            .offset(y: -stretch)
+        }
     }
 
     private var heroTopRow: some View {

@@ -75,7 +75,11 @@ fun HeroSection(
                 width = 1.dp,
                 color = haloColor.copy(alpha = UGColors.HaloBorderAlpha),
                 shape = RoundedCornerShape(22.dp),
-            ),
+            )
+            // Tap anywhere on the card opens the same Detail flow as
+            // the Play button. Inner clickables (Save / Share / Play
+            // now) take precedence at their own bounds.
+            .clickable(onClick = onPlay),
     ) {
         AsyncImage(
             model = game.coverUrl,

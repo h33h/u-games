@@ -60,64 +60,37 @@ struct RootView: View {
     private func reset(to route: Route) { routeStack = [route] }
 
     var body: some View {
+        // TabContainer is *always* mounted so its `selected` tab and
+        // @StateObject VMs (HomeVM/BrowseVM) survive Detail → Game →
+        // Back. Pushed routes overlay on top with a solid bg0
+        // background so TabContainer is fully hidden while a route
+        // is on screen but its state is intact when popped back.
+        //
+        // Previously RootView used `switch currentRoute { case .catalog
+        // ... }` which removed TabContainer from the view hierarchy
+        // every time we navigated, resetting `selected` to "home" and
+        // re-creating the VMs. That's the bug behind "Browse → Detail
+        // → Back kicks me to Home".
         ZStack {
-            Color.black.ignoresSafeArea()
-            switch currentRoute {
-            case .catalog:
-                TabContainer(
-                    catalogService: catalogService,
-                    favoritesStore: favoritesStore,
-                    onLogsRequest: { push(.logs) },
-                    onGameOpen: { game in
-                        // Phase 3: cards push Detail first; Detail's Play
-                        // button is what pushes the WebView.
-                        push(.gameDetail(game))
-                    },
-                    onLoginClick: { push(.auth) },
-                    onSignOut: {
-                        Task { await catalogService.clearSession() }
-                    },
-                )
-            case .gameDetail(let game):
-                GameDetailHost(
-                    game: game,
-                    catalogService: catalogService,
-                    favoritesStore: favoritesStore,
-                    onBack: { pop() },
-                    onPlay: { g in push(.game(appId: g.appId, title: g.title)) },
-                    onShare: { g in
-                        sharePayload = SharePayload(title: g.title, url: g.playUrl)
-                    },
-                    onSimilarClick: { g in push(.gameDetail(g)) }
-                )
-                // Distinct id-per-game so SwiftUI tears down + rebuilds
-                // (with a fresh @StateObject GameDetailViewModel) when
-                // navigating Detail(A) → similar tile → Detail(B).
-                .id(game.appId)
-            case .game(let appId, let title):
-                GameView(
-                    appId: appId,
-                    title: title,
-                    scripts: injectedScripts,
-                    blockList: blockList,
-                    onBack: {
-                        pop()
-                        // Yandex's server-side recentGames updates on the
-                        // play session — let HomeViewModel know so it
-                        // re-fetches the feed and the just-played game
-                        // appears in the Recently played row.
-                        catalogService.notifyGameSessionEnded()
-                    },
-                )
-            case .auth:
-                AuthView(onClose: {
-                    pop()
-                    Task { await catalogService.refreshProfile() }
-                })
-            case .logs:
-                LogsView(onClose: { pop() })
+            UGColor.bg0.ignoresSafeArea()
+            TabContainer(
+                catalogService: catalogService,
+                favoritesStore: favoritesStore,
+                onLogsRequest: { push(.logs) },
+                onGameOpen: { game in push(.gameDetail(game)) },
+                onLoginClick: { push(.auth) },
+                onSignOut: {
+                    Task { await catalogService.clearSession() }
+                },
+            )
+            if let route = routeStack.last {
+                routeOverlay(for: route)
+                    .background(UGColor.bg0.ignoresSafeArea())
+                    .id(routeId(route))
+                    .transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.18), value: routeStack.count)
         .sheet(item: $sharePayload) { payload in
             ShareSheet(payload: payload)
         }
@@ -128,6 +101,62 @@ struct RootView: View {
                 // WebView. Mirror Android's MainActivity.parseDeepLink.
                 reset(to: .game(appId: appId, title: ""))
             }
+        }
+    }
+
+    @ViewBuilder
+    private func routeOverlay(for route: Route) -> some View {
+        switch route {
+        case .catalog:
+            EmptyView()
+        case .gameDetail(let game):
+            GameDetailHost(
+                game: game,
+                catalogService: catalogService,
+                favoritesStore: favoritesStore,
+                onBack: { pop() },
+                onPlay: { g in push(.game(appId: g.appId, title: g.title)) },
+                onShare: { g in
+                    sharePayload = SharePayload(title: g.title, url: g.playUrl)
+                },
+                onSimilarClick: { g in push(.gameDetail(g)) }
+            )
+        case .game(let appId, let title):
+            GameView(
+                appId: appId,
+                title: title,
+                scripts: injectedScripts,
+                blockList: blockList,
+                onBack: {
+                    pop()
+                    // Yandex's server-side recentGames updates on the
+                    // play session — let HomeViewModel know so it
+                    // re-fetches the feed and the just-played game
+                    // appears in the Recently played row.
+                    catalogService.notifyGameSessionEnded()
+                },
+            )
+        case .auth:
+            AuthView(onClose: {
+                pop()
+                Task { await catalogService.refreshProfile() }
+            })
+        case .logs:
+            LogsView(onClose: { pop() })
+        }
+    }
+
+    /// Stable identity for the overlay so SwiftUI tears down + rebuilds
+    /// the host (and its `@StateObject`) only when the underlying route
+    /// content actually changes — e.g. Detail(A) → Similar tile →
+    /// Detail(B) replaces the host with a fresh VM and similar fetch.
+    private func routeId(_ route: Route) -> String {
+        switch route {
+        case .catalog: return "catalog"
+        case .gameDetail(let g): return "detail-\(g.appId)"
+        case .game(let id, _): return "game-\(id)"
+        case .auth: return "auth"
+        case .logs: return "logs"
         }
     }
 }

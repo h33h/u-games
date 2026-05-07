@@ -22,6 +22,7 @@ fun GameWebView(
     url: String,
     scripts: InjectedScripts,
     blockList: BlockList,
+    paused: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val savedScripts = remember { scripts }
@@ -76,9 +77,18 @@ fun GameWebView(
             container
         },
         update = { container ->
-            val webView = container.getChildAt(0) as? WebView
-            if (webView != null && webView.url != url) {
-                webView.loadUrl(url)
+            val webView = container.getChildAt(0) as? WebView ?: return@AndroidView
+            if (webView.url != url) webView.loadUrl(url)
+            // Pause/resume both the View and JS timers so games that locked an
+            // orientation we can't satisfy aren't burning frames behind the
+            // rotate overlay. resumeTimers is global on WebView prior to API
+            // 28, so calling it on a single instance is enough.
+            if (paused) {
+                webView.onPause()
+                webView.pauseTimers()
+            } else {
+                webView.onResume()
+                webView.resumeTimers()
             }
         },
         onRelease = { container ->

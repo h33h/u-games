@@ -17,20 +17,21 @@ struct UGamesApp: App {
     }
 }
 
-/// Parse `ugames://app/<id>` deep links. Also tolerates `https://yandex.com/games/app/<id>`
-/// in case Universal Links are added later. Returns the appId or nil.
+/// Parse `ugames://app/<id>` deep links. Also tolerates
+/// `https://yandex.com/games/app/<id>` in case Universal Links are added
+/// later. Returns the appId or nil.
 func parseDeepLink(_ url: URL) -> Int64? {
     let scheme = url.scheme?.lowercased() ?? ""
     let segments = url.pathComponents.filter { $0 != "/" }
     switch scheme {
     case "ugames":
-        // ugames://app/<id> → host="app", first path segment is id
         if url.host == "app" {
             return segments.first.flatMap { Int64($0) }
         }
         return nil
     case "https", "http":
-        if let host = url.host, (host.hasSuffix("yandex.com") || host.hasSuffix("yandex.ru")),
+        if let host = url.host,
+           host.hasSuffix("yandex.com") || host.hasSuffix("yandex.ru"),
            let idx = segments.firstIndex(of: "app"), idx + 1 < segments.count {
             return Int64(segments[idx + 1])
         }
@@ -53,26 +54,27 @@ struct RootView: View {
             Color.black.ignoresSafeArea()
             switch route {
             case .catalog:
-                TabContainer(hideBar: false) {
-                    CatalogView(
-                        service: catalogService,
-                        recentStore: recentStore,
-                        favoritesStore: favoritesStore,
-                        onGameClick: { game in
-                            recentStore.record(game)
-                            route = .game(appId: game.appId, title: game.title)
-                        },
-                        onLoginClick: { route = .auth },
-                        onLogsRequest: { route = .logs }
-                    )
-                }
+                TabContainer(
+                    catalogService: catalogService,
+                    recentStore: recentStore,
+                    favoritesStore: favoritesStore,
+                    onLogsRequest: { route = .logs },
+                    onGameOpen: { game in
+                        recentStore.record(game)
+                        route = .game(appId: game.appId, title: game.title)
+                    },
+                    onLoginClick: { route = .auth },
+                    onSignOut: {
+                        Task { await catalogService.clearSession() }
+                    },
+                )
             case .game(let appId, let title):
                 GameView(
                     appId: appId,
                     title: title,
                     scripts: injectedScripts,
                     blockList: blockList,
-                    onBack: { route = .catalog }
+                    onBack: { route = .catalog },
                 )
             case .auth:
                 AuthView(onClose: {

@@ -27,8 +27,19 @@ targets:
         excludes:
           - "Info.plist"
     resources:
-      - path: UGames/Resources
-        type: folder
+      # Pull inject scripts + blocklist directly from shared/ — the local
+      # copies under UGames/Resources/ used to drift (the iOS sdk-stub
+      # was 5 days stale and missed every diagnostic update). Android
+      # already does this via assets.srcDirs("../../shared/inject").
+      # Files are added individually (no `type: folder`) so
+      # Bundle.main.url(forResource:withExtension:) finds them at the top
+      # level of the .app bundle, matching how InjectedScripts.swift and
+      # BlockList.swift look them up today.
+      - path: ../shared/inject/honest-path.js
+      - path: ../shared/inject/pwa-mode.js
+      - path: ../shared/inject/pwa-mode.css
+      - path: ../shared/inject/ya-sdk-stub.js
+      - path: ../shared/blocklist/ad-domains.txt
     info:
       path: UGames/Info.plist
       properties:

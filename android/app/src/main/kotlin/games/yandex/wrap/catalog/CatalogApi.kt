@@ -211,6 +211,103 @@ class CatalogApi(private val httpClient: HttpClient) {
         return FeedPage(games = games, nextPageId = nextPageId, hasNext = hasNext)
     }
 
+    /**
+     * Fetch rich game-detail metadata that the JSON `/feed/` endpoint
+     * does not expose: long description, screenshots, published date.
+     *
+     * Yandex serves these only via JSON-LD inside the SSR HTML at
+     * `/games/app/<id>` (`<script type="application/ld+json">`).
+     * `apiData.appInfo` in `__appData__` is just a base64 version
+     * stamp; there is no JSON endpoint behind it that returns the full
+     * detail blob.
+     *
+     * Screenshot URLs come back with `/orig` suffix — multi-MB PNGs.
+     * We rewrite to `pjpg500x280` (~60 KB), the next-most-common
+     * pre-rendered size on Yandex's avatars storage. If the URL doesn't
+     * fit the expected `prefix-url + suffix` pattern we leave it alone.
+     */
+    suspend fun appDetail(appId: Long, lang: String = "en"): AppDetail = withContext(Dispatchers.IO) {
+        val host = preferredYandexHost()
+        val effectiveLang = if (host == "yandex.ru") "ru" else lang
+        val url = "https://$host/games/app/$appId?lang=$effectiveLang"
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", MOBILE_UA)
+            .header("Accept", "text/html")
+            .header("Accept-Language", "$effectiveLang,en;q=0.9")
+            .get()
+            .build()
+        val html = try {
+            profileHttp.newCall(request).execute().use { it.body?.string().orEmpty() }
+        } catch (_: Throwable) {
+            return@withContext AppDetail(description = null, screenshots = emptyList(), datePublished = null)
+        }
+        val ldJson = extractJsonLd(html)
+            ?: return@withContext AppDetail(description = null, screenshots = emptyList(), datePublished = null)
+        val parsed = runCatching { lenientJson.parseToJsonElement(ldJson) as? JsonObject }.getOrNull()
+            ?: return@withContext AppDetail(description = null, screenshots = emptyList(), datePublished = null)
+        val graph = parsed["@graph"] as? JsonArray ?: JsonArray(emptyList())
+        val gameNode = graph.firstOrNull { node ->
+            val obj = node as? JsonObject ?: return@firstOrNull false
+            val type = obj["@type"]?.jsonPrimitive?.contentOrNull
+            type == "SoftwareApplication" || type == "VideoGame" || type == "MobileApplication"
+        } as? JsonObject
+            ?: return@withContext AppDetail(description = null, screenshots = emptyList(), datePublished = null)
+
+        // Prefer the rich multi-paragraph description on `mainEntityOfPage`;
+        // the top-level `description` is the short OG tagline.
+        val mainEntity = gameNode["mainEntityOfPage"] as? JsonObject
+        val description = (mainEntity?.get("description") ?: gameNode["description"])
+            ?.jsonPrimitive?.contentOrNull
+            ?.let(::decodeHtmlEntities)
+            ?.takeIf { it.isNotBlank() }
+
+        val screenshots = (gameNode["screenshot"] as? JsonArray ?: JsonArray(emptyList()))
+            .mapNotNull { item ->
+                val s = item as? JsonObject ?: return@mapNotNull null
+                s["url"]?.jsonPrimitive?.contentOrNull
+            }
+            .map { rewriteAvatarSize(it, "pjpg500x280") }
+
+        val datePublished = gameNode["datePublished"]?.jsonPrimitive?.contentOrNull
+
+        AppDetail(description = description, screenshots = screenshots, datePublished = datePublished)
+    }
+
+    /** Pull the contents of `<script type="application/ld+json">…</script>`. */
+    private fun extractJsonLd(html: String): String? {
+        val markers = listOf("type=\"application/ld+json\"", "type='application/ld+json'")
+        for (marker in markers) {
+            val markerIdx = html.indexOf(marker)
+            if (markerIdx < 0) continue
+            val openTag = html.indexOf('>', markerIdx)
+            if (openTag < 0) continue
+            val closeTag = html.indexOf("</script>", openTag)
+            if (closeTag < 0) continue
+            return html.substring(openTag + 1, closeTag).trim()
+        }
+        return null
+    }
+
+    /** Replace the trailing size suffix on a Yandex avatars URL. The
+     *  storage only serves pre-rendered sizes, so the caller picks a
+     *  known-good value. Leaves the URL alone if it doesn't fit the
+     *  `…/{size}` shape. */
+    private fun rewriteAvatarSize(url: String, newSize: String): String {
+        val lastSlash = url.lastIndexOf('/')
+        if (lastSlash <= 0) return url
+        return url.substring(0, lastSlash + 1) + newSize
+    }
+
+    /** Minimal HTML-entity decoder for the common cases that appear in
+     *  JSON-LD-embedded titles and descriptions. */
+    private fun decodeHtmlEntities(s: String): String =
+        s.replace("&amp;", "&")
+            .replace("&quot;", "\"")
+            .replace("&#39;", "'")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+
     suspend fun similar(appId: Long, lang: String = "en"): List<Game> {
         val response: JsonObject = httpClient.get(SIMILAR_URL) {
             parameter("app_id", appId.toString())
@@ -433,6 +530,7 @@ class CatalogApi(private val httpClient: HttpClient) {
             mainColor = mainColor,
             iconMainColor = iconMainColor,
             videoUrl = videoUrl,
+            coverPrefixUrl = coverPrefix,
         )
     }
 

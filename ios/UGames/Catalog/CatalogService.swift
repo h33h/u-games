@@ -349,6 +349,92 @@ final class CatalogService: ObservableObject {
         return FeedPage(games: games, nextPageId: next, hasNext: hasNext)
     }
 
+    /// Fetch rich game-detail metadata that the JSON `/feed/` endpoint
+    /// does not expose: long description, screenshots, published date.
+    ///
+    /// Yandex serves these only via JSON-LD inside the SSR HTML at
+    /// `/games/app/<id>` (`<script type="application/ld+json">`).
+    /// `apiData.appInfo` in `__appData__` is just a base64 version
+    /// stamp; there is no JSON endpoint behind it that returns the
+    /// full detail blob.
+    ///
+    /// Screenshot URLs come back with `/orig` suffix — multi-MB PNGs.
+    /// We rewrite to `pjpg500x280` (~60 KB), the next-most-common
+    /// pre-rendered size on Yandex's avatars storage.
+    func fetchAppDetail(appId: Int64, lang: String = "en") async -> AppDetail {
+        let host = Self.preferredYandexHost
+        let preferredLang = host == "yandex.ru" ? "ru" : lang
+        var components = URLComponents(string: "https://\(host)/games/app/\(appId)")!
+        components.queryItems = [URLQueryItem(name: "lang", value: preferredLang)]
+        var request = URLRequest(url: components.url!)
+        request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
+        request.setValue("text/html", forHTTPHeaderField: "Accept")
+        request.setValue("\(preferredLang),en;q=0.9", forHTTPHeaderField: "Accept-Language")
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            guard let html = String(data: data, encoding: .utf8) else { return .empty }
+            guard let ldJson = extractJsonLd(html) else { return .empty }
+            guard let parsed = try JSONSerialization.jsonObject(with: Data(ldJson.utf8)) as? [String: Any],
+                  let graph = parsed["@graph"] as? [[String: Any]]
+            else { return .empty }
+            let gameNode = graph.first { node in
+                let type = node["@type"] as? String
+                return type == "SoftwareApplication" || type == "VideoGame" || type == "MobileApplication"
+            }
+            guard let game = gameNode else { return .empty }
+
+            // Prefer the multi-paragraph description on mainEntityOfPage;
+            // the top-level `description` is the short OG tagline.
+            let mainEntity = game["mainEntityOfPage"] as? [String: Any]
+            let rawDesc = (mainEntity?["description"] as? String) ?? (game["description"] as? String)
+            let description: String? = rawDesc.flatMap {
+                let trimmed = decodeHtmlEntities($0).trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+
+            let screenshots = ((game["screenshot"] as? [[String: Any]]) ?? [])
+                .compactMap { $0["url"] as? String }
+                .map { rewriteAvatarSize($0, newSize: "pjpg500x280") }
+
+            let datePublished = game["datePublished"] as? String
+
+            return AppDetail(description: description, screenshots: screenshots, datePublished: datePublished)
+        } catch {
+            return .empty
+        }
+    }
+
+    /// Pull the contents of `<script type="application/ld+json">…</script>`.
+    private func extractJsonLd(_ html: String) -> String? {
+        let markers = ["type=\"application/ld+json\"", "type='application/ld+json'"]
+        for marker in markers {
+            guard let markerRange = html.range(of: marker) else { continue }
+            guard let openIdx = html.range(of: ">", range: markerRange.upperBound..<html.endIndex) else { continue }
+            guard let closeIdx = html.range(of: "</script>", range: openIdx.upperBound..<html.endIndex) else { continue }
+            return String(html[openIdx.upperBound..<closeIdx.lowerBound])
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return nil
+    }
+
+    /// Replace the trailing size suffix on a Yandex avatars URL. The
+    /// storage only serves pre-rendered sizes; sticking to a known-good
+    /// value keeps the request from 404-ing.
+    private func rewriteAvatarSize(_ url: String, newSize: String) -> String {
+        guard let lastSlash = url.lastIndex(of: "/"), lastSlash != url.startIndex else { return url }
+        return String(url[..<url.index(after: lastSlash)]) + newSize
+    }
+
+    /// Minimal HTML-entity decoder for the few cases that appear in
+    /// JSON-LD titles and descriptions.
+    private func decodeHtmlEntities(_ s: String) -> String {
+        s.replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+    }
+
     /// Fetch games similar to the given app from Yandex's recommender. Used
     /// by the (future) game-detail row "More like this". Returns [] on any
     /// failure — caller decides whether to show the row.
@@ -556,7 +642,8 @@ enum GameDecoder {
             developer: developer,
             mainColor: mainColor,
             iconMainColor: iconMainColor,
-            videoUrl: videoUrl
+            videoUrl: videoUrl,
+            coverPrefixUrl: cover
         )
     }
 }

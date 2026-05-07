@@ -32,6 +32,9 @@ struct GameDetailView: View {
                     Spacer().frame(height: 18)
                     statsGrid
                     Spacer().frame(height: 24)
+                    aboutSection
+                    screenshotsRow
+                    Spacer().frame(height: 24)
                     sectionHeader("More like this")
                     Spacer().frame(height: 12)
                     similarRow
@@ -59,7 +62,10 @@ struct GameDetailView: View {
         ZStack(alignment: .top) {
             placeholder
             GeometryReader { geo in
-                AsyncImage(url: URL(string: viewModel.game.coverUrl)) { phase in
+                // Hero is 360pt tall; the feed thumb (`pjpg250x140`)
+                // looked terrible. `pjpg1280x720` is the next-largest
+                // pre-rendered size on Yandex's avatars storage.
+                AsyncImage(url: URL(string: viewModel.game.coverUrl(size: "pjpg1280x720"))) { phase in
                     switch phase {
                     case .success(let img):
                         img
@@ -127,8 +133,12 @@ struct GameDetailView: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let category = viewModel.game.categories.first, !category.isEmpty {
-                Text("\(category.uppercased()) · GAME")
+            let eyebrow = [
+                viewModel.game.categories.first?.uppercased(),
+                yearFromIso(viewModel.detail?.datePublished),
+            ].compactMap { $0 }.joined(separator: " · ")
+            if !eyebrow.isEmpty {
+                Text(eyebrow)
                     .font(UGFont.label)
                     .tracking(1.2)
                     .foregroundColor(UGColor.textMuted)
@@ -175,12 +185,121 @@ struct GameDetailView: View {
         let genre = viewModel.game.categories.first.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? "—"
         let rating = viewModel.game.rating > 0 ? String(format: "★ %.1f", viewModel.game.rating) : "—"
         let ratings = viewModel.game.ratingCount > 0 ? "\(viewModel.game.ratingCount)" : "—"
+        let year = yearFromIso(viewModel.detail?.datePublished)
         return HStack(spacing: 10) {
             statCard(eyebrow: "GENRE", value: genre)
             statCard(eyebrow: "RATING", value: rating)
-            statCard(eyebrow: "RATINGS", value: ratings)
+            // Show release year when JSON-LD provides one; otherwise fall
+            // back to the rating count (next-most-honest stat we have).
+            if let year = year {
+                statCard(eyebrow: "RELEASED", value: year)
+            } else {
+                statCard(eyebrow: "RATINGS", value: ratings)
+            }
         }
         .padding(.horizontal, 18)
+    }
+
+    private func yearFromIso(_ iso: String?) -> String? {
+        guard let iso = iso, !iso.isEmpty else { return nil }
+        let first4 = iso.prefix(4)
+        return first4.count == 4 && first4.allSatisfy { $0.isNumber } ? String(first4) : nil
+    }
+
+    // MARK: About + screenshots (from JSON-LD on the per-app page)
+
+    @ViewBuilder
+    private var aboutSection: some View {
+        let description = viewModel.detail?.description
+        if let text = description, !text.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("ABOUT")
+                    .font(UGFont.label)
+                    .tracking(1.2)
+                    .foregroundColor(UGColor.textMuted)
+                Text(text)
+                    .font(UGFont.body)
+                    .foregroundColor(UGColor.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 20)
+        } else if viewModel.isLoadingDetail {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("ABOUT")
+                    .font(UGFont.label)
+                    .tracking(1.2)
+                    .foregroundColor(UGColor.textMuted)
+                ForEach(0..<3) { _ in
+                    Skeleton(cornerRadius: 4).frame(height: 12)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.bottom, 20)
+        }
+    }
+
+    @ViewBuilder
+    private var screenshotsRow: some View {
+        let urls = viewModel.detail?.screenshots ?? []
+        if !urls.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("SCREENSHOTS")
+                    .font(UGFont.label)
+                    .tracking(1.2)
+                    .foregroundColor(UGColor.textMuted)
+                    .padding(.horizontal, 18)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 10) {
+                        ForEach(urls, id: \.self) { url in
+                            screenshotTile(url: url)
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                }
+            }
+        } else if viewModel.isLoadingDetail {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("SCREENSHOTS")
+                    .font(UGFont.label)
+                    .tracking(1.2)
+                    .foregroundColor(UGColor.textMuted)
+                    .padding(.horizontal, 18)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(0..<3) { _ in
+                            Skeleton(cornerRadius: 16)
+                                .frame(width: 220, height: 124)
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                }
+            }
+        }
+    }
+
+    private func screenshotTile(url: String) -> some View {
+        ZStack {
+            UGColor.elevated
+            GeometryReader { geo in
+                AsyncImage(url: URL(string: url)) { phase in
+                    switch phase {
+                    case .success(let img):
+                        img
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .clipped()
+                    default:
+                        Color.clear
+                    }
+                }
+            }
+        }
+        .frame(width: 220, height: 124)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(halo.opacity(UGColor.haloBorderAlpha)))
+        .shadow(color: halo.opacity(UGColor.haloAlpha), radius: 12, x: 0, y: 8)
     }
 
     private func statCard(eyebrow: String, value: String) -> some View {

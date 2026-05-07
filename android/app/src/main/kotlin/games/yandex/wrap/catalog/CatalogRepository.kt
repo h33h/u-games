@@ -51,6 +51,10 @@ class CatalogRepository(
         api.similar(appId)
     }
 
+    suspend fun appDetail(appId: Long): Result<AppDetail> = runCatching {
+        api.appDetail(appId)
+    }
+
     suspend fun userProfile(): UserProfile = api.userProfile()
 
     /// Resilient profile fetch: poll CookieManager for `Session_id` on the

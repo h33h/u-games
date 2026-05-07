@@ -103,9 +103,27 @@ fun GameDetailScreen(
                 )
             }
             item { Spacer(Modifier.height(20.dp)) }
-            item { TitleBlock(game = game) }
+            item { TitleBlock(game = game, year = yearFromIso(state.detail?.datePublished)) }
             item { Spacer(Modifier.height(18.dp)) }
-            item { StatsGrid(game = game) }
+            item { StatsGrid(game = game, year = yearFromIso(state.detail?.datePublished)) }
+            item { Spacer(Modifier.height(24.dp)) }
+            // About section. Skeleton while loading the JSON-LD detail,
+            // collapses entirely if the description is missing (some
+            // games genuinely have none — don't fake it).
+            item {
+                AboutSection(
+                    description = state.detail?.description,
+                    isLoading = state.isLoadingDetail,
+                )
+            }
+            // Screenshots row, same loading/empty rules as About.
+            item {
+                ScreenshotsRow(
+                    screenshots = state.detail?.screenshots.orEmpty(),
+                    isLoading = state.isLoadingDetail,
+                    haloHex = game.mainColor,
+                )
+            }
             item { Spacer(Modifier.height(24.dp)) }
             item {
                 Text(
@@ -158,7 +176,12 @@ private fun DetailHero(
             ),
     ) {
         AsyncImage(
-            model = game.coverUrl,
+            // Hero is 360dp tall — `pjpg250x140` looked like a postage
+            // stamp. `pjpg1280x720` is the next-largest pre-rendered
+            // size on Yandex's avatars storage and weighs ~120 KB.
+            // Falls back to the feed-cover URL if no prefix is available
+            // (e.g. game decoded from the favorites cache).
+            model = game.coverUrl("pjpg1280x720"),
             contentDescription = game.title,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),
@@ -218,13 +241,14 @@ private fun HeroIcon(
 }
 
 @Composable
-private fun TitleBlock(game: Game) {
+private fun TitleBlock(game: Game, year: String?) {
     val haloColor = parseHexColor(game.mainColor) ?: UGColors.Accent
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
         val eyebrow = game.categories.firstOrNull()?.uppercase()
-        if (!eyebrow.isNullOrEmpty()) {
+        val eyebrowText = listOfNotNull(eyebrow, year).joinToString(" · ")
+        if (eyebrowText.isNotEmpty()) {
             Text(
-                text = "$eyebrow · GAME",
+                text = eyebrowText,
                 color = UGColors.TextMuted,
                 style = UGType.Label,
             )
@@ -267,7 +291,7 @@ private fun TitleBlock(game: Game) {
 }
 
 @Composable
-private fun StatsGrid(game: Game) {
+private fun StatsGrid(game: Game, year: String?) {
     val genre = game.categories.firstOrNull()?.replaceFirstChar { it.uppercase() } ?: "—"
     val rating = if (game.rating > 0f) "★ %.1f".format(game.rating) else "—"
     val ratingCount = if (game.ratingCount > 0) game.ratingCount.toString() else "—"
@@ -277,7 +301,122 @@ private fun StatsGrid(game: Game) {
     ) {
         StatCard(eyebrow = "GENRE", value = genre, modifier = Modifier.weight(1f))
         StatCard(eyebrow = "RATING", value = rating, modifier = Modifier.weight(1f))
-        StatCard(eyebrow = "RATINGS", value = ratingCount, modifier = Modifier.weight(1f))
+        // Show release year when JSON-LD provides one; otherwise fall back
+        // to the rating count (the next-most-honest stat we have).
+        if (year != null) {
+            StatCard(eyebrow = "RELEASED", value = year, modifier = Modifier.weight(1f))
+        } else {
+            StatCard(eyebrow = "RATINGS", value = ratingCount, modifier = Modifier.weight(1f))
+        }
+    }
+}
+
+private fun yearFromIso(iso: String?): String? {
+    if (iso.isNullOrBlank()) return null
+    // JSON-LD `datePublished` is an ISO-8601 string starting with YYYY-MM-DD.
+    // Anything shorter (e.g. just "2024") is also valid — handle both.
+    val first4 = iso.take(4)
+    return if (first4.length == 4 && first4.all { it.isDigit() }) first4 else null
+}
+
+@Composable
+private fun AboutSection(description: String?, isLoading: Boolean) {
+    when {
+        isLoading && description == null -> Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
+            Text(text = "ABOUT", color = UGColors.TextMuted, style = UGType.Label)
+            Spacer(Modifier.height(10.dp))
+            // 3-row skeleton while the JSON-LD page is in flight.
+            repeat(3) {
+                Skeleton(modifier = Modifier.fillMaxWidth().height(12.dp), cornerRadius = 4.dp)
+                Spacer(Modifier.height(8.dp))
+            }
+            Spacer(Modifier.height(12.dp))
+        }
+        !description.isNullOrBlank() -> Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
+            Text(text = "ABOUT", color = UGColors.TextMuted, style = UGType.Label)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = description,
+                color = UGColors.TextSecondary,
+                style = UGType.Body,
+            )
+            Spacer(Modifier.height(20.dp))
+        }
+        else -> Spacer(Modifier.height(0.dp))  // collapse silently
+    }
+}
+
+@Composable
+private fun ScreenshotsRow(
+    screenshots: List<String>,
+    isLoading: Boolean,
+    haloHex: String?,
+) {
+    when {
+        isLoading && screenshots.isEmpty() -> Column {
+            Text(
+                text = "SCREENSHOTS",
+                color = UGColors.TextMuted,
+                style = UGType.Label,
+                modifier = Modifier.padding(horizontal = 18.dp),
+            )
+            Spacer(Modifier.height(10.dp))
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(3) {
+                    Skeleton(
+                        modifier = Modifier.width(220.dp).height(124.dp),
+                        cornerRadius = 16.dp,
+                    )
+                }
+            }
+        }
+        screenshots.isNotEmpty() -> Column {
+            Text(
+                text = "SCREENSHOTS",
+                color = UGColors.TextMuted,
+                style = UGType.Label,
+                modifier = Modifier.padding(horizontal = 18.dp),
+            )
+            Spacer(Modifier.height(10.dp))
+            val halo = parseHexColor(haloHex) ?: UGColors.Accent
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 18.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                items(screenshots) { url ->
+                    Box(
+                        modifier = Modifier
+                            .width(220.dp)
+                            .height(124.dp)
+                            .shadow(
+                                elevation = 12.dp,
+                                shape = RoundedCornerShape(16.dp),
+                                clip = false,
+                                ambientColor = halo.copy(alpha = UGColors.HaloAlpha),
+                                spotColor = halo.copy(alpha = UGColors.HaloAlpha),
+                            )
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(UGColors.Elevated)
+                            .border(
+                                width = 1.dp,
+                                color = halo.copy(alpha = UGColors.HaloBorderAlpha),
+                                shape = RoundedCornerShape(16.dp),
+                            ),
+                    ) {
+                        AsyncImage(
+                            model = url,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                }
+            }
+        }
+        else -> Spacer(Modifier.height(0.dp))  // collapse silently
     }
 }
 

@@ -37,6 +37,21 @@ class GameDetailViewModel(
             }
         }
         loadSimilar()
+        loadDetail()
+    }
+
+    fun loadDetail() {
+        if (_state.value.isLoadingDetail) return
+        _state.update { it.copy(isLoadingDetail = true) }
+        viewModelScope.launch {
+            val res = repository.appDetail(_state.value.game.appId)
+            _state.update {
+                it.copy(
+                    isLoadingDetail = false,
+                    detail = res.getOrNull() ?: it.detail,
+                )
+            }
+        }
     }
 
     fun loadSimilar() {

@@ -1,5 +1,6 @@
 package games.yandex.wrap.ui.detail
 
+import games.yandex.wrap.catalog.AppDetail
 import games.yandex.wrap.catalog.Game
 
 /**
@@ -18,4 +19,6 @@ data class GameDetailUiState(
     val similar: List<Game> = emptyList(),
     val isLoadingSimilar: Boolean = false,
     val similarError: String? = null,
+    val detail: AppDetail? = null,
+    val isLoadingDetail: Boolean = false,
 )

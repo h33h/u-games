@@ -60,19 +60,23 @@
   try {
     var sdkParamMatch = (location.search || '').match(/[?&]sdk=([^&]+)/);
     var sdkPath = sdkParamMatch ? decodeURIComponent(sdkParamMatch[1]) : null;
+    if (sdkPath && sdkPath.indexOf('http') !== 0) {
+      // For mobile UAs, Yandex serves /sdk/_/v2.<hash>.js ONLY from the
+      // per-game CDN origin (app-XXX.games.s3.yandex.net), NOT from
+      // yandex.com (yandex.com responds 404 for the same path under an
+      // iPhone/Android UA). Build the SDK URL against the iframe's own
+      // origin instead of the parent origin from `#origin=`.
+      sdkPath = location.origin + sdkPath;
+    }
     if (sdkPath) {
-      var hash = location.hash || '';
-      var originMatch = hash.match(/origin=([^&]+)/);
-      var origin = originMatch ? decodeURIComponent(originMatch[1]) : 'https://yandex.com';
-      var sdkUrl = sdkPath.indexOf('http') === 0 ? sdkPath : origin + sdkPath;
-      ylog('sdk', 'inject SDK <script src=' + sdkUrl + '>');
+      ylog('sdk', 'inject SDK <script src=' + sdkPath + '>');
       // documentStart runs before <head> exists; create one if needed.
       var head = document.head || document.documentElement;
       if (head) {
         var s = document.createElement('script');
-        s.src = sdkUrl;
+        s.src = sdkPath;
         s.async = false; // preserve order vs the game's bundle
-        s.onerror = function () { ylog('sdk', 'SDK <script> load FAILED ' + sdkUrl); };
+        s.onerror = function () { ylog('sdk', 'SDK <script> load FAILED ' + sdkPath); };
         s.onload = function () { ylog('sdk', 'SDK <script> loaded'); };
         head.appendChild(s);
       } else {

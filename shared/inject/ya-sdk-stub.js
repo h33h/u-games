@@ -46,6 +46,43 @@
     try { if (typeof window.__yga_log === 'function') window.__yga_log(tag, msg); } catch (_) {}
   }
 
+  // Yandex's MOBILE iframe HTML (e.g. game 388978's index.html) does NOT
+  // include any script that loads the YaGames SDK — desktop iframe HTML
+  // has an inline script that reads `?sdk=/sdk/_/v2.<hash>.js` and adds
+  // a <script src="https://yandex.com${sdk}"> tag, but the mobile build
+  // simply ships 5 Construct 3 scripts and expects the host PWA app to
+  // inject the SDK natively. Our wrapper isn't that PWA, so we do it here
+  // ourselves: read `?sdk=` from location.search (honest-path.js patches
+  // gameSrc to include it on the parent side), build the absolute SDK URL
+  // against the parent origin (yandex.com / yandex.ru), and append a
+  // synchronous-style <script> tag so the SDK loads BEFORE the game's
+  // bundle reads window.YaGames.
+  try {
+    var sdkParamMatch = (location.search || '').match(/[?&]sdk=([^&]+)/);
+    var sdkPath = sdkParamMatch ? decodeURIComponent(sdkParamMatch[1]) : null;
+    if (sdkPath) {
+      var hash = location.hash || '';
+      var originMatch = hash.match(/origin=([^&]+)/);
+      var origin = originMatch ? decodeURIComponent(originMatch[1]) : 'https://yandex.com';
+      var sdkUrl = sdkPath.indexOf('http') === 0 ? sdkPath : origin + sdkPath;
+      ylog('sdk', 'inject SDK <script src=' + sdkUrl + '>');
+      // documentStart runs before <head> exists; create one if needed.
+      var head = document.head || document.documentElement;
+      if (head) {
+        var s = document.createElement('script');
+        s.src = sdkUrl;
+        s.async = false; // preserve order vs the game's bundle
+        s.onerror = function () { ylog('sdk', 'SDK <script> load FAILED ' + sdkUrl); };
+        s.onload = function () { ylog('sdk', 'SDK <script> loaded'); };
+        head.appendChild(s);
+      } else {
+        ylog('sdk', 'no head/documentElement to attach SDK <script>');
+      }
+    }
+  } catch (e) {
+    ylog('sdk', 'inject error ' + (e && e.message || e));
+  }
+
   // Forward console.error / console.warn / unhandled errors to LogStore so
   // games that freeze at the loader leave a breadcrumb trail (Construct 3 /
   // GamePush titles like 388978 dump useful messages on init failure that

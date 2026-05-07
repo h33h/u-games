@@ -122,9 +122,7 @@ struct TabContainer: View {
         case "browse":
             BrowseView(
                 viewModel: browseVM,
-                profile: catalogService.profile,
                 onGameClick: onGameOpen,
-                onProfileClick: { profilePresented = true },
                 favoritesStore: favoritesStore,
             )
         case "favorites":

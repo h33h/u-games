@@ -22,7 +22,6 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -56,9 +55,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import games.yandex.wrap.catalog.Game
-import games.yandex.wrap.catalog.UserProfile
 import games.yandex.wrap.ui.components.GenreChipRow
 import games.yandex.wrap.ui.components.TileGameCard
 import games.yandex.wrap.ui.theme.UGColors
@@ -69,9 +66,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 @Composable
 fun BrowseScreen(
     viewModel: BrowseViewModel,
-    profile: UserProfile,
     onGameClick: (Game) -> Unit,
-    onProfileClick: () -> Unit,
 ) {
     val state by viewModel.state.collectAsState()
     val favoriteIds by viewModel.favoriteIds.collectAsState()
@@ -142,10 +137,8 @@ fun BrowseScreen(
         ) {
             BrowseTopBar(
                 query = state.searchQuery,
-                profile = profile,
                 onQueryChange = viewModel::onSearchChange,
                 onSubmit = viewModel::submitSearch,
-                onProfileClick = onProfileClick,
                 searchFocusRequester = searchFocusRequester,
             )
             if (state.mode == BrowseMode.Feed && state.categories.isNotEmpty()) {
@@ -254,10 +247,8 @@ fun BrowseScreen(
 @Composable
 private fun BrowseTopBar(
     query: String,
-    profile: UserProfile,
     onQueryChange: (String) -> Unit,
     onSubmit: () -> Unit,
-    onProfileClick: () -> Unit,
     searchFocusRequester: FocusRequester,
 ) {
     Row(
@@ -295,45 +286,6 @@ private fun BrowseTopBar(
             ),
             shape = RoundedCornerShape(14.dp),
         )
-        Spacer(Modifier.size(8.dp))
-        BrowseAvatar(profile = profile, onClick = onProfileClick)
     }
 }
 
-@Composable
-private fun BrowseAvatar(profile: UserProfile, onClick: () -> Unit) {
-    val size = 38.dp
-    val base = Modifier
-        .size(size)
-        .clip(CircleShape)
-        .clickable(onClick = onClick)
-    if (profile.isAuthorized && profile.avatarUrl.isNotEmpty()) {
-        Box(
-            modifier = base.border(
-                width = if (profile.hasYaPlus) 2.dp else 0.dp,
-                brush = UGColors.AccentGradient,
-                shape = CircleShape,
-            ),
-            contentAlignment = Alignment.Center,
-        ) {
-            AsyncImage(
-                model = profile.avatarUrl,
-                contentDescription = profile.displayName.ifEmpty { profile.login },
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize().clip(CircleShape),
-            )
-        }
-    } else {
-        Box(
-            modifier = base.background(UGColors.Elevated),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                Icons.Filled.AccountCircle,
-                contentDescription = "Profile",
-                tint = UGColors.TextSecondary,
-                modifier = Modifier.size(28.dp),
-            )
-        }
-    }
-}

@@ -71,7 +71,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             UGamesTheme {
                 val favorites by homeVm.favorites.collectAsState()
-                val homeState by homeVm.state.collectAsState()
                 TabContainer(
                     initialTab = "home",
                     initialPushed = deepLink,
@@ -95,9 +94,7 @@ class MainActivity : ComponentActivity() {
                     browse = { push, _ ->
                         BrowseScreen(
                             viewModel = browseVm,
-                            profile = homeState.profile,
                             onGameClick = { game -> openGame(game, push) },
-                            onProfileClick = { push(TabPushed.Profile) },
                         )
                     },
                     favorites = { push, switchTab ->

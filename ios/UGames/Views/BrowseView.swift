@@ -2,9 +2,7 @@ import SwiftUI
 
 struct BrowseView: View {
     @ObservedObject var viewModel: BrowseViewModel
-    let profile: UserProfile
     let onGameClick: (Game) -> Void
-    let onProfileClick: () -> Void
 
     @ObservedObject var favoritesStore: FavoritesStore
     @FocusState private var searchFocused: Bool
@@ -52,40 +50,36 @@ struct BrowseView: View {
     @ViewBuilder
     private var topBar: some View {
         HStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(UGColor.textSecondary)
-                TextField(
-                    "",
-                    text: Binding(
-                        get: { viewModel.searchQuery },
-                        set: { viewModel.searchQuery = $0 },
-                    ),
-                    prompt: Text("Search games").foregroundColor(UGColor.textMuted),
-                )
-                .foregroundColor(UGColor.textPrimary)
-                .submitLabel(.search)
-                .onSubmit { viewModel.submitSearch() }
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .focused($searchFocused)
-                if !viewModel.searchQuery.isEmpty {
-                    Button {
-                        viewModel.searchQuery = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(UGColor.textSecondary)
-                    }
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(UGColor.textSecondary)
+            TextField(
+                "",
+                text: Binding(
+                    get: { viewModel.searchQuery },
+                    set: { viewModel.searchQuery = $0 },
+                ),
+                prompt: Text("Search games").foregroundColor(UGColor.textMuted),
+            )
+            .foregroundColor(UGColor.textPrimary)
+            .submitLabel(.search)
+            .onSubmit { viewModel.submitSearch() }
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
+            .focused($searchFocused)
+            if !viewModel.searchQuery.isEmpty {
+                Button {
+                    viewModel.searchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(UGColor.textSecondary)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(UGColor.surface)
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(UGColor.divider))
-            .clipShape(RoundedRectangle(cornerRadius: 14))
-
-            BrowseAvatar(profile: profile, onTap: onProfileClick)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(UGColor.surface)
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(UGColor.divider))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
         .padding(.horizontal, 12)
         .padding(.top, 8)
     }
@@ -150,33 +144,3 @@ struct BrowseView: View {
     }
 }
 
-private struct BrowseAvatar: View {
-    let profile: UserProfile
-    let onTap: () -> Void
-
-    var body: some View {
-        Group {
-            if profile.isAuthorized, let url = URL(string: profile.avatarUrl), !profile.avatarUrl.isEmpty {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let img): img.resizable().scaledToFill()
-                    default: UGColor.elevated
-                    }
-                }
-                .frame(width: 38, height: 38)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(LinearGradient.ugAccent, lineWidth: profile.hasYaPlus ? 2 : 0))
-            } else {
-                ZStack {
-                    Circle().fill(UGColor.elevated)
-                    Image(systemName: "person.crop.circle")
-                        .font(.system(size: 22))
-                        .foregroundColor(UGColor.textSecondary)
-                }
-                .frame(width: 38, height: 38)
-            }
-        }
-        .contentShape(Circle())
-        .onTapGesture(perform: onTap)
-    }
-}

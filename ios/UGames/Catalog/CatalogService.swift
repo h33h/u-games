@@ -216,11 +216,12 @@ final class CatalogService: ObservableObject {
             guard let type = raw["type"] as? String else { continue }
             let size = raw["size"] as? String
             let title = (raw["title"] as? String) ?? ""
-            let items = ((raw["items"] as? [[String: Any]]) ?? []).compactMap(GameDecoder.parse)
+            let items = ((raw["items"] as? [[String: Any]]) ?? []).compactMap(GameDecoder.parse).stableSorted()
             if items.isEmpty { continue }
             blocks.append(FeedBlock(type: type, size: size, title: title, items: items))
             for g in items where seen.insert(g.appId).inserted { flat.append(g) }
         }
+        flat = flat.stableSorted()
         let pageInfo = root["pageInfo"] as? [String: Any]
         let nextPageId = pageInfo?["nextPageId"] as? String
         let hasNext = (pageInfo?["hasNextPage"] as? Bool) ?? (nextPageId != nil)
@@ -561,6 +562,17 @@ final class ProfileFetchRedirectDelegate: NSObject, URLSessionTaskDelegate, @unc
     }
 }
 
+extension Array where Element == Game {
+    func stableSorted() -> [Game] {
+        sorted { a, b in
+            if a.ratingCount != b.ratingCount { return a.ratingCount > b.ratingCount }
+            if a.rating != b.rating { return a.rating > b.rating }
+            if a.title != b.title { return a.title.localizedCompare(b.title) == .orderedAscending }
+            return a.appId < b.appId
+        }
+    }
+}
+
 enum GameDecoder {
     static func flatten(_ blocks: [[String: Any]]) -> [Game] {
         var seen = Set<Int64>()
@@ -572,7 +584,7 @@ enum GameDecoder {
                 if seen.insert(game.appId).inserted { out.append(game) }
             }
         }
-        return out
+        return out.stableSorted()
     }
 
     static func parse(_ item: [String: Any]) -> Game? {

@@ -32,7 +32,6 @@ enum UGSize {
     static let screenshotH: CGFloat = 124
     static let similarTileW: CGFloat = 160
     static let similarTileH: CGFloat = 140
-    static let tileTitleH: CGFloat = 48
     static let tileGridMin: CGFloat = 160
     static let tileGridMax: CGFloat = 220
     static let heroH: CGFloat = 300

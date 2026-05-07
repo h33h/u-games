@@ -89,7 +89,7 @@ struct HomeView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: UGSpace.m) {
                 ForEach(games) { g in
-                    WideGameCard(game: g, onTap: { onGameClick(g) })
+                    GameCard(game: g, style: .wide, onTap: { onGameClick(g) })
                         .padding(.vertical, UGSpace.xxxl)
                 }
             }
@@ -102,7 +102,7 @@ struct HomeView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: UGSpace.m) {
                 ForEach(games) { g in
-                    SquareGameCard(game: g, onTap: { onGameClick(g) })
+                    GameCard(game: g, style: .square, onTap: { onGameClick(g) })
                         .padding(.vertical, UGSpace.xl)
                 }
             }

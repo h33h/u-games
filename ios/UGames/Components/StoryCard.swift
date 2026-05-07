@@ -60,7 +60,7 @@ struct StoryCard: View {
                 .clipped()
                 .rotationEffect(.degrees(Double(-8 + idx * 8)))
                 .offset(x: CGFloat(-14 - idx * 8), y: 24)
-                .ugShadow(.stack)
+                .ugShadow(.elevation(.stacked))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)

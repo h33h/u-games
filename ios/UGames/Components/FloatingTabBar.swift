@@ -45,7 +45,7 @@ struct FloatingTabBar: View {
         .background(UGColor.surface.opacity(0.55))
         .clipShape(RoundedRectangle(cornerRadius: UGRadius.xxl))
         .overlay(RoundedRectangle(cornerRadius: UGRadius.xxl).stroke(UGColor.divider))
-        .ugShadow(.chrome)
+        .ugShadow(.elevation(.surface))
         .padding(.horizontal, UGSpace.xxl)
         .padding(.bottom, UGSpace.l)
     }

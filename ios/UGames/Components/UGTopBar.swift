@@ -1,8 +1,9 @@
 import SwiftUI
 
-struct UGTopBar: View {
+struct UGTopBar<Trailing: View>: View {
     let title: String
     let onBack: () -> Void
+    @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
         HStack {
@@ -21,7 +22,16 @@ struct UGTopBar: View {
                 .font(UGFont.titleM)
                 .foregroundColor(UGColor.textPrimary)
             Spacer()
+            trailing()
         }
         .padding(.horizontal, UGSpace.s)
+    }
+}
+
+extension UGTopBar where Trailing == EmptyView {
+    init(title: String, onBack: @escaping () -> Void) {
+        self.title = title
+        self.onBack = onBack
+        self.trailing = { EmptyView() }
     }
 }

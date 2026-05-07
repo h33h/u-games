@@ -1,30 +1,68 @@
 import SwiftUI
 
-struct TileGameCard: View {
-    let game: Game
-    let isFavorite: Bool
-    let onTap: () -> Void
-    let onFavoriteToggle: () -> Void
+enum GameCardStyle {
+    case tile
+    case wide
+    case square
+}
 
-    private var halo: Color { Color(hex: game.mainColor) ?? UGColor.accent }
-    private var placeholder: Color { Color(hex: game.mainColor) ?? UGColor.elevated }
+struct GameCard: View {
+    let game: Game
+    let style: GameCardStyle
+    var isFavorite: Bool = false
+    let onTap: () -> Void
+    var onFavoriteToggle: (() -> Void)? = nil
+
+    private var halo: Color {
+        let hex = style == .square ? (game.iconMainColor ?? game.mainColor) : game.mainColor
+        return Color(hex: hex) ?? UGColor.accent
+    }
+    private var placeholder: Color { halo }
+
+    private var coverUrl: URL? {
+        switch style {
+        case .tile, .wide:
+            URL(string: game.coverUrl)
+        case .square:
+            URL(string: game.iconUrl.isEmpty ? game.coverUrl : game.iconUrl)
+        }
+    }
 
     var body: some View {
+        Group {
+            switch style {
+            case .tile: tileBody
+            case .wide: wideBody
+            case .square: squareBody
+            }
+        }
+        .pressable()
+        .contentShape(Rectangle())
+        .onTapGesture {
+            UGHaptics.tap()
+            onTap()
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel(game.title)
+    }
+
+    private var tileBody: some View {
         VStack(alignment: .leading, spacing: UGSpace.s) {
             ZStack {
-                CoverImage(url: URL(string: game.coverUrl), placeholder: placeholder)
-
-                UGCircleIconButton(
-                    systemName: isFavorite ? "heart.fill" : "heart",
-                    accessibilityLabel: isFavorite ? "Remove from favorites" : "Add to favorites",
-                    tint: isFavorite ? UGColor.danger : UGColor.textPrimary,
-                    diameter: UGSize.buttonSm,
-                    iconSize: 14,
-                    action: onFavoriteToggle
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(UGSpace.s)
-
+                CoverImage(url: coverUrl, placeholder: placeholder)
+                if let onFavoriteToggle {
+                    UGCircleIconButton(
+                        systemName: isFavorite ? "heart.fill" : "heart",
+                        accessibilityLabel: isFavorite ? "Remove from favorites" : "Add to favorites",
+                        tint: isFavorite ? UGColor.danger : UGColor.textPrimary,
+                        diameter: UGSize.buttonSm,
+                        iconSize: 14,
+                        action: onFavoriteToggle
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(UGSpace.s)
+                }
                 if game.ratingCount > 0 {
                     UGChip(text: String(format: "★ %.1f", game.rating), style: .overlayRating)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
@@ -44,31 +82,51 @@ struct TileGameCard: View {
                     game.categories.first,
                     game.ratingCount > 0 ? "\(game.ratingCount) ratings" : nil,
                 ].compactMap { $0 }.joined(separator: " · ")
-                Text(meta.isEmpty ? " " : meta)
-                    .font(UGFont.caption)
-                    .foregroundColor(UGColor.textMuted)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                if !meta.isEmpty {
+                    Text(meta)
+                        .font(UGFont.caption)
+                        .foregroundColor(UGColor.textMuted)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
-            .frame(height: UGSize.tileTitleH, alignment: .topLeading)
+            .fixedSize(horizontal: false, vertical: true)
         }
-        .pressable()
-        .contentShape(Rectangle())
-        .onTapGesture {
-            UGHaptics.tap()
-            onTap()
+    }
+
+    private var wideBody: some View {
+        ZStack(alignment: .bottomLeading) {
+            CoverImage(url: coverUrl, placeholder: placeholder)
+            Text(game.title)
+                .font(UGFont.caption)
+                .foregroundColor(UGColor.textPrimary)
+                .lineLimit(1)
+                .padding(UGSpace.s)
+                .ugShadow(.elevation(.text))
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(game.title)
+        .frame(width: UGSize.wideCardW, height: UGSize.wideCardH)
+        .haloChrome(halo, size: .lg)
+    }
+
+    private var squareBody: some View {
+        VStack(alignment: .leading, spacing: UGSpace.s) {
+            CoverImage(url: coverUrl, placeholder: placeholder)
+                .frame(width: UGSize.squareCard, height: UGSize.squareCard)
+                .haloChrome(halo, size: .lg)
+            Text(game.title)
+                .font(UGFont.bodyS)
+                .foregroundColor(UGColor.textPrimary)
+                .lineLimit(1)
+                .frame(width: UGSize.squareCard, alignment: .leading)
+        }
     }
 }
 
 @available(iOS 17.0, *)
-#Preview(traits: .fixedLayout(width: 200, height: 220)) {
+#Preview("Tile", traits: .fixedLayout(width: 200, height: 240)) {
     ZStack {
         Color.black.ignoresSafeArea()
-        TileGameCard(
+        GameCard(
             game: Game(
                 appId: 1, title: "Block Puzzle: Falling Shapes",
                 rating: 4.9, ratingCount: 39,
@@ -76,41 +134,12 @@ struct TileGameCard: View {
                 categories: ["Puzzle"], developer: "studio",
                 mainColor: "#41B4F6"
             ),
+            style: .tile,
             isFavorite: true,
-            onTap: {}, onFavoriteToggle: {}
+            onTap: {},
+            onFavoriteToggle: {}
         )
         .padding(12)
-    }
-}
-
-struct WideGameCard: View {
-    let game: Game
-    let onTap: () -> Void
-
-    private var halo: Color { Color(hex: game.mainColor) ?? UGColor.accent }
-    private var placeholder: Color { Color(hex: game.mainColor) ?? UGColor.elevated }
-
-    var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            CoverImage(url: URL(string: game.coverUrl), placeholder: placeholder)
-            Text(game.title)
-                .font(UGFont.caption)
-                .foregroundColor(UGColor.textPrimary)
-                .lineLimit(1)
-                .padding(UGSpace.s)
-                .ugShadow(.overlayText)
-        }
-        .frame(width: UGSize.wideCardW, height: UGSize.wideCardH)
-        .haloChrome(halo, size: .lg)
-        .pressable()
-        .contentShape(Rectangle())
-        .onTapGesture {
-            UGHaptics.tap()
-            onTap()
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(game.title)
     }
 }
 
@@ -118,7 +147,7 @@ struct WideGameCard: View {
 #Preview("Wide", traits: .fixedLayout(width: 180, height: 130)) {
     ZStack {
         Color.black.ignoresSafeArea()
-        WideGameCard(
+        GameCard(
             game: Game(
                 appId: 2, title: "Drift King",
                 rating: 4.5, ratingCount: 12,
@@ -126,45 +155,9 @@ struct WideGameCard: View {
                 categories: ["Racing"], developer: "studio",
                 mainColor: "#FFC700"
             ),
+            style: .wide,
             onTap: {}
         )
-    }
-}
-
-struct SquareGameCard: View {
-    let game: Game
-    let onTap: () -> Void
-
-    private var halo: Color {
-        Color(hex: game.iconMainColor ?? game.mainColor) ?? UGColor.accent
-    }
-    private var placeholder: Color {
-        Color(hex: game.iconMainColor ?? game.mainColor) ?? UGColor.elevated
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: UGSpace.s) {
-            CoverImage(
-                url: URL(string: game.iconUrl.isEmpty ? game.coverUrl : game.iconUrl),
-                placeholder: placeholder
-            )
-            .frame(width: UGSize.squareCard, height: UGSize.squareCard)
-            .haloChrome(halo, size: .lg)
-            Text(game.title)
-                .font(UGFont.bodyS)
-                .foregroundColor(UGColor.textPrimary)
-                .lineLimit(1)
-                .frame(width: UGSize.squareCard, alignment: .leading)
-        }
-        .pressable()
-        .contentShape(Rectangle())
-        .onTapGesture {
-            UGHaptics.tap()
-            onTap()
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(game.title)
     }
 }
 
@@ -172,7 +165,7 @@ struct SquareGameCard: View {
 #Preview("Square", traits: .fixedLayout(width: 160, height: 180)) {
     ZStack {
         Color.black.ignoresSafeArea()
-        SquareGameCard(
+        GameCard(
             game: Game(
                 appId: 3, title: "Lily's Tea",
                 rating: 4.8, ratingCount: 24,
@@ -181,6 +174,7 @@ struct SquareGameCard: View {
                 mainColor: "#FF7EB9",
                 iconMainColor: "#FF7EB9"
             ),
+            style: .square,
             onTap: {}
         )
     }

@@ -28,8 +28,9 @@ struct FavoritesView: View {
                         .padding(.top, UGSpace.m)
                     LazyVGrid(columns: columns, spacing: UGSpace.m) {
                         ForEach(favorites.games) { game in
-                            TileGameCard(
+                            GameCard(
                                 game: game,
+                                style: .tile,
                                 isFavorite: true,
                                 onTap: { onGameClick(game) },
                                 onFavoriteToggle: { favorites.toggle(game) },

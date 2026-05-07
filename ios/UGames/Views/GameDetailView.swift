@@ -88,7 +88,7 @@ struct GameDetailView: View {
                 .fill(halo.opacity(UGColor.haloBorderAlpha))
                 .frame(height: 0.5)
         }
-        .ugShadow(.haloXL(halo))
+        .ugShadow(.halo(.xl, halo))
     }
 
     private var stretchyCover: some View {
@@ -273,8 +273,9 @@ struct GameDetailView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: UGSpace.m) {
                     ForEach(viewModel.similar, id: \.appId) { g in
-                        TileGameCard(
+                        GameCard(
                             game: g,
+                            style: .tile,
                             isFavorite: favorites.contains(g.appId),
                             onTap: { onSimilarClick(g) },
                             onFavoriteToggle: { favorites.toggle(g) }

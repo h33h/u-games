@@ -24,7 +24,7 @@ struct GenreChipRow: View {
             .background(active ? UGColor.accent : UGColor.surface)
             .clipShape(Capsule())
             .overlay(Capsule().stroke(active ? UGColor.accent : UGColor.divider))
-            .ugShadow(.glow(active ? UGColor.accent : nil))
+            .ugShadow(.glow(.subtle, active ? UGColor.accent : .clear))
             .padding(.vertical, UGSpace.m)
             .onTapGesture { onSelect(value) }
     }

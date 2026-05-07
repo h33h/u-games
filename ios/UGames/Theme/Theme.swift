@@ -27,67 +27,55 @@ extension LinearGradient {
 }
 
 enum UGShadow {
-    case haloXL(Color)
-    case haloLg(Color)
-    case haloSm(Color)
-    case chrome
-    case overlayText
-    case glow(Color?)
-    case cta(Color)
-    case stack
+    case halo(HaloSize, Color)
+    case elevation(Elevation)
+    case glow(GlowIntensity, Color)
+
+    enum HaloSize { case sm, lg, xl }
+    enum Elevation { case text, stacked, surface }
+    enum GlowIntensity { case subtle, strong }
 }
 
 extension View {
     @ViewBuilder
     func ugShadow(_ token: UGShadow) -> some View {
         switch token {
-        case .haloXL(let c):
-            shadow(color: c.opacity(UGColor.haloAlpha), radius: 20, x: 0, y: 14)
-        case .haloLg(let c):
-            shadow(color: c.opacity(UGColor.haloAlpha), radius: 14, x: 0, y: 12)
-        case .haloSm(let c):
-            shadow(color: c.opacity(UGColor.haloAlpha), radius: 12, x: 0, y: 8)
-        case .chrome:
-            shadow(color: .black.opacity(0.5), radius: 16, x: 0, y: 12)
-        case .overlayText:
-            shadow(color: .black.opacity(0.6), radius: 6, x: 0, y: 2)
-        case .glow(let c):
-            shadow(color: (c ?? .clear).opacity(0.4), radius: 8, x: 0, y: 0)
-        case .cta(let c):
-            shadow(color: c.opacity(0.5), radius: 18, x: 0, y: 8)
-        case .stack:
-            shadow(color: .black.opacity(0.45), radius: 6, x: 0, y: 2)
+        case .halo(let size, let c):
+            switch size {
+            case .xl: shadow(color: c.opacity(UGColor.haloAlpha), radius: 20, x: 0, y: 14)
+            case .lg: shadow(color: c.opacity(UGColor.haloAlpha), radius: 14, x: 0, y: 12)
+            case .sm: shadow(color: c.opacity(UGColor.haloAlpha), radius: 12, x: 0, y: 8)
+            }
+        case .elevation(let level):
+            switch level {
+            case .text:    shadow(color: .black.opacity(0.6),  radius: 6,  x: 0, y: 2)
+            case .stacked: shadow(color: .black.opacity(0.45), radius: 6,  x: 0, y: 2)
+            case .surface: shadow(color: .black.opacity(0.5),  radius: 16, x: 0, y: 12)
+            }
+        case .glow(let intensity, let c):
+            switch intensity {
+            case .subtle: shadow(color: c.opacity(0.4), radius: 8,  x: 0, y: 0)
+            case .strong: shadow(color: c.opacity(0.5), radius: 18, x: 0, y: 8)
+            }
         }
     }
 }
 
-enum UGHaloSize {
-    case xl
-    case lg
-    case sm
-
+extension UGShadow.HaloSize {
     var cornerRadius: CGFloat {
         switch self {
         case .xl: UGRadius.xl
         case .lg, .sm: UGRadius.l
         }
     }
-
-    func shadow(_ color: Color) -> UGShadow {
-        switch self {
-        case .xl: .haloXL(color)
-        case .lg: .haloLg(color)
-        case .sm: .haloSm(color)
-        }
-    }
 }
 
 extension View {
-    func haloChrome(_ color: Color, size: UGHaloSize) -> some View {
+    func haloChrome(_ color: Color, size: UGShadow.HaloSize) -> some View {
         let shape = RoundedRectangle(cornerRadius: size.cornerRadius)
         return clipShape(shape)
             .overlay(shape.stroke(color.opacity(UGColor.haloBorderAlpha)))
-            .ugShadow(size.shadow(color))
+            .ugShadow(.halo(size, color))
     }
 }
 

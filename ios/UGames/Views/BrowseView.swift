@@ -101,8 +101,9 @@ struct BrowseView: View {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: UGSpace.l) {
                     ForEach(visible) { game in
-                        TileGameCard(
+                        GameCard(
                             game: game,
+                            style: .tile,
                             isFavorite: favoritesStore.contains(game.appId),
                             onTap: { onGameClick(game) },
                             onFavoriteToggle: { favoritesStore.toggle(game) },

@@ -13,6 +13,17 @@ struct GenreChipRow: View {
             }
             .padding(.horizontal, UGSpace.l)
         }
+        .mask(
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0.0),
+                    .init(color: .black, location: 0.04),
+                    .init(color: .black, location: 0.96),
+                    .init(color: .clear, location: 1.0),
+                ],
+                startPoint: .leading, endPoint: .trailing
+            )
+        )
     }
 
     private func chip(label: String, value: String?) -> some View {
@@ -26,7 +37,12 @@ struct GenreChipRow: View {
             .overlay(Capsule().stroke(active ? UGColor.Accent.primary : UGColor.Border.divider))
             .ugShadow(.glow(.subtle, active ? UGColor.Accent.primary : .clear))
             .padding(.vertical, UGSpace.m)
-            .onTapGesture { onSelect(value) }
+            .onTapGesture {
+                UGHaptics.selection()
+                onSelect(value)
+            }
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAddTraits(active ? .isSelected : [])
     }
 }
 

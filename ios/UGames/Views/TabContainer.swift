@@ -120,14 +120,6 @@ struct TabContainer: View {
             HomeView(
                 viewModel: homeVM,
                 onGameClick: { game in homePath.append(game) },
-                onOpenBrowse: {
-                    browsePath.removeAll()
-                    selected = .browse
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 100_000_000)
-                        browseVM.requestSearchFocus()
-                    }
-                },
                 onOpenBrowseFiltered: { rawCategory in
                     browsePath.removeAll()
                     browseVM.setCategoryByName(rawCategory)

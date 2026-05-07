@@ -3,7 +3,6 @@ import SwiftUI
 struct HomeView: View {
     @ObservedObject var viewModel: HomeViewModel
     let onGameClick: (Game) -> Void
-    let onOpenBrowse: () -> Void
     let onOpenBrowseFiltered: (String) -> Void
     let onProfileClick: () -> Void
     let onLogsRequest: () -> Void
@@ -21,16 +20,6 @@ struct HomeView: View {
                         onProfileClick: onProfileClick,
                         onProfileLongPress: { showAvatarMenu = true }
                     )
-                    .padding(.horizontal, UGSpace.l)
-
-                    UGSearchBarShell {
-                        Text("Search games")
-                            .font(UGFont.bodyS)
-                            .foregroundColor(UGColor.Text.muted)
-                        Spacer()
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture(perform: onOpenBrowse)
                     .padding(.horizontal, UGSpace.l)
 
                     if let hero = viewModel.hero {

@@ -1,0 +1,1 @@
+../../../shared/inject/pwa-mode.js

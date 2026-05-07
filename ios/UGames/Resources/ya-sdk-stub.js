@@ -1,0 +1,1 @@
+../../../shared/inject/ya-sdk-stub.js

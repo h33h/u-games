@@ -20,13 +20,24 @@ final class OrientationStore: ObservableObject {
     /// `screen.orientation.lock()` if the new game has a preference.
     func reset() { required = nil }
 
-    /// Parse the body of an `orient` log message. Yandex SDK calls usually
-    /// pass strings like "landscape", "landscape-primary", or "portrait".
+    /// Parse the body of an `orient` log message. The `orient` channel
+    /// carries two kinds of payload:
+    ///   1. Real orientation signals — `screen.orientation.lock()` targets
+    ///      ("landscape", "landscape-primary", "portrait", …) and
+    ///      canvas-aspect-inferred reports ("landscape (canvas 1920x1080 …)").
+    ///      All of these *start* with "landscape" or "portrait".
+    ///   2. Diagnostic viewport dumps from `reportViewport()` — strings like
+    ///      "atstart inner=375x812 …" or "boot+2s inner=…" that may also
+    ///      embed the words "landscape"/"portrait" inside the meta viewport
+    ///      content, but always *start* with a stage name.
+    /// We must only react to (1). A loose `contains` match used to let (2)
+    /// flip `required` to the wrong value mid-session, producing a flashing
+    /// overlay aimed at the wrong orientation.
     func setFromString(_ s: String) {
-        let lower = s.lowercased()
-        if lower.contains("landscape") {
+        let lower = s.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        if lower.hasPrefix("landscape") {
             required = .landscape
-        } else if lower.contains("portrait") {
+        } else if lower.hasPrefix("portrait") {
             required = .portrait
         }
     }

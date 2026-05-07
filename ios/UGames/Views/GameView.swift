@@ -11,17 +11,24 @@ struct GameView: View {
     @State private var showBack: Bool = true
     @State private var revision: Int = 0
     @StateObject private var orient: OrientationStore = .shared
-    @State private var deviceIsPortrait: Bool = !UIDevice.current.orientation.isLandscape
-
-    private var rotateOverlayVisible: Bool {
-        switch orient.required {
-        case .landscape: return deviceIsPortrait
-        case .portrait: return !deviceIsPortrait
-        case .none: return false
-        }
-    }
 
     var body: some View {
+        // Derive the current orientation from the actual layout size rather
+        // than from `UIDevice.current.orientation`. UIDevice's reading is
+        // unreliable until orientation notifications are turned on (and
+        // returns `.unknown`/`.faceUp`/`.faceDown` when the phone is flat),
+        // which used to make the rotate-overlay flash on entry. The view's
+        // size is the source of truth for what the user sees.
+        GeometryReader { proxy in
+            let isPortrait = proxy.size.height >= proxy.size.width
+            content(isPortrait: isPortrait)
+        }
+        .ignoresSafeArea()
+    }
+
+    @ViewBuilder
+    private func content(isPortrait: Bool) -> some View {
+        let overlayVisible = isOverlayVisible(isPortrait: isPortrait)
         ZStack(alignment: .topLeading) {
             Color.black.ignoresSafeArea()
             if let url = URL(string: "https://yandex.com/games/app/\(appId)") {
@@ -29,7 +36,7 @@ struct GameView: View {
                     url: url,
                     scripts: scripts,
                     blockList: blockList,
-                    paused: rotateOverlayVisible,
+                    paused: overlayVisible,
                 )
             }
 
@@ -53,8 +60,8 @@ struct GameView: View {
                 .transition(.opacity)
             }
 
-            if rotateOverlayVisible {
-                RotateDeviceOverlay(target: orient.required ?? .landscape, onBack: onBack)
+            if overlayVisible, let target = orient.required {
+                RotateDeviceOverlay(target: target, onBack: onBack)
                     .transition(.opacity)
             }
         }
@@ -62,16 +69,10 @@ struct GameView: View {
         .onChange(of: revision) { _ in scheduleHide() }
         .onAppear {
             orient.reset()
-            UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-            updateDeviceOrientation()
             scheduleHide()
         }
         .onDisappear {
-            UIDevice.current.endGeneratingDeviceOrientationNotifications()
             orient.reset()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-            updateDeviceOrientation()
         }
         .gesture(
             DragGesture()
@@ -83,14 +84,12 @@ struct GameView: View {
         )
     }
 
-    private func updateDeviceOrientation() {
-        let o = UIDevice.current.orientation
-        if o.isLandscape {
-            withAnimation { deviceIsPortrait = false }
-        } else if o.isPortrait {
-            withAnimation { deviceIsPortrait = true }
+    private func isOverlayVisible(isPortrait: Bool) -> Bool {
+        switch orient.required {
+        case .landscape: return isPortrait
+        case .portrait: return !isPortrait
+        case .none: return false
         }
-        // Unknown / face-up / face-down: keep previous value.
     }
 
     private func scheduleHide() {

@@ -19,6 +19,13 @@ final class CatalogService: ObservableObject {
     @Published private(set) var hasMore: Bool = false
     @Published private(set) var error: String?
     @Published private(set) var profile: UserProfile = .anonymous
+    /// Bumped by RootView each time the user closes a game and returns to
+    /// the catalog. HomeViewModel observes it to re-fetch the feed so
+    /// Yandex's server-side `recentGames` (now including the game that
+    /// was just played) lands in feedRecent.
+    @Published private(set) var gameSessionEndCount: Int = 0
+
+    func notifyGameSessionEnded() { gameSessionEndCount &+= 1 }
     @Published var searchQuery: String = "" {
         didSet { onQueryChanged(searchQuery) }
     }

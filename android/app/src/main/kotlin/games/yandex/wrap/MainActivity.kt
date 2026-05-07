@@ -112,7 +112,14 @@ class MainActivity : ComponentActivity() {
                                 title = pushed.title,
                                 scripts = app.injectedScripts,
                                 blockList = app.blockList,
-                                onBack = onPop,
+                                onBack = {
+                                    // Yandex updates server-side
+                                    // recentGames on the play session —
+                                    // refresh Home so the just-played
+                                    // game appears in Recently played.
+                                    homeVm.onGameSessionEnded()
+                                    onPop()
+                                },
                             )
                             TabPushed.Auth -> AuthScreen(onClose = {
                                 profileVm.refresh()

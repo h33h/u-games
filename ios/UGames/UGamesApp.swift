@@ -74,7 +74,14 @@ struct RootView: View {
                     title: title,
                     scripts: injectedScripts,
                     blockList: blockList,
-                    onBack: { route = .catalog },
+                    onBack: {
+                        route = .catalog
+                        // Yandex's server-side recentGames updates on the
+                        // play session — let HomeViewModel know so it
+                        // re-fetches the feed and the just-played game
+                        // appears in the Recently played row.
+                        catalogService.notifyGameSessionEnded()
+                    },
                 )
             case .auth:
                 AuthView(onClose: {

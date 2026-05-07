@@ -61,8 +61,44 @@ final class HomeViewModel: ObservableObject {
             .store(in: &cancellables)
         service.$profile
             .receive(on: RunLoop.main)
-            .sink { [weak self] p in self?.profile = p }
+            .sink { [weak self] p in
+                guard let self = self else { return }
+                let wasAnon = !self.profile.isAuthorized
+                self.profile = p
+                // First feed call may have run before auth cookies were
+                // ready — Yandex SSR returned recentGames=0 for an
+                // anonymous request. Once the profile flips to
+                // authorized, re-fetch so the server-side recents tied
+                // to the user's account land in feedRecent.
+                if wasAnon && p.isAuthorized && self.loaded {
+                    Task { await self.refreshFeedOnly() }
+                }
+            }
             .store(in: &cancellables)
+        // Re-fetch the feed every time the user closes a game — Yandex's
+        // server-side recentGames updates on play sessions, so
+        // `feedRecent` stays current with what the profile actually saw.
+        service.$gameSessionEndCount
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self = self, self.loaded else { return }
+                Task { await self.refreshFeedOnly() }
+            }
+            .store(in: &cancellables)
+    }
+
+    /// Same as `refresh()` but skips the profile fetch (we're already
+    /// reacting to a profile change, no need to chase it again).
+    private func refreshFeedOnly() async {
+        do {
+            let main = try await service.fetchFeedWithBlocks()
+            digest(main: main)
+            let categories = (try? await service.fetchCategories()) ?? []
+            await fanOutGenreRows(categories: categories, exclude: main.flatGames.first?.appId)
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     func loadInitialIfNeeded() async {

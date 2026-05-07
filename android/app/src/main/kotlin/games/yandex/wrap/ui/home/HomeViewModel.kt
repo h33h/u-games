@@ -85,10 +85,38 @@ class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
         viewModelScope.launch { runCatching { repository.toggleFavorite(game) } }
     }
 
+    /// Re-fetches feed (and recents) without touching the profile. Called
+    /// by MainActivity after the user returns from a game so Yandex's
+    /// server-side recentGames — refreshed on the play session — lands
+    /// in feedRecent.
+    fun onGameSessionEnded() {
+        viewModelScope.launch {
+            val feed = runCatching { repository.firstFeedWithBlocks() }.getOrNull() ?: return@launch
+            val (hero, spotlight, freshRow) = digestMain(feed)
+            _state.update {
+                it.copy(
+                    hero = hero,
+                    spotlight = spotlight,
+                    feedRecent = feed.recentGames.take(12),
+                    genreRows = listOfNotNull(freshRow) + it.genreRows.filter { row -> row.title != "Fresh today" },
+                )
+            }
+        }
+    }
+
     private fun refreshProfile() {
         viewModelScope.launch {
-            val p = runCatching { repository.userProfileWithRetry() }.getOrNull()
-            if (p != null) _state.update { it.copy(profile = p) }
+            val p = runCatching { repository.userProfileWithRetry() }.getOrNull() ?: return@launch
+            val wasAnon = !_state.value.profile.isAuthorized
+            _state.update { it.copy(profile = p) }
+            // First feed call may have run before auth cookies were ready
+            // — Yandex SSR returned recentGames=0 for an anonymous
+            // request. Once the profile flips to authorized, re-fetch so
+            // the server-side recents tied to the account land in
+            // feedRecent.
+            if (wasAnon && p.isAuthorized) {
+                onGameSessionEnded()
+            }
         }
     }
 

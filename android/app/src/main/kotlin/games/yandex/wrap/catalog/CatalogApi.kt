@@ -54,6 +54,128 @@ class CatalogApi(private val httpClient: HttpClient) {
         clientHeight: Int = 915,
     ): FeedPage = fetchFeed(pageId = null, gamesPerPage = gamesPerPage, lang = lang, clientWidth = clientWidth, clientHeight = clientHeight)
 
+    /**
+     * Same `/feed/` endpoint as [firstFeedPage] but preserves the editorial
+     * block structure (`type` / `size` / `title` / `items`) instead of
+     * flattening. Used by Home to drive Hero (first item of the first
+     * `categorized` `size=l` block), Spotlight (first `categorized` `size=s`
+     * block with ≥5 items) and per-genre rows. Also extracts the genre list
+     * from `siteNavigationLinks.categories` so Browse chips don't need a
+     * separate request.
+     */
+    suspend fun firstFeedPageWithBlocks(
+        gamesPerPage: Int = 24,
+        lang: String = "en",
+        clientWidth: Int = 412,
+        clientHeight: Int = 915,
+        tab: String? = null,
+    ): FeedWithBlocks {
+        val response: JsonObject = httpClient.get(FEED_URL) {
+            parameter("with_promos", "true")
+            parameter("lang", lang)
+            parameter("games_count", gamesPerPage.toString())
+            parameter("suggested_width", "3")
+            parameter("suggested_rows", "8")
+            parameter("with_recent_games", "true")
+            parameter("platform", "android_other")
+            parameter("client_width", clientWidth.toString())
+            parameter("client_height", clientHeight.toString())
+            if (!tab.isNullOrEmpty()) parameter("tab", tab)
+            mobileHeaders()
+        }.body()
+
+        val feedArr = response["feed"] as? JsonArray ?: JsonArray(emptyList())
+        val blocks = feedArr.mapNotNull { el ->
+            val obj = el as? JsonObject ?: return@mapNotNull null
+            val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+            val size = obj["size"]?.jsonPrimitive?.contentOrNull
+            val title = obj["title"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val itemsArr = obj["items"] as? JsonArray ?: JsonArray(emptyList())
+            val items = itemsArr.mapNotNull { (it as? JsonObject)?.let(::itemToGame) }
+            if (items.isEmpty()) null else FeedBlock(type, size, title, items)
+        }
+        val flat = run {
+            val seen = mutableSetOf<Long>()
+            buildList { for (b in blocks) for (g in b.items) if (seen.add(g.appId)) add(g) }
+        }
+        val pageInfo = response["pageInfo"] as? JsonObject
+        val nextPageId = pageInfo?.get("nextPageId")?.jsonPrimitive?.contentOrNull
+        val hasNext = pageInfo?.get("hasNextPage")?.jsonPrimitive?.booleanOrNull ?: (nextPageId != null)
+        // Server-side recents live at the response root, not inside feed[].
+        val recentArr = response["recentGames"] as? JsonArray ?: JsonArray(emptyList())
+        val recentGames = recentArr.mapNotNull { (it as? JsonObject)?.let(::itemToGame) }
+
+        return FeedWithBlocks(
+            blocks = blocks,
+            flatGames = flat,
+            recentGames = recentGames,
+            genres = emptyList(),
+            nextPageId = nextPageId,
+            hasNext = hasNext,
+        )
+    }
+
+    /**
+     * REST search. Returns the same paginated `FeedPage` shape as `/feed/`
+     * so the caller can drive paging through `nextPageId`. The previous
+     * HTML-scrape path silently capped at one page of ~24 results.
+     */
+    suspend fun searchPaginated(
+        query: String,
+        pageId: String? = null,
+        gamesPerPage: Int = 24,
+        lang: String = "en",
+    ): FeedPage {
+        if (query.isBlank()) return FeedPage(emptyList(), null, false)
+        val response: JsonObject = httpClient.get(SEARCH_REST_URL) {
+            parameter("query", query)
+            parameter("lang", lang)
+            parameter("platform", "android_other")
+            parameter("games_count", gamesPerPage.toString())
+            if (pageId != null) parameter("page_id", pageId)
+            mobileHeaders()
+        }.body()
+        val games = parseFeedItems(response["feed"] as? JsonArray ?: JsonArray(emptyList()))
+        val pageInfo = response["pageInfo"] as? JsonObject
+        val nextPageId = pageInfo?.get("nextPageId")?.jsonPrimitive?.contentOrNull
+        val hasNext = pageInfo?.get("hasNextPage")?.jsonPrimitive?.booleanOrNull ?: (nextPageId != null)
+        return FeedPage(games = games, nextPageId = nextPageId, hasNext = hasNext)
+    }
+
+    /**
+     * Loads the localized list of category tabs by scraping the SSR
+     * `__appData__.categoriesForTabs` from the catalog landing page. The
+     * JSON `/feed/` response does not carry this list on mobile platforms;
+     * the only stable source is the HTML root document.
+     */
+    suspend fun fetchCategories(lang: String = "en"): List<GameCategory> = withContext(Dispatchers.IO) {
+        val host = preferredYandexHost()
+        val effectiveLang = if (host == "yandex.ru") "ru" else lang
+        val url = "https://$host/games/?lang=$effectiveLang"
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", MOBILE_UA)
+            .header("Accept", "text/html")
+            .header("Accept-Language", "$effectiveLang,en;q=0.9")
+            .get()
+            .build()
+        val html = try {
+            profileHttp.newCall(request).execute().use { it.body?.string().orEmpty() }
+        } catch (_: Throwable) {
+            return@withContext emptyList<GameCategory>()
+        }
+        val appData = extractAppData(html) ?: return@withContext emptyList()
+        val parsed = lenientJson.parseToJsonElement(appData) as? JsonObject ?: return@withContext emptyList()
+        val arr = parsed["categoriesForTabs"] as? JsonArray ?: return@withContext emptyList()
+        arr.mapNotNull {
+            val o = it as? JsonObject ?: return@mapNotNull null
+            val name = o["name"]?.jsonPrimitive?.contentOrNull?.takeIf { s -> s.isNotEmpty() } ?: return@mapNotNull null
+            val title = o["title"]?.jsonPrimitive?.contentOrNull?.takeIf { s -> s.isNotEmpty() } ?: return@mapNotNull null
+            val count = o["gamesCount"]?.jsonPrimitive?.intOrNull ?: 0
+            GameCategory(name = name, title = title, gamesCount = count)
+        }
+    }
+
     suspend fun nextFeedPage(
         pageId: String,
         gamesPerPage: Int = 24,
@@ -324,6 +446,7 @@ class CatalogApi(private val httpClient: HttpClient) {
         const val FEED_URL = "https://yandex.com/games/api/catalogue/v2/feed/"
         const val SIMILAR_URL = "https://yandex.com/games/api/catalogue/v2/similar_games/"
         const val SEARCH_URL = "https://yandex.com/games/search"
+        const val SEARCH_REST_URL = "https://yandex.com/games/api/catalogue/v2/search/"
         const val CATALOG_URL = "https://yandex.com/games/"
         const val MOBILE_UA = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Mobile Safari/537.36"
         const val COVER_SIZE = "pjpg250x140"

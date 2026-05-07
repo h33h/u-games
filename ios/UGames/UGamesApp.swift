@@ -17,20 +17,21 @@ struct UGamesApp: App {
     }
 }
 
-/// Parse `ugames://app/<id>` deep links. Also tolerates `https://yandex.com/games/app/<id>`
-/// in case Universal Links are added later. Returns the appId or nil.
+/// Parse `ugames://app/<id>` deep links. Also tolerates
+/// `https://yandex.com/games/app/<id>` in case Universal Links are added
+/// later. Returns the appId or nil.
 func parseDeepLink(_ url: URL) -> Int64? {
     let scheme = url.scheme?.lowercased() ?? ""
     let segments = url.pathComponents.filter { $0 != "/" }
     switch scheme {
     case "ugames":
-        // ugames://app/<id> → host="app", first path segment is id
         if url.host == "app" {
             return segments.first.flatMap { Int64($0) }
         }
         return nil
     case "https", "http":
-        if let host = url.host, (host.hasSuffix("yandex.com") || host.hasSuffix("yandex.ru")),
+        if let host = url.host,
+           host.hasSuffix("yandex.com") || host.hasSuffix("yandex.ru"),
            let idx = segments.firstIndex(of: "app"), idx + 1 < segments.count {
             return Int64(segments[idx + 1])
         }
@@ -43,7 +44,6 @@ func parseDeepLink(_ url: URL) -> Int64? {
 struct RootView: View {
     @State private var route: Route = .catalog
     @StateObject private var catalogService = CatalogService()
-    @StateObject private var recentStore = RecentGamesStore.shared
     @StateObject private var favoritesStore = FavoritesStore.shared
     private let injectedScripts = InjectedScripts.load()
     private let blockList = BlockList.load()
@@ -53,26 +53,34 @@ struct RootView: View {
             Color.black.ignoresSafeArea()
             switch route {
             case .catalog:
-                TabContainer(hideBar: false) {
-                    CatalogView(
-                        service: catalogService,
-                        recentStore: recentStore,
-                        favoritesStore: favoritesStore,
-                        onGameClick: { game in
-                            recentStore.record(game)
-                            route = .game(appId: game.appId, title: game.title)
-                        },
-                        onLoginClick: { route = .auth },
-                        onLogsRequest: { route = .logs }
-                    )
-                }
+                TabContainer(
+                    catalogService: catalogService,
+                    favoritesStore: favoritesStore,
+                    onLogsRequest: { route = .logs },
+                    onGameOpen: { game in
+                        // Yandex maintains the recents list server-side
+                        // — no local store to update before launching.
+                        route = .game(appId: game.appId, title: game.title)
+                    },
+                    onLoginClick: { route = .auth },
+                    onSignOut: {
+                        Task { await catalogService.clearSession() }
+                    },
+                )
             case .game(let appId, let title):
                 GameView(
                     appId: appId,
                     title: title,
                     scripts: injectedScripts,
                     blockList: blockList,
-                    onBack: { route = .catalog }
+                    onBack: {
+                        route = .catalog
+                        // Yandex's server-side recentGames updates on the
+                        // play session — let HomeViewModel know so it
+                        // re-fetches the feed and the just-played game
+                        // appears in the Recently played row.
+                        catalogService.notifyGameSessionEnded()
+                    },
                 )
             case .auth:
                 AuthView(onClose: {

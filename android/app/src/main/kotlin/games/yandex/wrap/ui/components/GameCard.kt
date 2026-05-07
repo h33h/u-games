@@ -120,20 +120,23 @@ fun TileGameCard(
             }
         }
         Spacer(Modifier.height(8.dp))
-        Text(
-            text = game.title,
-            color = UGColors.TextPrimary,
-            style = UGType.BodyS,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
-        val meta = listOfNotNull(
-            game.categories.firstOrNull(),
-            if (game.ratingCount > 0) "${game.ratingCount} ratings" else null,
-        ).joinToString(" · ")
-        if (meta.isNotEmpty()) {
+        // Fixed-height title+meta block so cards in the same grid row align
+        // even when one has a 1-line title and the next has 2 lines / no
+        // meta. 48dp accommodates 2-line BodyS + 1-line Caption.
+        Column(modifier = Modifier.fillMaxWidth().height(48.dp)) {
             Text(
-                text = meta,
+                text = game.title,
+                color = UGColors.TextPrimary,
+                style = UGType.BodyS,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val meta = listOfNotNull(
+                game.categories.firstOrNull(),
+                if (game.ratingCount > 0) "${game.ratingCount} ratings" else null,
+            ).joinToString(" · ")
+            Text(
+                text = meta.ifEmpty { " " },
                 color = UGColors.TextMuted,
                 style = UGType.Caption,
                 maxLines = 1,

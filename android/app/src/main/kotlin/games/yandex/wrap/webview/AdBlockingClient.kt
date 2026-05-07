@@ -70,7 +70,16 @@ class AdBlockingClient(
             CookieManager.getInstance().getCookie(url)?.let { cookie ->
                 rb.addHeader("Cookie", cookie)
             }
-            rb.addHeader("Accept-Encoding", "identity")
+            // DON'T set Accept-Encoding — OkHttp transparently advertises
+            // `gzip` and decompresses on the way back, BUT only when we
+            // haven't overridden the header ourselves. Yandex's SSR keys
+            // its mirror selection off the encoding clients accept: with
+            // `identity` (our previous override) it embeds a non-brotli
+            // CDN URL into __playPageData__.gameSrc whose iframe HTML is
+            // missing the YaGames SDK <script> tag — Construct 3 /
+            // GamePush titles like game id 388978 trip on
+            //   GamePush Initialization Yandex SDK failed:
+            //   TypeError: undefined is not an object (evaluating 'window.YaGames.init')
             val response = http.newCall(rb.build()).execute()
             val contentType = response.header("Content-Type") ?: "text/html"
             if (!contentType.contains("text/html", ignoreCase = true)) {

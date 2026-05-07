@@ -5,6 +5,7 @@ struct GameWebView: UIViewRepresentable {
     let url: URL
     let scripts: InjectedScripts
     let blockList: BlockList
+    var paused: Bool = false
 
     func makeCoordinator() -> Coordinator { Coordinator(scripts: scripts) }
 
@@ -109,9 +110,54 @@ struct GameWebView: UIViewRepresentable {
         if webView.url != url {
             webView.load(URLRequest(url: url))
         }
+        // Only emit the visibility-change script when the paused flag
+        // actually flips. Earlier we ran it on every recomposition, which
+        // overrode `document.visibilityState` getter mid-game-init and
+        // tripped some games (e.g. Construct 3 / GamePush titles like
+        // game id 388978) into a "GamePush Timeout 5000ms" boot loop.
+        // Skip the very first update when paused is false — the page
+        // already starts in the visible state, so the no-op script we'd
+        // emit is just dead weight that races init.
+        let last = context.coordinator.lastPausedState
+        if last == nil && !paused {
+            context.coordinator.lastPausedState = paused
+            return
+        }
+        if last != paused {
+            context.coordinator.lastPausedState = paused
+            let js = Self.visibilityJS(paused: paused)
+            webView.evaluateJavaScript(js, completionHandler: nil)
+            webView.isUserInteractionEnabled = !paused
+        }
+    }
+
+    private static func visibilityJS(paused: Bool) -> String {
+        let state = paused ? "hidden" : "visible"
+        return """
+        (function(){
+          try {
+            Object.defineProperty(document, 'visibilityState', {
+              configurable: true,
+              get: function() { return '\(state)'; }
+            });
+            Object.defineProperty(document, 'hidden', {
+              configurable: true,
+              get: function() { return \(paused ? "true" : "false"); }
+            });
+            document.dispatchEvent(new Event('visibilitychange'));
+            \(paused ? "document.querySelectorAll('video,audio').forEach(function(e){ try{e.pause();}catch(_){} });" : "")
+          } catch(_) {}
+        })();
+        """
     }
 
     final class Coordinator: NSObject, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler {
+
+        /// Tracks the last applied paused state so updateUIView only re-runs
+        /// the visibility-change script when the flag actually flips. Optional
+        /// so the FIRST update is a no-op (the default page state already
+        /// matches `paused == false`).
+        var lastPausedState: Bool? = nil
 
         // Receives `window.__yga_log(tag, msg)` calls from the inject scripts.
         func userContentController(_ userContentController: WKUserContentController,
@@ -168,8 +214,18 @@ struct GameWebView: UIViewRepresentable {
             scripts: InjectedScripts
         ) {
             var prefetchRequest = request
-            // identity encoding: we need to read the body unmodified to splice
-            prefetchRequest.setValue("identity", forHTTPHeaderField: "Accept-Encoding")
+            // DON'T force `identity` here. Yandex's SSR uses the request's
+            // Accept-Encoding to decide which CDN mirror to embed into
+            // __playPageData__.gameSrc. With `identity` it serves the
+            // non-brotli mirror, whose iframe HTML is missing the
+            // `<script src="/sdk/_/v2.xxx.js">` tag — the result is
+            // window.YaGames never gets defined and Construct 3 / GamePush
+            // titles (e.g. game id 388978) trip on
+            //   GamePush Initialization Yandex SDK failed:
+            //   TypeError: undefined is not an object (evaluating 'window.YaGames.init')
+            // URLSession decompresses gzip/br automatically, so the body
+            // we receive is already plain UTF-8 HTML — no need to ask the
+            // server for uncompressed bytes.
             prefetchRequest.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
             URLSession.shared.dataTask(with: prefetchRequest) { [weak webView] data, response, _ in
                 guard let webView = webView else { return }

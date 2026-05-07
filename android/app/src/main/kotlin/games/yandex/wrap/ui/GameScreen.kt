@@ -92,6 +92,7 @@ fun GameScreen(
             url = "https://yandex.com/games/app/$appId",
             scripts = scripts,
             blockList = blockList,
+            paused = rotateOverlayVisible,
             modifier = Modifier.fillMaxSize(),
         )
 

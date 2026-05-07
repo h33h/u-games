@@ -43,12 +43,15 @@ struct StoryCard: View {
                 let placeholder = Color(hex: g.mainColor) ?? UGColor.elevated
                 AsyncImage(url: URL(string: g.iconUrl.isEmpty ? g.coverUrl : g.iconUrl)) { phase in
                     switch phase {
-                    case .success(let img): img.resizable().scaledToFill()
-                    default: placeholder
+                    case .success(let img):
+                        img.resizable().scaledToFill()
+                    default:
+                        placeholder
                     }
                 }
                 .frame(width: 42, height: 42)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
+                .clipped()
                 .rotationEffect(.degrees(Double(-8 + idx * 8)))
                 .offset(x: CGFloat(-14 - idx * 8), y: 24)
                 .shadow(radius: 6)

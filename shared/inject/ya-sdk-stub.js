@@ -46,6 +46,36 @@
     try { if (typeof window.__yga_log === 'function') window.__yga_log(tag, msg); } catch (_) {}
   }
 
+  // Forward console.error / console.warn / unhandled errors to LogStore so
+  // games that freeze at the loader leave a breadcrumb trail (Construct 3 /
+  // GamePush titles like 388978 dump useful messages on init failure that
+  // we'd otherwise need a USB-attached browser to see).
+  try {
+    var realErr = console.error.bind(console);
+    var realWarn = console.warn.bind(console);
+    function fmt(args) {
+      try {
+        return Array.prototype.map.call(args, function (a) {
+          if (a == null) return String(a);
+          if (typeof a === 'string') return a;
+          if (a instanceof Error) return (a.name || 'Error') + ': ' + a.message;
+          try { return JSON.stringify(a); } catch (_) { return String(a); }
+        }).join(' ').slice(0, 600);
+      } catch (_) { return '<unstringifiable>'; }
+    }
+    console.error = function () { try { ylog('jserr', fmt(arguments)); } catch (_) {} return realErr.apply(console, arguments); };
+    console.warn  = function () { try { ylog('jswarn', fmt(arguments)); } catch (_) {} return realWarn.apply(console, arguments); };
+    window.addEventListener('error', function (ev) {
+      var src = ev && (ev.filename || (ev.target && (ev.target.src || ev.target.href)) || '');
+      ylog('jserr', 'window.onerror ' + (ev && ev.message || '') + ' @ ' + (src || '?') + (ev && ev.lineno ? ':' + ev.lineno : ''));
+    }, true);
+    window.addEventListener('unhandledrejection', function (ev) {
+      var r = ev && ev.reason;
+      var msg = r ? (r.message || String(r)) : '?';
+      ylog('jserr', 'unhandledrejection ' + msg);
+    });
+  } catch (_) {}
+
   // Behavior flags. 'auto' grants the rewarded reward without showing an ad
   // (the user expects every monetization touchpoint to "just work" for free).
   var REWARDED_MODE = 'auto';

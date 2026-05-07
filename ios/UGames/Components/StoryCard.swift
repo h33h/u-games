@@ -41,7 +41,7 @@ struct StoryCard: View {
         ZStack(alignment: .topTrailing) {
             ForEach(Array(games.prefix(3).enumerated()), id: \.element.appId) { idx, g in
                 let placeholder = Color(hex: g.mainColor) ?? UGColor.elevated
-                AsyncImage(url: URL(string: g.iconUrl.isEmpty ? g.coverUrl : g.iconUrl)) { phase in
+                CachedAsyncImage(url: URL(string: g.iconUrl.isEmpty ? g.coverUrl : g.iconUrl)) { phase in
                     switch phase {
                     case .success(let img):
                         img.resizable().scaledToFill()

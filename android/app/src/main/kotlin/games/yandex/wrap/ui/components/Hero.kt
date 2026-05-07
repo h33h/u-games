@@ -82,7 +82,10 @@ fun HeroSection(
             .clickable(onClick = onPlay),
     ) {
         AsyncImage(
-            model = game.coverUrl,
+            // Hero is 300dp tall — the feed thumb (`pjpg250x140`)
+            // looks like a postage stamp at this size. Bump to the
+            // next pre-rendered size (`pjpg1280x720`, ~120 KB).
+            model = game.coverUrl("pjpg1280x720"),
             contentDescription = game.title,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),

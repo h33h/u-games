@@ -22,7 +22,10 @@ struct HeroSection: View {
             // `.clipped()` is the only combination that bounds AsyncImage
             // reliably.
             GeometryReader { geo in
-                AsyncImage(url: URL(string: game.coverUrl)) { phase in
+                // Hero is 300pt tall — feed thumb (pjpg250x140) is a
+                // postage stamp at this size. Use the next pre-rendered
+                // pjpg1280x720 for visible quality.
+                CachedAsyncImage(url: URL(string: game.coverUrl(size: "pjpg1280x720"))) { phase in
                     switch phase {
                     case .success(let img):
                         img

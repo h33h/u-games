@@ -279,16 +279,15 @@ private fun HomeRowSection(
 @Composable
 private fun WideRow(games: List<Game>, onClick: (Game) -> Unit) {
     // Per-item vertical padding makes each item's reported size
-    // include the mainColor shadow halo, so neither the LazyRow's
-    // viewport clip nor the outer LazyColumn's spacing crops it.
-    // (Plain LazyRow contentPadding wasn't enough — items reported
-    // their bare size and the halo bled outside.)
+    // include the mainColor shadow halo. 20dp leaves clear room for
+    // the 12dp shadow plus anti-alias bleed; previous values (14, 16)
+    // proved too tight — LazyRow's container clip kept cropping.
     LazyRow(
         contentPadding = PaddingValues(horizontal = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(games, key = { it.appId }) { g ->
-            Box(modifier = Modifier.padding(vertical = 16.dp)) {
+            Box(modifier = Modifier.padding(vertical = 20.dp)) {
                 WideGameCard(game = g, onClick = { onClick(g) })
             }
         }
@@ -302,7 +301,7 @@ private fun SquareRow(games: List<Game>, onClick: (Game) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         items(games, key = { it.appId }) { g ->
-            Box(modifier = Modifier.padding(vertical = 16.dp)) {
+            Box(modifier = Modifier.padding(vertical = 20.dp)) {
                 SquareGameCard(game = g, onClick = { onClick(g) })
             }
         }

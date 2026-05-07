@@ -108,14 +108,13 @@ struct HomeView: View {
     @ViewBuilder
     private func wideRow(games: [Game]) -> some View {
         // Per-item vertical padding makes each item's measured frame
-        // include the halo shadow, which is what the parent ScrollView
-        // (and any clipping ancestor) actually respects. Padding on
-        // the HStack alone isn't enough on its own.
+        // include the halo shadow. 20pt leaves clear room for the
+        // 14pt shadow + anti-alias bleed; previous 16pt was too tight.
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
                 ForEach(games) { g in
                     WideGameCard(game: g, onTap: { onGameClick(g) })
-                        .padding(.vertical, 16)
+                        .padding(.vertical, 20)
                 }
             }
             .padding(.horizontal, 14)
@@ -128,7 +127,7 @@ struct HomeView: View {
             HStack(spacing: 12) {
                 ForEach(games) { g in
                     SquareGameCard(game: g, onTap: { onGameClick(g) })
-                        .padding(.vertical, 16)
+                        .padding(.vertical, 20)
                 }
             }
             .padding(.horizontal, 14)
@@ -185,7 +184,7 @@ private struct ProfileAvatar: View {
     var body: some View {
         Group {
             if profile.isAuthorized, let url = URL(string: profile.avatarUrl), !profile.avatarUrl.isEmpty {
-                AsyncImage(url: url) { phase in
+                CachedAsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let img): img.resizable().scaledToFill()
                     default: UGColor.elevated

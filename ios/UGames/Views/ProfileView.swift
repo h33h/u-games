@@ -43,7 +43,7 @@ struct ProfileView: View {
         HStack(alignment: .center, spacing: 16) {
             Group {
                 if p.isAuthorized, let url = URL(string: p.avatarUrl), !p.avatarUrl.isEmpty {
-                    AsyncImage(url: url) { phase in
+                    CachedAsyncImage(url: url) { phase in
                         switch phase {
                         case .success(let img): img.resizable().scaledToFill()
                         default: UGColor.elevated

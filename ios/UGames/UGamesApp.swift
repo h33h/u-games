@@ -8,6 +8,16 @@ struct UGamesApp: App {
         // Bridge WKWebView's cookies into URLSession.shared so catalog HTTP
         // requests see the same session as the in-app WebView (auth screen).
         _ = SharedCookieStore.shared
+
+        // URLCache used by `CachedAsyncImage` to keep cover thumbnails
+        // warm across launches. 30 MB memory + 250 MB disk is enough
+        // to hold a few hundred Yandex avatars URLs (covers,
+        // screenshots, icons) without bloating storage.
+        URLCache.shared = URLCache(
+            memoryCapacity: 30 * 1024 * 1024,
+            diskCapacity: 250 * 1024 * 1024,
+            diskPath: "ugames-image-cache"
+        )
     }
 
     var body: some Scene {
@@ -81,6 +91,9 @@ struct RootView: View {
                 onLoginClick: { push(.auth) },
                 onSignOut: {
                     Task { await catalogService.clearSession() }
+                },
+                onShareGame: { game in
+                    sharePayload = SharePayload(title: game.title, url: game.playUrl)
                 },
             )
             if let route = routeStack.last {

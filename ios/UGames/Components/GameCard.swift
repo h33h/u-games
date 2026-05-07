@@ -19,7 +19,7 @@ struct TileGameCard: View {
             ZStack {
                 placeholder
                 GeometryReader { geo in
-                    AsyncImage(url: URL(string: game.coverUrl)) { phase in
+                    CachedAsyncImage(url: URL(string: game.coverUrl)) { phase in
                         switch phase {
                         case .success(let img):
                             img
@@ -119,7 +119,7 @@ struct WideGameCard: View {
         ZStack(alignment: .bottomLeading) {
             placeholder
             GeometryReader { geo in
-                AsyncImage(url: URL(string: game.coverUrl)) { phase in
+                CachedAsyncImage(url: URL(string: game.coverUrl)) { phase in
                     switch phase {
                     case .success(let img):
                         img
@@ -182,7 +182,7 @@ struct SquareGameCard: View {
             ZStack {
                 placeholder
                 GeometryReader { geo in
-                    AsyncImage(url: URL(string: game.iconUrl.isEmpty ? game.coverUrl : game.iconUrl)) { phase in
+                    CachedAsyncImage(url: URL(string: game.iconUrl.isEmpty ? game.coverUrl : game.iconUrl)) { phase in
                         switch phase {
                         case .success(let img):
                             img

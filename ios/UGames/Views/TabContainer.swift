@@ -13,6 +13,7 @@ struct TabContainer: View {
     let onGameOpen: (Game) -> Void
     let onLoginClick: () -> Void
     let onSignOut: () -> Void
+    let onShareGame: (Game) -> Void
 
     @StateObject private var homeVM: HomeViewModel
     @StateObject private var browseVM: BrowseViewModel
@@ -27,6 +28,7 @@ struct TabContainer: View {
         onGameOpen: @escaping (Game) -> Void,
         onLoginClick: @escaping () -> Void,
         onSignOut: @escaping () -> Void,
+        onShareGame: @escaping (Game) -> Void,
     ) {
         self.catalogService = catalogService
         self.favoritesStore = favoritesStore
@@ -34,6 +36,7 @@ struct TabContainer: View {
         self.onGameOpen = onGameOpen
         self.onLoginClick = onLoginClick
         self.onSignOut = onSignOut
+        self.onShareGame = onShareGame
         _homeVM = StateObject(
             wrappedValue: HomeViewModel(
                 service: catalogService,
@@ -113,7 +116,7 @@ struct TabContainer: View {
                 },
                 onProfileClick: { profilePresented = true },
                 onProfileLongPress: onLogsRequest,
-                onShareGame: { _ in /* phase 3 */ },
+                onShareGame: onShareGame,
             )
         case "browse":
             BrowseView(

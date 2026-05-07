@@ -340,10 +340,13 @@ private fun DetailTopBar(
     onFavorite: () -> Unit,
     onShare: () -> Unit,
 ) {
+    // `topInset` is the system status bar height; the extra +12dp
+    // gives breathing room so the icons don't sit flush against the
+    // status bar's clock/battery glyphs.
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(top = topInset + 10.dp, start = 14.dp, end = 14.dp),
+            .padding(top = topInset + 12.dp, start = 14.dp, end = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         HeroIcon(icon = Icons.Filled.ArrowBack, contentDescription = "Back", onClick = onBack)

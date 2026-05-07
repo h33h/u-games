@@ -78,7 +78,7 @@ struct GameDetailView: View {
                 // Sticky top controls — anchored to the screen top so
                 // they stay visible/tappable while the hero scrolls.
                 heroTopRow
-                    .padding(.top, safeTop + 10)
+                    .padding(.top, max(safeTop, 44) + 8)
                     .padding(.horizontal, 14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
@@ -144,7 +144,7 @@ struct GameDetailView: View {
             let stretch = max(0, minY)
             ZStack {
                 placeholder
-                AsyncImage(url: URL(string: viewModel.game.coverUrl(size: "pjpg1280x720"))) { phase in
+                CachedAsyncImage(url: URL(string: viewModel.game.coverUrl(size: "pjpg1280x720"))) { phase in
                     switch phase {
                     case .success(let img):
                         img
@@ -339,7 +339,7 @@ struct GameDetailView: View {
         ZStack {
             UGColor.elevated
             GeometryReader { geo in
-                AsyncImage(url: URL(string: url)) { phase in
+                CachedAsyncImage(url: URL(string: url)) { phase in
                     switch phase {
                     case .success(let img):
                         img
@@ -603,7 +603,7 @@ struct ScreenshotsFullscreenView: View {
                 .onTapGesture(perform: onDismiss)
             TabView(selection: $page) {
                 ForEach(Array(screenshots.enumerated()), id: \.offset) { idx, url in
-                    AsyncImage(url: URL(string: upgradeToOrig(url))) { phase in
+                    CachedAsyncImage(url: URL(string: upgradeToOrig(url))) { phase in
                         switch phase {
                         case .success(let img):
                             img.resizable().aspectRatio(contentMode: .fit)

@@ -21,9 +21,16 @@ import games.yandex.wrap.ui.components.UGTab
  * Per-tab pushed routes. Switching tabs preserves each tab's stack so a
  * user mid-Auth on Profile can flick to Home, browse, then come back to
  * Profile and resume the WebView push without losing scroll/state.
+ *
+ * Phase 3: each tab keeps a *stack* of these (`List<TabPushed>`), so
+ * `Detail → Game → Back` lands back on Detail rather than the catalog.
  */
 sealed interface TabPushed {
     data object None : TabPushed
+    // Fully-qualified `catalog.Game` because inside the `TabPushed` body the
+    // unqualified `Game` token resolves to the nested `TabPushed.Game` class
+    // declared below, not to the imported `games.yandex.wrap.catalog.Game`.
+    data class GameDetail(val game: games.yandex.wrap.catalog.Game) : TabPushed
     data class Game(val appId: Long, val title: String) : TabPushed
     data object Auth : TabPushed
     data object Logs : TabPushed
@@ -46,15 +53,6 @@ private val TABS = listOf(
 )
 
 /**
- * Phase-2 tab container. Each tab owns its own `TabPushed` state; the bar
- * hides whenever the active tab has a non-None pushed route, so Game/Auth/
- * Logs/About cover the bar without leaking back to the user.
- *
- * `initialTab` and `initialPushed` let MainActivity drive deep-links — e.g.
- * `ugames://app/123` opens with the Home tab selected and a Game pushed
- * onto its stack.
- */
-/**
  * Per-tab content slot. Receives:
  * - `push` — push a `TabPushed` route onto this tab's stack
  * - `switchTab` — switch the active tab from inside the content (e.g.
@@ -65,58 +63,87 @@ typealias TabContent = @Composable (
     switchTab: (String) -> Unit,
 ) -> Unit
 
+/**
+ * Host that renders a pushed route. Receives:
+ * - `pushed` — the route at the top of the active tab's stack
+ * - `push`   — append another route ON TOP of `pushed` (Phase 3:
+ *              Detail.onPlay pushes Game on top so Back lands on Detail)
+ * - `onPop`  — drop the top route from the active tab's stack
+ * - `replace`— swap the top route in place (Profile → Auth/Logs/About)
+ */
+typealias PushedHost = @Composable (
+    pushed: TabPushed,
+    push: (TabPushed) -> Unit,
+    onPop: () -> Unit,
+    replace: (TabPushed) -> Unit,
+) -> Unit
+
 @Composable
 fun TabContainer(
     home: TabContent,
     browse: TabContent,
     favorites: TabContent,
-    pushedHost: @Composable (
-        pushed: TabPushed,
-        onPop: () -> Unit,
-        replace: (TabPushed) -> Unit,
-    ) -> Unit,
+    pushedHost: PushedHost,
     initialTab: String = "home",
     initialPushed: TabPushed = TabPushed.None,
 ) {
     var selected by remember { mutableStateOf(initialTab) }
-    var homePushed by remember {
-        mutableStateOf(if (initialTab == "home") initialPushed else TabPushed.None)
+    var homeStack by remember {
+        mutableStateOf<List<TabPushed>>(
+            if (initialTab == "home" && initialPushed !is TabPushed.None) listOf(initialPushed) else emptyList()
+        )
     }
-    var browsePushed by remember {
-        mutableStateOf(if (initialTab == "browse") initialPushed else TabPushed.None)
+    var browseStack by remember {
+        mutableStateOf<List<TabPushed>>(
+            if (initialTab == "browse" && initialPushed !is TabPushed.None) listOf(initialPushed) else emptyList()
+        )
     }
-    var favoritesPushed by remember {
-        mutableStateOf(if (initialTab == "favorites") initialPushed else TabPushed.None)
+    var favoritesStack by remember {
+        mutableStateOf<List<TabPushed>>(
+            if (initialTab == "favorites" && initialPushed !is TabPushed.None) listOf(initialPushed) else emptyList()
+        )
     }
 
-    val activePushed: TabPushed = when (selected) {
-        "home" -> homePushed
-        "browse" -> browsePushed
-        else -> favoritesPushed
+    val activeStack: List<TabPushed> = when (selected) {
+        "home" -> homeStack
+        "browse" -> browseStack
+        else -> favoritesStack
+    }
+    val activePushed: TabPushed = activeStack.lastOrNull() ?: TabPushed.None
+
+    val pushOnActive: (TabPushed) -> Unit = { route ->
+        when (selected) {
+            "home" -> homeStack = homeStack + route
+            "browse" -> browseStack = browseStack + route
+            "favorites" -> favoritesStack = favoritesStack + route
+        }
+    }
+    val popOnActive: () -> Unit = {
+        when (selected) {
+            "home" -> homeStack = homeStack.dropLast(1)
+            "browse" -> browseStack = browseStack.dropLast(1)
+            "favorites" -> favoritesStack = favoritesStack.dropLast(1)
+        }
+    }
+    val replaceOnActive: (TabPushed) -> Unit = { route ->
+        when (selected) {
+            "home" -> homeStack = homeStack.dropLast(1) + route
+            "browse" -> browseStack = browseStack.dropLast(1) + route
+            "favorites" -> favoritesStack = favoritesStack.dropLast(1) + route
+        }
     }
 
     val switchTab: (String) -> Unit = { selected = it }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        when (selected) {
-            "home" -> if (homePushed is TabPushed.None) home({ homePushed = it }, switchTab)
-                       else pushedHost(
-                           homePushed,
-                           { homePushed = TabPushed.None },
-                           { homePushed = it },
-                       )
-            "browse" -> if (browsePushed is TabPushed.None) browse({ browsePushed = it }, switchTab)
-                         else pushedHost(
-                             browsePushed,
-                             { browsePushed = TabPushed.None },
-                             { browsePushed = it },
-                         )
-            "favorites" -> if (favoritesPushed is TabPushed.None) favorites({ favoritesPushed = it }, switchTab)
-                            else pushedHost(
-                                favoritesPushed,
-                                { favoritesPushed = TabPushed.None },
-                                { favoritesPushed = it },
-                            )
+        if (activePushed is TabPushed.None) {
+            when (selected) {
+                "home" -> home(pushOnActive, switchTab)
+                "browse" -> browse(pushOnActive, switchTab)
+                "favorites" -> favorites(pushOnActive, switchTab)
+            }
+        } else {
+            pushedHost(activePushed, pushOnActive, popOnActive, replaceOnActive)
         }
         if (activePushed is TabPushed.None) {
             Box(

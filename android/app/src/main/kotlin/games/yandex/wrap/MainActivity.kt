@@ -8,7 +8,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import games.yandex.wrap.catalog.Game
@@ -19,6 +21,8 @@ import games.yandex.wrap.ui.TabContainer
 import games.yandex.wrap.ui.TabPushed
 import games.yandex.wrap.ui.browse.BrowseScreen
 import games.yandex.wrap.ui.browse.BrowseViewModel
+import games.yandex.wrap.ui.detail.GameDetailScreen
+import games.yandex.wrap.ui.detail.GameDetailViewModel
 import games.yandex.wrap.ui.favorites.FavoritesScreen
 import games.yandex.wrap.ui.home.HomeScreen
 import games.yandex.wrap.ui.home.HomeViewModel
@@ -26,6 +30,7 @@ import games.yandex.wrap.ui.profile.AboutScreen
 import games.yandex.wrap.ui.profile.ProfileScreen
 import games.yandex.wrap.ui.profile.ProfileViewModel
 import games.yandex.wrap.ui.theme.UGamesTheme
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -46,15 +51,19 @@ class MainActivity : ComponentActivity() {
         val browseVm = provider[BrowseViewModel::class.java]
         val profileVm = provider[ProfileViewModel::class.java]
 
+        // Deep-link bypasses the Detail screen because we don't have a
+        // full Game object on cold start (only the appId). The user lands
+        // straight in the WebView, matching the link's "open the game"
+        // intent.
         val deepLink: TabPushed = parseDeepLink(intent)
             ?.let { TabPushed.Game(appId = it, title = "") }
             ?: TabPushed.None
 
-        // Yandex maintains the recents list server-side per profile, so
-        // we don't track local opens here — Home re-fetches the feed on
-        // game-session-end (see homeVm.onGameSessionEnded below).
+        // Phase 3: card clicks land on GameDetail first; Detail's "Play
+        // now" is what pushes the WebView. Yandex maintains recents
+        // server-side per profile, so no local store update here.
         val openGame: (Game, (TabPushed) -> Unit) -> Unit = { game, push ->
-            push(TabPushed.Game(game.appId, game.title))
+            push(TabPushed.GameDetail(game))
         }
 
         val openShare: (Game) -> Unit = { game ->
@@ -103,8 +112,42 @@ class MainActivity : ComponentActivity() {
                             onBrowse = { switchTab("browse") },
                         )
                     },
-                    pushedHost = { pushed, onPop, replace ->
+                    pushedHost = { pushed, push, onPop, replace ->
                         when (pushed) {
+                            is TabPushed.GameDetail -> {
+                                // Fresh VM keyed on the game so navigating
+                                // Detail(A) → Similar tile → Detail(B) gets
+                                // a clean state and a new similar fetch.
+                                val detailVm = remember(pushed.game.appId) {
+                                    GameDetailViewModel(
+                                        repository = app.catalogRepository,
+                                        initialGame = pushed.game,
+                                    )
+                                }
+                                GameDetailScreen(
+                                    viewModel = detailVm,
+                                    onBack = onPop,
+                                    onPlay = { game ->
+                                        push(TabPushed.Game(game.appId, game.title))
+                                    },
+                                    onShare = openShare,
+                                    onSimilarClick = { game ->
+                                        push(TabPushed.GameDetail(game))
+                                    },
+                                    onSimilarFavoriteToggle = { game ->
+                                        // Repository toggle bypasses the
+                                        // detail VM so any tab that
+                                        // observes favoriteIds (Browse,
+                                        // Favorites grid, Home favorites
+                                        // row) updates immediately.
+                                        lifecycleScope.launch {
+                                            runCatching {
+                                                app.catalogRepository.toggleFavorite(game)
+                                            }
+                                        }
+                                    },
+                                )
+                            }
                             is TabPushed.Game -> GameScreen(
                                 appId = pushed.appId,
                                 title = pushed.title,

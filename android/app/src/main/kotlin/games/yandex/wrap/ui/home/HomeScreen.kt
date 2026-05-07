@@ -99,10 +99,15 @@ fun HomeScreen(
                     HeroSkeleton()
                 }
             }
-            if (state.continueRow.isNotEmpty()) {
+            val effectiveContinue = state.feedRecent.ifEmpty { state.localRecent }
+            if (effectiveContinue.isNotEmpty()) {
                 item("continue") {
-                    HomeRowSection(title = "Continue playing", showAll = false, onSeeAll = {}) {
-                        WideRow(games = state.continueRow, onClick = onGameClick)
+                    HomeRowSection(
+                        title = if (state.feedRecent.isNotEmpty()) "Recently played" else "Continue playing",
+                        showAll = false,
+                        onSeeAll = {},
+                    ) {
+                        WideRow(games = effectiveContinue, onClick = onGameClick)
                     }
                 }
             }

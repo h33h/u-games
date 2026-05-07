@@ -51,6 +51,35 @@ class CatalogRepository(
 
     suspend fun userProfile(): UserProfile = api.userProfile()
 
+    /// Resilient profile fetch: poll CookieManager for `Session_id` on the
+    /// locale-preferred Yandex domain (≤3s), then retry the SSR fetch with
+    /// growing back-off so the avatar/Plus pill eventually reflects the
+    /// authenticated session even if the WebView's cookie flush is still
+    /// in flight after AuthScreen closes. Mirrors the original logic from
+    /// CatalogViewModel.refreshProfile (now removed) so Home + Profile both
+    /// behave the same way.
+    suspend fun userProfileWithRetry(attempts: Int = 4): UserProfile {
+        val cm = android.webkit.CookieManager.getInstance()
+        val preferredHost =
+            if (java.util.Locale.getDefault().language.lowercase().startsWith("ru")) "yandex.ru" else "yandex.com"
+        val deadline = System.currentTimeMillis() + 3000
+        while (System.currentTimeMillis() < deadline) {
+            val raw = cm.getCookie("https://$preferredHost").orEmpty()
+            if (raw.contains("Session_id=")) break
+            kotlinx.coroutines.delay(150)
+        }
+        val delaysMs = longArrayOf(0, 350, 800, 1600)
+        var last: UserProfile = UserProfile(false, "", "", "", false)
+        for (i in 0 until attempts) {
+            val d = delaysMs[i.coerceAtMost(delaysMs.size - 1)]
+            if (d > 0) kotlinx.coroutines.delay(d)
+            val p = runCatching { api.userProfile() }.getOrNull() ?: continue
+            last = p
+            if (p.isAuthorized) return p
+        }
+        return last
+    }
+
     /// Drops every Yandex cookie from the WebView's CookieManager so the next
     /// request to /games/ is anonymous. The Ktor HTTP client reads cookies
     /// directly from CookieManager via AndroidWebViewCookieStorage, so a single

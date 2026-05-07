@@ -37,7 +37,7 @@ class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
         refresh()
         viewModelScope.launch {
             combine(recent, favorites) { r, f -> r to f }.collect { (r, f) ->
-                _state.update { it.copy(continueRow = r.take(12), favoritesRow = f.take(12)) }
+                _state.update { it.copy(localRecent = r.take(12), favoritesRow = f.take(12)) }
             }
         }
     }
@@ -48,14 +48,15 @@ class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
             val result = runCatching { repository.firstFeedWithBlocks() }
             result.fold(
                 onSuccess = { feed ->
-                    val (hero, spotlight, genreRows) = digest(feed.blocks, feed.flatGames)
+                    val digested = digest(feed.blocks, feed.flatGames)
                     _state.update {
                         it.copy(
                             isLoading = false,
                             error = null,
-                            hero = hero,
-                            spotlight = spotlight,
-                            genreRows = genreRows,
+                            hero = digested.hero,
+                            feedRecent = digested.feedRecent,
+                            spotlight = digested.spotlight,
+                            genreRows = digested.genreRows,
                         )
                     }
                 },
@@ -73,32 +74,53 @@ class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
 
     private fun refreshProfile() {
         viewModelScope.launch {
-            val p = runCatching { repository.userProfile() }.getOrNull()
+            val p = runCatching { repository.userProfileWithRetry() }.getOrNull()
             if (p != null) _state.update { it.copy(profile = p) }
         }
     }
 
-    /// Picks Hero / Spotlight / per-genre rows from the editorial blocks.
-    /// Hero falls back to the highest-rated flat game so the page never
-    /// renders without one when the feed misses an `l`-sized block.
-    private fun digest(
-        blocks: List<FeedBlock>,
-        flat: List<Game>,
-    ): Triple<Game?, SpotlightBlock?, List<GenreRow>> {
-        val heroBlock = blocks.firstOrNull { it.type == "categorized" && it.size == "l" }
+    private data class Digest(
+        val hero: Game?,
+        val feedRecent: List<Game>,
+        val spotlight: SpotlightBlock?,
+        val genreRows: List<GenreRow>,
+    )
+
+    /// Picks Hero / Spotlight / per-genre rows + server-side recents from the
+    /// editorial blocks. Hero falls back to the highest-rated flat game so
+    /// the page never renders without one. Genre rows include any non-promo,
+    /// non-recent block with a non-empty title and ≥3 items so the layout
+    /// stays full even when the feed only marks one block `categorized`.
+    private fun digest(blocks: List<FeedBlock>, flat: List<Game>): Digest {
+        fun isRecent(b: FeedBlock) = b.type.contains("recent", ignoreCase = true)
+        fun isPromo(b: FeedBlock) = b.type.equals("promo", ignoreCase = true)
+
+        val recentBlock = blocks.firstOrNull(::isRecent)
+        val heroBlock = blocks.firstOrNull {
+            !isRecent(it) && !isPromo(it) && it.size == "l"
+        } ?: blocks.firstOrNull { !isRecent(it) && !isPromo(it) && it.items.isNotEmpty() }
         val hero = heroBlock?.items?.firstOrNull() ?: flat.maxByOrNull { it.ratingCount }
+
         val spotlightBlock = blocks.firstOrNull {
-            it.type == "categorized" && it.size == "s" && it.items.size >= 5
+            !isRecent(it) && !isPromo(it) && it !== heroBlock
+                && it.size == "s" && it.items.size >= 5 && it.title.isNotEmpty()
         }
         val spotlight = spotlightBlock?.let { SpotlightBlock(it.title, it.items) }
+
+        val excluded = setOfNotNull(heroBlock, spotlightBlock, recentBlock)
         val genreRows = blocks
-            .filter { it.type == "categorized" && it !== spotlightBlock }
+            .asSequence()
+            .filter { !isRecent(it) && !isPromo(it) && it !in excluded }
+            .filter { it.title.isNotEmpty() && it.items.size >= 3 }
             .take(8)
-            .map { b ->
-                val items = if (b === heroBlock) b.items.drop(1) else b.items
-                GenreRow(b.title, items)
-            }
-            .filter { it.games.isNotEmpty() }
-        return Triple(hero, spotlight, genreRows)
+            .map { GenreRow(it.title, it.items) }
+            .toList()
+
+        return Digest(
+            hero = hero,
+            feedRecent = recentBlock?.items.orEmpty().take(12),
+            spotlight = spotlight,
+            genreRows = genreRows,
+        )
     }
 }

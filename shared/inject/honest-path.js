@@ -32,7 +32,15 @@
           if ('isAdvStickyBannerEnabled' in result) result.isAdvStickyBannerEnabled = false;
           if (result.request) {
             result.request.withWorldWideAdv = false;
-            result.request.isPWA = true;
+            // Do NOT force isPWA = true here. Yandex's SSR uses isPWA to
+            // decide how to construct __playPageData__.gameSrc — when
+            // isPWA is true, the iframe URL is emitted without the
+            // `?sdk=/sdk/_/v2.xxx.js` query parameter (the assumption
+            // being that a real PWA install would host the SDK locally).
+            // Without that query the iframe HTML never injects the
+            // YaGames SDK <script> tag, window.YaGames is never assigned,
+            // and any title that uses the SDK (Construct 3 / GamePush
+            // games like 388978) crashes on YaGames.init.
             result.request.hidePaymentsAndCurrency = true;
           }
           // Extract Yandex's authoritative orientation hint. Lives at

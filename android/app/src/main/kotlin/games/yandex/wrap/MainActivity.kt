@@ -9,7 +9,6 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import games.yandex.wrap.catalog.Game
@@ -27,7 +26,6 @@ import games.yandex.wrap.ui.profile.AboutScreen
 import games.yandex.wrap.ui.profile.ProfileScreen
 import games.yandex.wrap.ui.profile.ProfileViewModel
 import games.yandex.wrap.ui.theme.UGamesTheme
-import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
@@ -52,10 +50,10 @@ class MainActivity : ComponentActivity() {
             ?.let { TabPushed.Game(appId = it, title = "") }
             ?: TabPushed.None
 
+        // Yandex maintains the recents list server-side per profile, so
+        // we don't track local opens here — Home re-fetches the feed on
+        // game-session-end (see homeVm.onGameSessionEnded below).
         val openGame: (Game, (TabPushed) -> Unit) -> Unit = { game, push ->
-            lifecycleScope.launch {
-                runCatching { app.catalogRepository.recordOpen(game) }
-            }
             push(TabPushed.Game(game.appId, game.title))
         }
 

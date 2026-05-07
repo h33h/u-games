@@ -8,7 +8,6 @@ import SwiftUI
 /// Tab-bar hides whenever a "pushed" view (Profile or About) is on screen.
 struct TabContainer: View {
     @ObservedObject var catalogService: CatalogService
-    @ObservedObject var recentStore: RecentGamesStore
     @ObservedObject var favoritesStore: FavoritesStore
     let onLogsRequest: () -> Void
     let onGameOpen: (Game) -> Void
@@ -23,7 +22,6 @@ struct TabContainer: View {
 
     init(
         catalogService: CatalogService,
-        recentStore: RecentGamesStore,
         favoritesStore: FavoritesStore,
         onLogsRequest: @escaping () -> Void,
         onGameOpen: @escaping (Game) -> Void,
@@ -31,7 +29,6 @@ struct TabContainer: View {
         onSignOut: @escaping () -> Void,
     ) {
         self.catalogService = catalogService
-        self.recentStore = recentStore
         self.favoritesStore = favoritesStore
         self.onLogsRequest = onLogsRequest
         self.onGameOpen = onGameOpen
@@ -40,7 +37,6 @@ struct TabContainer: View {
         _homeVM = StateObject(
             wrappedValue: HomeViewModel(
                 service: catalogService,
-                recents: recentStore,
                 favorites: favoritesStore,
             )
         )

@@ -22,21 +22,6 @@ interface FavoritesDao {
 }
 
 @Dao
-interface RecentGamesDao {
-    @Query("SELECT * FROM recent_games ORDER BY openedAtMs DESC LIMIT :limit")
-    fun observe(limit: Int = 20): kotlinx.coroutines.flow.Flow<List<RecentGameEntity>>
-
-    @Query("SELECT * FROM recent_games ORDER BY openedAtMs DESC LIMIT :limit")
-    suspend fun latest(limit: Int = 20): List<RecentGameEntity>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(entity: RecentGameEntity)
-
-    @Query("DELETE FROM recent_games WHERE appId NOT IN (SELECT appId FROM recent_games ORDER BY openedAtMs DESC LIMIT :keep)")
-    suspend fun trim(keep: Int = 50)
-}
-
-@Dao
 interface GameCacheDao {
     @Query("SELECT * FROM game_cache WHERE updatedAtMs >= :sinceMs ORDER BY updatedAtMs DESC")
     suspend fun fresh(sinceMs: Long): List<GameCacheEntity>

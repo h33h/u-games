@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -35,9 +34,6 @@ class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
-    val recent: StateFlow<List<Game>> = repository.recentGames()
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-
     val favorites: StateFlow<List<Game>> = repository.favoritesAsGames()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -46,9 +42,7 @@ class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
     init {
         refresh()
         viewModelScope.launch {
-            combine(recent, favorites) { r, f -> r to f }.collect { (r, f) ->
-                _state.update { it.copy(localRecent = r.take(12), favoritesRow = f.take(12)) }
-            }
+            favorites.collect { f -> _state.update { it.copy(favoritesRow = f.take(12)) } }
         }
     }
 

@@ -4,8 +4,6 @@ import games.yandex.wrap.data.FavoritesDao
 import games.yandex.wrap.data.GameCacheDao
 import games.yandex.wrap.data.GameCacheEntity
 import games.yandex.wrap.data.FavoriteEntity
-import games.yandex.wrap.data.RecentGameEntity
-import games.yandex.wrap.data.RecentGamesDao
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -13,7 +11,6 @@ class CatalogRepository(
     private val api: CatalogApi,
     private val cache: GameCacheDao,
     private val favorites: FavoritesDao,
-    private val recents: RecentGamesDao,
 ) {
 
     suspend fun firstFeedPage(gamesPerPage: Int = 24): FeedPage {
@@ -121,24 +118,6 @@ class CatalogRepository(
         list.map { it.appId }.toSet()
     }
 
-    fun recentGames(limit: Int = 20): Flow<List<Game>> =
-        recents.observe(limit).map { list -> list.map { it.toGame() } }
-
-    suspend fun recordOpen(game: Game) {
-        recents.insert(
-            RecentGameEntity(
-                appId = game.appId,
-                title = game.title,
-                rating = game.rating,
-                ratingCount = game.ratingCount,
-                coverUrl = game.coverUrl,
-                iconUrl = game.iconUrl,
-                openedAtMs = System.currentTimeMillis(),
-            )
-        )
-        recents.trim()
-    }
-
     suspend fun isFavorite(appId: Long): Boolean = favorites.isFavorite(appId)
 
     suspend fun toggleFavorite(game: Game) {
@@ -178,17 +157,6 @@ private fun GameCacheEntity.toGame(): Game = Game(
     iconUrl = iconUrl,
     categories = categories,
     developer = developer,
-)
-
-private fun RecentGameEntity.toGame(): Game = Game(
-    appId = appId,
-    title = title,
-    rating = rating,
-    ratingCount = ratingCount,
-    coverUrl = coverUrl,
-    iconUrl = iconUrl,
-    categories = emptyList(),
-    developer = "",
 )
 
 private fun FavoriteEntity.toGame(): Game = Game(

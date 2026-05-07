@@ -26,11 +26,9 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var isLoading: Bool = false
     @Published private(set) var error: String?
     @Published private(set) var hero: Game?
-    /// Local recents (RecentGamesStore). Fallback for the Continue row when
-    /// the server-side `recentGames` is empty (anonymous user).
-    @Published private(set) var continueRow: [Game] = []
-    /// Server-side `recentGames` from the authenticated feed. Overrides
-    /// `continueRow` for the Continue row label.
+    /// Server-side `recentGames` from the authenticated feed. Drives the
+    /// "My games" row on Home — Yandex tracks recents per profile so we
+    /// no longer maintain a local fallback list.
     @Published private(set) var feedRecent: [Game] = []
     @Published private(set) var favoritesRow: [Game] = []
     @Published private(set) var spotlight: SpotlightBlock?
@@ -38,7 +36,6 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var profile: UserProfile = .anonymous
 
     private let service: CatalogService
-    private let recents: RecentGamesStore
     private let favorites: FavoritesStore
     private var cancellables = Set<AnyCancellable>()
     private var loaded = false
@@ -47,14 +44,9 @@ final class HomeViewModel: ObservableObject {
     /// fetch, so 6 keeps cold start under a second on a fast network.
     private let categoryRowLimit = 6
 
-    init(service: CatalogService, recents: RecentGamesStore, favorites: FavoritesStore) {
+    init(service: CatalogService, favorites: FavoritesStore) {
         self.service = service
-        self.recents = recents
         self.favorites = favorites
-        recents.$games
-            .receive(on: RunLoop.main)
-            .sink { [weak self] g in self?.continueRow = Array(g.prefix(12)) }
-            .store(in: &cancellables)
         favorites.$games
             .receive(on: RunLoop.main)
             .sink { [weak self] g in self?.favoritesRow = Array(g.prefix(12)) }

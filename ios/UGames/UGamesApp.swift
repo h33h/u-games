@@ -44,7 +44,6 @@ func parseDeepLink(_ url: URL) -> Int64? {
 struct RootView: View {
     @State private var route: Route = .catalog
     @StateObject private var catalogService = CatalogService()
-    @StateObject private var recentStore = RecentGamesStore.shared
     @StateObject private var favoritesStore = FavoritesStore.shared
     private let injectedScripts = InjectedScripts.load()
     private let blockList = BlockList.load()
@@ -56,11 +55,11 @@ struct RootView: View {
             case .catalog:
                 TabContainer(
                     catalogService: catalogService,
-                    recentStore: recentStore,
                     favoritesStore: favoritesStore,
                     onLogsRequest: { route = .logs },
                     onGameOpen: { game in
-                        recentStore.record(game)
+                        // Yandex maintains the recents list server-side
+                        // — no local store to update before launching.
                         route = .game(appId: game.appId, title: game.title)
                     },
                     onLoginClick: { route = .auth },

@@ -25,6 +25,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -38,7 +41,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -94,12 +102,24 @@ fun GameDetailScreen(
     val systemBarsPadding: PaddingValues = WindowInsets.systemBars.asPaddingValues()
     val statusBarsPadding: PaddingValues = WindowInsets.statusBars.asPaddingValues()
 
+    // Index of the currently expanded screenshot, or -1 when the
+    // fullscreen viewer is dismissed. `rememberSaveable` so the
+    // fullscreen state survives config changes (rotation).
+    var fullscreenIndex by rememberSaveable { mutableStateOf(-1) }
+
+    val ctaSolidHeight = 70.dp  // button + 18dp bottom padding cushion
+    val ctaGradientHeight = 90.dp
+    val ctaTotalHeight = ctaSolidHeight + ctaGradientHeight
     Box(modifier = Modifier.fillMaxSize().background(UGColors.Bg0)) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
+            // Bottom padding = system inset + the entire CTA strip
+            // (solid + gradient). Matches the sticky CTA so the
+            // Information block can scroll fully into view without the
+            // last row hiding under the fade.
             contentPadding = PaddingValues(
                 top = 0.dp,
-                bottom = systemBarsPadding.calculateBottomPadding() + 110.dp,
+                bottom = systemBarsPadding.calculateBottomPadding() + ctaTotalHeight + 8.dp,
             ),
         ) {
             item {
@@ -132,6 +152,7 @@ fun GameDetailScreen(
                     screenshots = state.detail?.screenshots.orEmpty(),
                     isLoading = state.isLoadingDetail,
                     haloHex = game.mainColor,
+                    onScreenshotClick = { idx -> fullscreenIndex = idx },
                 )
             }
             item { Spacer(Modifier.height(24.dp)) }
@@ -158,8 +179,20 @@ fun GameDetailScreen(
             item { InformationBlock(game = game, detail = state.detail) }
         }
         StickyPlayCta(
+            modifier = Modifier.align(Alignment.BottomCenter),
             bottomInset = systemBarsPadding.calculateBottomPadding(),
+            gradientHeight = ctaGradientHeight,
+            solidHeight = ctaSolidHeight,
             onPlay = { onPlay(game) },
+        )
+    }
+
+    val screenshots = state.detail?.screenshots.orEmpty()
+    if (fullscreenIndex in screenshots.indices) {
+        ScreenshotsFullscreen(
+            screenshots = screenshots,
+            initialIndex = fullscreenIndex,
+            onDismiss = { fullscreenIndex = -1 },
         )
     }
 }
@@ -345,6 +378,7 @@ private fun ScreenshotsRow(
     screenshots: List<String>,
     isLoading: Boolean,
     haloHex: String?,
+    onScreenshotClick: (Int) -> Unit,
 ) {
     when {
         isLoading && screenshots.isEmpty() -> Column {
@@ -377,7 +411,7 @@ private fun ScreenshotsRow(
                 contentPadding = PaddingValues(horizontal = 18.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                items(screenshots) { url ->
+                itemsIndexed(screenshots) { idx, url ->
                     Box(
                         modifier = Modifier
                             .width(220.dp)
@@ -395,7 +429,8 @@ private fun ScreenshotsRow(
                                 width = 1.dp,
                                 color = halo.copy(alpha = UGColors.HaloBorderAlpha),
                                 shape = RoundedCornerShape(16.dp),
-                            ),
+                            )
+                            .clickable { onScreenshotClick(idx) },
                     ) {
                         AsyncImage(
                             model = url,
@@ -505,7 +540,10 @@ private fun InformationBlock(game: Game, detail: AppDetail?) {
 
 @Composable
 private fun StickyPlayCta(
+    modifier: Modifier = Modifier,
     bottomInset: androidx.compose.ui.unit.Dp,
+    gradientHeight: androidx.compose.ui.unit.Dp,
+    solidHeight: androidx.compose.ui.unit.Dp,
     onPlay: () -> Unit,
 ) {
     val scale = remember { Animatable(1.0f) }
@@ -515,25 +553,37 @@ private fun StickyPlayCta(
             scale.animateTo(1.0f, animationSpec = tween(1200, easing = FastOutSlowInEasing))
         }
     }
-    Box(
-        modifier = Modifier.fillMaxWidth().padding(bottom = bottomInset),
-        contentAlignment = Alignment.BottomCenter,
-    ) {
+    Box(modifier = modifier.fillMaxWidth()) {
+        // Two stacked, full-width strips — gradient fade on top, solid
+        // black underneath. Together they hide whatever the LazyColumn
+        // is rendering behind the CTA, including the accent shadow's
+        // halo on either side of the button.
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(gradientHeight)
+                    .background(
+                        Brush.verticalGradient(
+                            0.0f to Color.Transparent,
+                            1.0f to UGColors.Bg0,
+                        )
+                    ),
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(solidHeight + bottomInset)
+                    .background(UGColors.Bg0),
+            )
+        }
+        // Button is centered horizontally, anchored to the solid
+        // strip's vertical middle so it sits cleanly above the
+        // home-indicator inset.
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(120.dp)
-                .background(
-                    Brush.verticalGradient(
-                        0.0f to Color.Transparent,
-                        0.3f to UGColors.Bg0.copy(alpha = 0.6f),
-                        1.0f to UGColors.Bg0,
-                    )
-                ),
-        )
-        Box(
-            modifier = Modifier
-                .padding(bottom = 18.dp)
+                .align(Alignment.BottomCenter)
+                .padding(bottom = bottomInset + (solidHeight - 50.dp) / 2)
                 .scale(scale.value)
                 .shadow(
                     elevation = 18.dp,
@@ -550,6 +600,92 @@ private fun StickyPlayCta(
             Text(text = "▶ Play now", color = Color.Black, style = UGType.BodyS)
         }
     }
+}
+
+/**
+ * Full-screen pager over the JSON-LD screenshot list. Tap-to-dismiss,
+ * horizontal swipe to flip between shots. Uses `/orig` size — at this
+ * point bandwidth is no longer the constraint, image quality is.
+ *
+ * Hosted in a `Dialog` so the underlying Detail's scroll position
+ * stays put when the viewer closes.
+ */
+@Composable
+private fun ScreenshotsFullscreen(
+    screenshots: List<String>,
+    initialIndex: Int,
+    onDismiss: () -> Unit,
+) {
+    val pagerState = rememberPagerState(
+        initialPage = initialIndex.coerceIn(0, (screenshots.size - 1).coerceAtLeast(0)),
+        pageCount = { screenshots.size },
+    )
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.95f))
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center,
+        ) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+            ) { page ->
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    AsyncImage(
+                        // /orig variant — full quality. The list URL
+                        // already trimmed the prefix to a known shape;
+                        // rewriting the suffix keeps that consistent.
+                        model = upgradeToOrig(screenshots[page]),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 14.dp, end = 14.dp)
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable(onClick = onDismiss),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(text = "✕", color = UGColors.TextPrimary, style = UGType.TitleM)
+            }
+            if (screenshots.size > 1) {
+                Text(
+                    text = "${pagerState.currentPage + 1} / ${screenshots.size}",
+                    color = UGColors.TextSecondary,
+                    style = UGType.Caption,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 28.dp)
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                )
+            }
+        }
+    }
+}
+
+/** Replace the `pjpg500x280` (or whatever) suffix with `orig` so the
+ *  fullscreen viewer renders the full-quality screenshot. Mirrors the
+ *  rewrite logic in CatalogApi.rewriteAvatarSize. */
+private fun upgradeToOrig(url: String): String {
+    val lastSlash = url.lastIndexOf('/')
+    if (lastSlash <= 0) return url
+    return url.substring(0, lastSlash + 1) + "orig"
 }
 
 // --- helpers ---------------------------------------------------------

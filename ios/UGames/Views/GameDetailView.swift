@@ -26,6 +26,17 @@ struct GameDetailView: View {
     let onSimilarClick: (Game) -> Void
 
     @State private var ctaScale: CGFloat = 1.0
+    /// `nil` when the screenshot viewer is closed; otherwise the
+    /// initial page index. Wrapped in an Identifiable struct because
+    /// `.fullScreenCover(item:)` needs that.
+    @State private var fullscreen: ScreenshotPager?
+
+    /// Heights for the two stacked CTA strips. The ScrollView's bottom
+    /// inset matches gradient + solid + safe-area-bottom so the
+    /// Information block scrolls fully into view above the gradient
+    /// instead of fading under it.
+    private let ctaGradientHeight: CGFloat = 90
+    private let ctaSolidHeight: CGFloat = 70
 
     private var halo: Color { Color(hex: viewModel.game.mainColor) ?? UGColor.accent }
     private var placeholder: Color { Color(hex: viewModel.game.mainColor) ?? UGColor.elevated }
@@ -47,7 +58,10 @@ struct GameDetailView: View {
                     similarRow
                     Spacer().frame(height: 24)
                     informationBlock
-                    Spacer().frame(height: 110)  // sticky CTA + safe area
+                    // Bottom inset matches the sticky CTA strip so the
+                    // Information block can scroll fully into view
+                    // above the gradient instead of fading under it.
+                    Spacer().frame(height: ctaGradientHeight + ctaSolidHeight + 8)
                 }
             }
             .ignoresSafeArea(edges: .top)
@@ -62,6 +76,13 @@ struct GameDetailView: View {
                     ctaScale = 1.04
                 }
             }
+        }
+        .fullScreenCover(item: $fullscreen) { pager in
+            ScreenshotsFullscreenView(
+                screenshots: viewModel.detail?.screenshots ?? [],
+                initialIndex: pager.index,
+                onDismiss: { fullscreen = nil }
+            )
         }
     }
 
@@ -254,8 +275,9 @@ struct GameDetailView: View {
                     .padding(.horizontal, 18)
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 10) {
-                        ForEach(urls, id: \.self) { url in
+                        ForEach(Array(urls.enumerated()), id: \.offset) { idx, url in
                             screenshotTile(url: url)
+                                .onTapGesture { fullscreen = ScreenshotPager(index: idx) }
                         }
                     }
                     .padding(.horizontal, 18)
@@ -418,17 +440,27 @@ struct GameDetailView: View {
     // MARK: Sticky CTA
 
     private var stickyCta: some View {
-        VStack(spacing: 0) {
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0.0),
-                    .init(color: UGColor.bg0.opacity(0.6), location: 0.3),
-                    .init(color: UGColor.bg0, location: 1.0),
-                ],
-                startPoint: .top, endPoint: .bottom
-            )
-            .frame(height: 100)
-            .allowsHitTesting(false)
+        // Full-width sandwich:
+        //   1. Gradient strip on top (transparent → bg0)
+        //   2. Solid bg0 strip underneath, including the safe-area
+        //      bottom inset so the home indicator zone is also covered.
+        // The button is overlaid on the solid strip — its accent halo
+        // shadow stays inside the bg0 area on every side, so no
+        // content peeks through "left" or "right" of it.
+        ZStack(alignment: .bottom) {
+            VStack(spacing: 0) {
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: UGColor.bg0, location: 1.0),
+                    ],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .frame(height: ctaGradientHeight)
+                .allowsHitTesting(false)
+                UGColor.bg0
+                    .frame(height: ctaSolidHeight)
+            }
             Button(action: { onPlay(viewModel.game) }) {
                 Text("▶ Play now")
                     .font(UGFont.bodyS.weight(.heavy))
@@ -441,10 +473,14 @@ struct GameDetailView: View {
                     .scaleEffect(ctaScale)
             }
             .buttonStyle(.borderless)
-            .padding(.bottom, 18)
-            .background(UGColor.bg0)
+            // Center the button vertically inside the solid strip.
+            .padding(.bottom, (ctaSolidHeight - 50) / 2)
         }
         .frame(maxWidth: .infinity)
+        // Pull the sandwich down into the home-indicator inset so the
+        // solid strip flush-fills it; SwiftUI's safe-area drawing keeps
+        // the button itself above the inset thanks to ctaSolidHeight.
+        .background(UGColor.bg0.ignoresSafeArea(edges: .bottom))
     }
 
     // MARK: Helpers
@@ -507,5 +543,87 @@ struct GameDetailView: View {
             return "\(Int(rounded))\(suffix)"
         }
         return String(format: "%.1f%@", rounded, suffix)
+    }
+}
+
+/// Identifiable wrapper for the screenshot fullscreen sheet's
+/// initial-index argument — `.fullScreenCover(item:)` requires
+/// Identifiable, and a bare `Int?` won't compile.
+struct ScreenshotPager: Identifiable, Equatable {
+    let id = UUID()
+    let index: Int
+}
+
+/// Full-screen pager over the JSON-LD screenshot list. Tap-to-dismiss,
+/// horizontal swipe (TabView page style) to flip between shots. Uses
+/// `/orig` size — at this point bandwidth is no longer the constraint,
+/// image quality is.
+struct ScreenshotsFullscreenView: View {
+    let screenshots: [String]
+    let initialIndex: Int
+    let onDismiss: () -> Void
+
+    @State private var page: Int
+
+    init(screenshots: [String], initialIndex: Int, onDismiss: @escaping () -> Void) {
+        self.screenshots = screenshots
+        self.initialIndex = initialIndex
+        self.onDismiss = onDismiss
+        _page = State(initialValue: max(0, min(initialIndex, screenshots.count - 1)))
+    }
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.95).ignoresSafeArea()
+                .onTapGesture(perform: onDismiss)
+            TabView(selection: $page) {
+                ForEach(Array(screenshots.enumerated()), id: \.offset) { idx, url in
+                    AsyncImage(url: URL(string: upgradeToOrig(url))) { phase in
+                        switch phase {
+                        case .success(let img):
+                            img.resizable().aspectRatio(contentMode: .fit)
+                        default:
+                            Color.clear
+                        }
+                    }
+                    .tag(idx)
+                    .padding(.horizontal, 12)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(UGColor.textPrimary)
+                            .frame(width: 36, height: 36)
+                            .background(Color.black.opacity(0.55))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.borderless)
+                }
+                .padding(.horizontal, 14)
+                Spacer()
+                if screenshots.count > 1 {
+                    Text("\(page + 1) / \(screenshots.count)")
+                        .font(UGFont.caption)
+                        .foregroundColor(UGColor.textSecondary)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .background(Color.black.opacity(0.55))
+                        .clipShape(Capsule())
+                        .padding(.bottom, 28)
+                }
+            }
+        }
+    }
+
+    /// Replace the `pjpg500x280` (or whatever) suffix with `orig` so
+    /// the fullscreen viewer renders the full-quality screenshot.
+    /// Mirrors the rewrite logic in CatalogService.rewriteAvatarSize.
+    private func upgradeToOrig(_ url: String) -> String {
+        guard let lastSlash = url.lastIndex(of: "/"), lastSlash != url.startIndex else { return url }
+        return String(url[..<url.index(after: lastSlash)]) + "orig"
     }
 }

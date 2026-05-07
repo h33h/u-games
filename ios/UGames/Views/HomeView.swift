@@ -41,14 +41,13 @@ struct HomeView: View {
                             .padding(.horizontal, 14)
                     }
 
-                    if !viewModel.continueRow.isEmpty {
-                        sectionHeader(title: "Continue playing", showAll: false, onSeeAll: {})
-                        wideRow(games: viewModel.continueRow)
-                    }
-
-                    if !viewModel.favoritesRow.isEmpty {
-                        sectionHeader(title: "Your favorites", showAll: false, onSeeAll: {})
-                        wideRow(games: viewModel.favoritesRow)
+                    let effectiveContinue = viewModel.feedRecent.isEmpty ? viewModel.continueRow : viewModel.feedRecent
+                    if !effectiveContinue.isEmpty {
+                        sectionHeader(
+                            title: viewModel.feedRecent.isEmpty ? "Continue playing" : "Recently played",
+                            showAll: false, onSeeAll: {},
+                        )
+                        wideRow(games: effectiveContinue)
                     }
 
                     if let spotlight = viewModel.spotlight {

@@ -5,6 +5,7 @@ import SwiftUI
 /// "Settings" rows. Long-press on the avatar still opens diagnostic logs.
 struct ProfileView: View {
     @ObservedObject var service: CatalogService
+    let onBack: () -> Void
     let onLoginClick: () -> Void
     let onLogsClick: () -> Void
     let onAboutClick: () -> Void
@@ -14,7 +15,18 @@ struct ProfileView: View {
         ZStack(alignment: .top) {
             UGColor.bg0.ignoresSafeArea()
             VStack(alignment: .leading, spacing: 0) {
-                Spacer().frame(height: 24)
+                HStack {
+                    Button(action: onBack) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundColor(UGColor.textPrimary)
+                            .padding(8)
+                    }
+                    Text("Profile").font(UGFont.titleM).foregroundColor(UGColor.textPrimary)
+                    Spacer()
+                }
+                .padding(.horizontal, 8)
+                Spacer().frame(height: 16)
                 hero
                     .padding(.horizontal, 18)
                 Spacer().frame(height: 28)

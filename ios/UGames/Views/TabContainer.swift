@@ -1,12 +1,11 @@
 import SwiftUI
 
-/// Phase-2 tab container. Hosts Home / Browse / Favorites / Profile and a
-/// per-tab About push (Profile-only for this phase). Game / Auth / Logs are
-/// driven by the parent `RootView` global route — Phase 3 will move them
-/// into per-tab stacks.
+/// Phase-2 tab container. Hosts Home / Browse / Favorites tabs; Profile is
+/// pushed from the avatar in Home/Browse top-bars. About is a sub-push
+/// from Profile. Game / Auth / Logs still live at the parent `RootView`
+/// level — phase 3 may move them in.
 ///
-/// `hideBar` is set externally when the parent route is non-`.catalog`, and
-/// also toggles internally while About is pushed.
+/// Tab-bar hides whenever a "pushed" view (Profile or About) is on screen.
 struct TabContainer: View {
     @ObservedObject var catalogService: CatalogService
     @ObservedObject var recentStore: RecentGamesStore
@@ -19,6 +18,7 @@ struct TabContainer: View {
     @StateObject private var homeVM: HomeViewModel
     @StateObject private var browseVM: BrowseViewModel
     @State private var selected: String = "home"
+    @State private var profilePresented: Bool = false
     @State private var aboutPresented: Bool = false
 
     init(
@@ -51,78 +51,85 @@ struct TabContainer: View {
         .init(key: "home", label: "Home", systemIcon: "house.fill"),
         .init(key: "browse", label: "Browse", systemIcon: "square.grid.2x2.fill"),
         .init(key: "favorites", label: "Favorites", systemIcon: "heart.fill"),
-        .init(key: "profile", label: "Profile", systemIcon: "person.crop.circle.fill"),
     ]
 
     var body: some View {
         ZStack {
             UGColor.bg0.ignoresSafeArea()
-            switch selected {
-            case "home":
-                HomeView(
-                    viewModel: homeVM,
-                    onGameClick: onGameOpen,
-                    onOpenBrowse: { selected = "browse" },
-                    onOpenBrowseFiltered: { genre in
-                        browseVM.setGenre(genre)
-                        selected = "browse"
-                    },
-                    onProfileClick: { selected = "profile" },
-                    onProfileLongPress: onLogsRequest,
-                    onShareGame: { _ in /* phase 3: UIActivityViewController */ },
-                )
-            case "browse":
-                BrowseView(
-                    viewModel: browseVM,
-                    profile: catalogService.profile,
-                    onGameClick: onGameOpen,
-                    onProfileClick: { selected = "profile" },
-                    favoritesStore: favoritesStore,
-                )
-            case "favorites":
-                FavoritesView(
-                    favorites: favoritesStore,
-                    onGameClick: onGameOpen,
-                    onBrowse: { selected = "browse" },
-                )
-            case "profile":
+            tabContent
+            if profilePresented {
                 if aboutPresented {
                     AboutView(onBack: { aboutPresented = false })
+                        .transition(.opacity)
                 } else {
                     ProfileView(
                         service: catalogService,
-                        onLoginClick: onLoginClick,
-                        onLogsClick: onLogsRequest,
+                        onBack: { profilePresented = false },
+                        onLoginClick: {
+                            profilePresented = false
+                            onLoginClick()
+                        },
+                        onLogsClick: {
+                            profilePresented = false
+                            onLogsRequest()
+                        },
                         onAboutClick: { aboutPresented = true },
-                        onSignOut: onSignOut,
+                        onSignOut: {
+                            onSignOut()
+                            profilePresented = false
+                        },
                     )
+                    .transition(.opacity)
                 }
-            default:
-                EmptyView()
             }
-            if !(selected == "profile" && aboutPresented) {
+            if !profilePresented {
                 VStack {
                     Spacer()
                     FloatingTabBar(
                         tabs: tabs,
                         selectedKey: selected,
-                        onSelect: { key in
-                            selected = key
-                            // Switching away from Profile resets About so it
-                            // doesn't ghost-render the next time the user
-                            // returns.
-                            if key != "profile" { aboutPresented = false }
-                        },
+                        onSelect: { selected = $0 },
                     )
                 }
             }
         }
     }
 
-    func refreshAfterAuth() {
-        Task {
-            await homeVM.refresh()
-            await catalogService.refreshProfile()
+    @ViewBuilder
+    private var tabContent: some View {
+        switch selected {
+        case "home":
+            HomeView(
+                viewModel: homeVM,
+                onGameClick: onGameOpen,
+                onOpenBrowse: {
+                    browseVM.requestSearchFocus()
+                    selected = "browse"
+                },
+                onOpenBrowseFiltered: { genre in
+                    browseVM.setGenre(genre)
+                    selected = "browse"
+                },
+                onProfileClick: { profilePresented = true },
+                onProfileLongPress: onLogsRequest,
+                onShareGame: { _ in /* phase 3 */ },
+            )
+        case "browse":
+            BrowseView(
+                viewModel: browseVM,
+                profile: catalogService.profile,
+                onGameClick: onGameOpen,
+                onProfileClick: { profilePresented = true },
+                favoritesStore: favoritesStore,
+            )
+        case "favorites":
+            FavoritesView(
+                favorites: favoritesStore,
+                onGameClick: onGameOpen,
+                onBrowse: { selected = "browse" },
+            )
+        default:
+            EmptyView()
         }
     }
 }

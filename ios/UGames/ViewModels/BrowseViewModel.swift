@@ -17,6 +17,10 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var genres: [String] = []
     @Published var selectedGenre: String? = nil
     @Published private(set) var mode: Mode = .feed
+    /// Monotonically increasing tick. BrowseView reads it via .onChange to
+    /// pull keyboard focus into the search field — used by HomeView's
+    /// search-stub so the user lands inside an already-focused input.
+    @Published private(set) var searchFocusRequest: Int = 0
 
     private let service: CatalogService
     private var nextPageId: String?
@@ -93,6 +97,10 @@ final class BrowseViewModel: ObservableObject {
 
     func setGenre(_ g: String?) {
         selectedGenre = g
+    }
+
+    func requestSearchFocus() {
+        searchFocusRequest &+= 1
     }
 
     private func onQueryChanged(_ q: String) {

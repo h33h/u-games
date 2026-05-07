@@ -7,8 +7,10 @@ struct BrowseView: View {
     let onProfileClick: () -> Void
 
     @ObservedObject var favoritesStore: FavoritesStore
+    @FocusState private var searchFocused: Bool
+    @State private var lastTriggerGamesCount: Int = 0
 
-    private let columns = [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 12)]
+    private let columns = [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: 14)]
 
     var body: some View {
         ZStack {
@@ -28,6 +30,14 @@ struct BrowseView: View {
             }
         }
         .task { await viewModel.loadInitialIfNeeded() }
+        .onChange(of: viewModel.searchFocusRequest) { _ in
+            // Tiny delay so the field is laid out before iOS will accept
+            // first-responder focus.
+            Task {
+                try? await Task.sleep(nanoseconds: 150_000_000)
+                searchFocused = true
+            }
+        }
     }
 
     @ViewBuilder
@@ -49,6 +59,7 @@ struct BrowseView: View {
                 .onSubmit { viewModel.submitSearch() }
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
+                .focused($searchFocused)
                 if !viewModel.searchQuery.isEmpty {
                     Button {
                         viewModel.searchQuery = ""
@@ -92,7 +103,7 @@ struct BrowseView: View {
             .padding(24)
         } else {
             ScrollView {
-                LazyVGrid(columns: columns, spacing: 12) {
+                LazyVGrid(columns: columns, spacing: 18) {
                     ForEach(visible) { game in
                         TileGameCard(
                             game: game,
@@ -101,9 +112,14 @@ struct BrowseView: View {
                             onFavoriteToggle: { favoritesStore.toggle(game) },
                         )
                         .onAppear {
-                            // Trigger pagination ~6 tiles before the end of the
-                            // visible window. Match Android's threshold.
-                            if let last = visible.last, game.id == last.id {
+                            // Pagination guard: only fire if the underlying
+                            // games list grew since the last trigger.
+                            // Otherwise a chip filter that hides every new
+                            // page would keep firing loadMore on every tile
+                            // tap.
+                            if let last = visible.last, game.id == last.id,
+                               viewModel.games.count != lastTriggerGamesCount {
+                                lastTriggerGamesCount = viewModel.games.count
                                 viewModel.loadMore()
                             }
                         }
@@ -111,8 +127,14 @@ struct BrowseView: View {
                     if viewModel.isLoadingMore {
                         ProgressView().tint(UGColor.textPrimary).padding(16)
                     }
+                    if viewModel.mode == .search && !visible.isEmpty {
+                        Text("End of search results")
+                            .font(UGFont.caption)
+                            .foregroundColor(UGColor.textMuted)
+                            .padding(20)
+                    }
                 }
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 14)
                 .padding(.top, 4)
                 .padding(.bottom, 96)
             }

@@ -20,7 +20,12 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var isLoading: Bool = false
     @Published private(set) var error: String?
     @Published private(set) var hero: Game?
+    /// Local recents (RecentGamesStore). Fallback for the Continue row when
+    /// the authenticated feed didn't return a server-side recent block.
     @Published private(set) var continueRow: [Game] = []
+    /// Server-side "recently_played" block from the authenticated feed.
+    /// Takes precedence over `continueRow` for the Continue row.
+    @Published private(set) var feedRecent: [Game] = []
     @Published private(set) var favoritesRow: [Game] = []
     @Published private(set) var spotlight: SpotlightBlock?
     @Published private(set) var genreRows: [GenreRow] = []
@@ -73,27 +78,40 @@ final class HomeViewModel: ObservableObject {
         favorites.toggle(game)
     }
 
-    /// Picks Hero / Spotlight / per-genre rows from the editorial blocks.
-    /// Hero falls back to the highest-rated flat game so the page never
-    /// renders without one when the feed misses an `l`-sized block.
+    /// Picks Hero / Spotlight / per-genre rows + server-side recents from
+    /// the editorial blocks. Hero falls back to the highest-rated flat game
+    /// so the page never renders without one. Genre rows include any non-
+    /// promo, non-recent block with a non-empty title and ≥3 items so the
+    /// layout stays full even when the feed only marks one block
+    /// `categorized`.
     private func digest(blocks: [FeedBlock], flat: [Game]) {
-        let heroBlock = blocks.first(where: { $0.type == "categorized" && $0.size == "l" })
+        func isRecent(_ b: FeedBlock) -> Bool {
+            b.type.range(of: "recent", options: .caseInsensitive) != nil
+        }
+        func isPromo(_ b: FeedBlock) -> Bool {
+            b.type.compare("promo", options: .caseInsensitive) == .orderedSame
+        }
+
+        let recentBlock = blocks.first(where: isRecent)
+        let heroBlock = blocks.first(where: { !isRecent($0) && !isPromo($0) && $0.size == "l" })
+            ?? blocks.first(where: { !isRecent($0) && !isPromo($0) && !$0.items.isEmpty })
         hero = heroBlock?.items.first ?? flat.max(by: { $0.ratingCount < $1.ratingCount })
+
         let spotlightBlock = blocks.first(where: {
-            $0.type == "categorized" && $0.size == "s" && $0.items.count >= 5
+            !isRecent($0) && !isPromo($0)
+                && $0.title != heroBlock?.title
+                && $0.size == "s" && $0.items.count >= 5 && !$0.title.isEmpty
         })
         spotlight = spotlightBlock.map { SpotlightBlock(title: $0.title, games: $0.items) }
+
+        let excludedTitles = Set([heroBlock?.title, spotlightBlock?.title, recentBlock?.title].compactMap { $0 })
         let rows = blocks
-            .filter { $0.type == "categorized" }
-            .filter { spotlightBlock == nil || $0.title != spotlightBlock!.title }
+            .filter { !isRecent($0) && !isPromo($0) }
+            .filter { !excludedTitles.contains($0.title) }
+            .filter { !$0.title.isEmpty && $0.items.count >= 3 }
             .prefix(8)
-            .map { b -> GenreRow in
-                let items = (heroBlock != nil && b.title == heroBlock!.title)
-                    ? Array(b.items.dropFirst())
-                    : b.items
-                return GenreRow(title: b.title, games: items)
-            }
-            .filter { !$0.games.isEmpty }
+            .map { GenreRow(title: $0.title, games: $0.items) }
         genreRows = Array(rows)
+        feedRecent = Array((recentBlock?.items ?? []).prefix(12))
     }
 }

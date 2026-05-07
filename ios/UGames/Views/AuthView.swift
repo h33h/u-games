@@ -1,25 +1,88 @@
 import SwiftUI
 @preconcurrency import WebKit
 
+@MainActor
+final class AuthState: ObservableObject {
+    @Published var isLoading: Bool = true
+    @Published var loadError: String?
+    @Published var reloadToken: Int = 0
+
+    func retry() {
+        loadError = nil
+        isLoading = true
+        reloadToken &+= 1
+    }
+}
+
 struct AuthView: View {
     let onClose: () -> Void
+
+    @StateObject private var state = AuthState()
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             UGColor.Surface.base.ignoresSafeArea()
             VStack(spacing: 0) {
                 UGTopBar(title: "Sign in to Yandex", onBack: onClose)
-                AuthWebView(onSignedIn: onClose)
-                    .ignoresSafeArea(edges: .bottom)
+                ZStack {
+                    AuthWebView(state: state, onSignedIn: onClose)
+                        .ignoresSafeArea(edges: .bottom)
+                    if let err = state.loadError {
+                        AuthErrorOverlay(message: err, onRetry: { state.retry() })
+                    } else if state.isLoading {
+                        AuthLoadingOverlay()
+                    }
+                }
             }
         }
     }
 }
 
+private struct AuthLoadingOverlay: View {
+    var body: some View {
+        ZStack {
+            UGColor.Surface.base.ignoresSafeArea()
+            VStack(spacing: UGSpace.l) {
+                ProgressView()
+                    .tint(UGColor.Text.primary)
+                    .scaleEffect(1.4)
+                Text("Signing in via Yandex Passport…")
+                    .font(UGFont.bodyS)
+                    .foregroundColor(UGColor.Text.secondary)
+            }
+        }
+        .transition(.opacity)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Signing in")
+    }
+}
+
+private struct AuthErrorOverlay: View {
+    let message: String
+    let onRetry: () -> Void
+
+    var body: some View {
+        ZStack {
+            UGColor.Surface.base.ignoresSafeArea()
+            EmptyState(
+                systemIcon: "wifi.slash",
+                title: "Couldn't sign in",
+                message: message,
+                ctaLabel: "Try again",
+                onCta: onRetry
+            )
+        }
+        .transition(.opacity)
+    }
+}
+
 private struct AuthWebView: UIViewRepresentable {
+    @ObservedObject var state: AuthState
     let onSignedIn: () -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(onSignedIn: onSignedIn) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(state: state, onSignedIn: onSignedIn)
+    }
 
     static var preferredYandexHost: String {
         let lang = Locale.preferredLanguages.first ?? Locale.current.identifier
@@ -86,9 +149,30 @@ private struct AuthWebView: UIViewRepresentable {
         return web
     }
 
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
+    func updateUIView(_ uiView: WKWebView, context: Context) {
+        if state.reloadToken != context.coordinator.lastReloadToken {
+            context.coordinator.lastReloadToken = state.reloadToken
+            context.coordinator.firstLoadDone = false
+            uiView.load(URLRequest(url: AuthWebView.passportAuthURL))
+            Log.write("auth", "manual retry reload token=\(state.reloadToken)")
+        }
+    }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+        let state: AuthState
+        let onSignedIn: () -> Void
+        private var dismissed = false
+        private var watcherTask: Task<Void, Never>?
+        var firstLoadDone = false
+        var lastReloadToken: Int = 0
+
+        init(state: AuthState, onSignedIn: @escaping () -> Void) {
+            self.state = state
+            self.onSignedIn = onSignedIn
+        }
+
+        deinit { watcherTask?.cancel() }
+
         func userContentController(_ userContentController: WKUserContentController,
                                    didReceive message: WKScriptMessage) {
             guard message.name == "ugamesLog" else { return }
@@ -105,16 +189,6 @@ private struct AuthWebView: UIViewRepresentable {
             }
             Log.write(tag, msg)
         }
-
-        let onSignedIn: () -> Void
-        private var dismissed = false
-        private var watcherTask: Task<Void, Never>?
-
-        init(onSignedIn: @escaping () -> Void) {
-            self.onSignedIn = onSignedIn
-        }
-
-        deinit { watcherTask?.cancel() }
 
         func startSessionWatcher(webView: WKWebView) {
             watcherTask?.cancel()
@@ -175,21 +249,52 @@ private struct AuthWebView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
             Log.write("nav", "auth commit \(webView.url?.absoluteString ?? "?")")
+            if !firstLoadDone {
+                Task { @MainActor in self.state.isLoading = false }
+            }
             check(webView)
         }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             Log.write("nav", "auth finish \(webView.url?.absoluteString ?? "?")")
+            firstLoadDone = true
+            Task { @MainActor in
+                self.state.isLoading = false
+                self.state.loadError = nil
+            }
             check(webView)
         }
+
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             Log.write("nav", "auth start \(webView.url?.absoluteString ?? "?")")
+            if !firstLoadDone {
+                Task { @MainActor in self.state.isLoading = true }
+            }
             check(webView)
         }
+
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             Log.write("nav", "auth fail \((error as NSError).code) \(error.localizedDescription)")
+            if !firstLoadDone {
+                let message = error.localizedDescription
+                Task { @MainActor in
+                    self.state.isLoading = false
+                    self.state.loadError = message
+                }
+            }
         }
+
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             Log.write("nav", "auth failProv \((error as NSError).code) \(error.localizedDescription)")
+            let nsErr = error as NSError
+            // -999 (NSURLErrorCancelled) is a transient cancel during nav redirects — ignore.
+            if !firstLoadDone, nsErr.code != NSURLErrorCancelled {
+                let message = error.localizedDescription
+                Task { @MainActor in
+                    self.state.isLoading = false
+                    self.state.loadError = message
+                }
+            }
         }
     }
 }

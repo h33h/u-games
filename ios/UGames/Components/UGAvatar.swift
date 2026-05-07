@@ -1,15 +1,11 @@
 import SwiftUI
 
-/// Circular user avatar with two states: signed-in (remote image +
-/// optional Yandex Plus accent ring) and signed-out (system silhouette
-/// on `elevated`). Used in the Home greeting and the Profile screen
-/// hero — same model, two diameters.
 struct UGAvatar: View {
     let profile: UserProfile
     var diameter: CGFloat = UGSize.avatarS
-    /// Accent ring stroke width when the user has Yandex Plus.
+
     var plusBorderWidth: CGFloat = 2
-    /// Glyph size used for the signed-out fallback.
+
     var fallbackIconSize: CGFloat = 22
 
     var body: some View {

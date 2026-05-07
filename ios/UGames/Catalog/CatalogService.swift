@@ -19,10 +19,7 @@ final class CatalogService: ObservableObject {
     @Published private(set) var hasMore: Bool = false
     @Published private(set) var error: String?
     @Published private(set) var profile: UserProfile = .anonymous
-    /// Bumped by RootView each time the user closes a game and returns to
-    /// the catalog. HomeViewModel observes it to re-fetch the feed so
-    /// Yandex's server-side `recentGames` (now including the game that
-    /// was just played) lands in feedRecent.
+
     @Published private(set) var gameSessionEndCount: Int = 0
 
     func notifyGameSessionEnded() { gameSessionEndCount &+= 1 }
@@ -108,14 +105,6 @@ final class CatalogService: ObservableObject {
         }
     }
 
-    /// Re-fetch the profile up to `attempts` times with growing back-off.
-    /// Reason: just after the auth WebView redirects to `/games/`, the new
-    /// `Session_id` cookie has only just landed in WKWebView's cookie store.
-    /// `SharedCookieStore` mirrors it to `URLSession.shared` asynchronously,
-    /// so an immediate fetch may still see the anonymous session and report
-    /// `isAuthorized=false`. Force one synchronous WK→shared sync, poll the
-    /// shared store for `Session_id` (max 3s), then retry to absorb residual
-    /// SSR/edge propagation latency.
     func refreshProfile(attempts: Int = 4) async {
         Log.write("profile", "refreshProfile begin")
         await SharedCookieStore.shared.syncToShared()
@@ -167,7 +156,7 @@ final class CatalogService: ObservableObject {
                 store.deleteCookie(cookie)
             }
         }
-        // Clear WKWebView cookies too via SharedCookieStore observer side.
+
         await SharedCookieStore.shared.clearYandexCookies()
         profile = .anonymous
     }
@@ -192,11 +181,6 @@ final class CatalogService: ObservableObject {
         let hasNext: Bool
     }
 
-    /// Block-aware /feed/ caller for Home. Returns the editorial block list
-    /// plus a deduped flat list and the genre vocabulary harvested from
-    /// `siteNavigationLinks.categories`. Same query params as `fetchFeed` so
-    /// the response shape matches; the only difference is preservation of
-    /// block structure on the client side.
     func fetchFeedWithBlocks(
         gamesPerPage: Int = 24,
         lang: String = "en",
@@ -240,12 +224,10 @@ final class CatalogService: ObservableObject {
         let pageInfo = root["pageInfo"] as? [String: Any]
         let nextPageId = pageInfo?["nextPageId"] as? String
         let hasNext = (pageInfo?["hasNextPage"] as? Bool) ?? (nextPageId != nil)
-        // Server-side recents live at the response root, not inside feed[].
+
         let recentGames = ((root["recentGames"] as? [[String: Any]]) ?? [])
             .compactMap(GameDecoder.parse)
-        // siteNavigationLinks.categories is empty in the JSON response;
-        // categories are only available via the SSR HTML __appData__.
-        // fetchCategories() is the right place to load them.
+
         return FeedWithBlocks(
             blocks: blocks,
             flatGames: flat,
@@ -256,10 +238,6 @@ final class CatalogService: ObservableObject {
         )
     }
 
-    /// REST search endpoint. Returns a paginated `FeedPage`-shaped response
-    /// (the same JSON shape as `/feed/`) so BrowseViewModel can drive paging
-    /// through `nextPageId`. The previous HTML-scrape path silently capped
-    /// at one page of ~24 results — that's why search looked broken.
     func fetchSearchPaginated(
         query: String,
         pageId: String? = nil,
@@ -291,10 +269,6 @@ final class CatalogService: ObservableObject {
         return FeedPage(games: games, nextPageId: nextPageId, hasNext: hasNext)
     }
 
-    /// Fetches the localized list of category tabs by scraping the SSR
-    /// `__appData__.categoriesForTabs` from the catalog landing page. Yandex
-    /// does NOT expose this list via JSON; the only stable source is the
-    /// HTML root document. Each entry is `(name, title, gamesCount)`.
     func fetchCategories(lang: String = "en") async throws -> [GameCategory] {
         let host = Self.preferredYandexHost
         let preferredLang = host == "yandex.ru" ? "ru" : lang
@@ -318,8 +292,6 @@ final class CatalogService: ObservableObject {
         }
     }
 
-    /// Pulls a single feed page in legacy (flat) form. Phase 2 keeps this for
-    /// Browse pagination; Phase 3 may unify with the block-aware caller.
     func fetchFeed(pageId: String?, gamesPerPage: Int = 24, lang: String = "en") async throws -> FeedPage {
         var components = URLComponents(string: "https://yandex.com/games/api/catalogue/v2/feed/")!
         var items = [
@@ -349,18 +321,6 @@ final class CatalogService: ObservableObject {
         return FeedPage(games: games, nextPageId: next, hasNext: hasNext)
     }
 
-    /// Fetch rich game-detail metadata that the JSON `/feed/` endpoint
-    /// does not expose: long description, screenshots, published date.
-    ///
-    /// Yandex serves these only via JSON-LD inside the SSR HTML at
-    /// `/games/app/<id>` (`<script type="application/ld+json">`).
-    /// `apiData.appInfo` in `__appData__` is just a base64 version
-    /// stamp; there is no JSON endpoint behind it that returns the
-    /// full detail blob.
-    ///
-    /// Screenshot URLs come back with `/orig` suffix — multi-MB PNGs.
-    /// We rewrite to `pjpg500x280` (~60 KB), the next-most-common
-    /// pre-rendered size on Yandex's avatars storage.
     func fetchAppDetail(appId: Int64, lang: String = "en") async -> AppDetail {
         let host = Self.preferredYandexHost
         let preferredLang = host == "yandex.ru" ? "ru" : lang
@@ -383,8 +343,6 @@ final class CatalogService: ObservableObject {
             }
             guard let game = gameNode else { return .empty }
 
-            // Prefer the multi-paragraph description on mainEntityOfPage;
-            // the top-level `description` is the short OG tagline.
             let mainEntity = game["mainEntityOfPage"] as? [String: Any]
             let rawDesc = (mainEntity?["description"] as? String) ?? (game["description"] as? String)
             let description: String? = rawDesc.flatMap {
@@ -398,7 +356,6 @@ final class CatalogService: ObservableObject {
 
             let datePublished = game["datePublished"] as? String
 
-            // `genre` may be a string or an array — JSON-LD allows both.
             let genres: [String]
             if let arr = game["genre"] as? [String] {
                 genres = arr.map { decodeHtmlEntities($0) }
@@ -437,7 +394,6 @@ final class CatalogService: ObservableObject {
         }
     }
 
-    /// Pull the contents of `<script type="application/ld+json">…</script>`.
     private func extractJsonLd(_ html: String) -> String? {
         let markers = ["type=\"application/ld+json\"", "type='application/ld+json'"]
         for marker in markers {
@@ -450,16 +406,11 @@ final class CatalogService: ObservableObject {
         return nil
     }
 
-    /// Replace the trailing size suffix on a Yandex avatars URL. The
-    /// storage only serves pre-rendered sizes; sticking to a known-good
-    /// value keeps the request from 404-ing.
     private func rewriteAvatarSize(_ url: String, newSize: String) -> String {
         guard let lastSlash = url.lastIndex(of: "/"), lastSlash != url.startIndex else { return url }
         return String(url[..<url.index(after: lastSlash)]) + newSize
     }
 
-    /// Minimal HTML-entity decoder for the few cases that appear in
-    /// JSON-LD titles and descriptions.
     private func decodeHtmlEntities(_ s: String) -> String {
         s.replacingOccurrences(of: "&amp;", with: "&")
             .replacingOccurrences(of: "&quot;", with: "\"")
@@ -468,9 +419,6 @@ final class CatalogService: ObservableObject {
             .replacingOccurrences(of: "&gt;", with: ">")
     }
 
-    /// Fetch games similar to the given app from Yandex's recommender. Used
-    /// by the (future) game-detail row "More like this". Returns [] on any
-    /// failure — caller decides whether to show the row.
     func fetchSimilar(appId: Int64, lang: String = "en") async -> [Game] {
         var components = URLComponents(string: "https://yandex.com/games/api/catalogue/v2/similar_games/")!
         components.queryItems = [
@@ -520,11 +468,6 @@ final class CatalogService: ObservableObject {
     }
 
     private func fetchProfile(lang: String = "en") async throws -> UserProfile {
-        // Match the AuthView retpath so the SSR we hit is the same domain
-        // that received Set-Cookie:Session_id during auth — yandex.ru for
-        // Russian users, yandex.com for the rest. Avoids a yandex.com →
-        // yandex.ru geo-redirect that would otherwise drop session context
-        // (Session_id is domain-bound on Yandex's side).
         let host = Self.preferredYandexHost
         let preferredLang = host == "yandex.ru" ? "ru" : lang
         var components = URLComponents(string: "https://\(host)/games/")!
@@ -534,20 +477,10 @@ final class CatalogService: ObservableObject {
         request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("text/html", forHTTPHeaderField: "Accept")
 
-        // Build a merged Cookie header from EVERY yandex.* cookie. Reason:
-        // PWL passport (the new passwordless login flow) only sets
-        // Session_id on `.yandex.com`. Russian-IP users get geo-redirected
-        // to `yandex.ru`, and URLSession's default cookie store does NOT
-        // carry `.yandex.com` cookies onto the `.yandex.ru` redirect — the
-        // server then sees an anonymous request and the SSR returns
-        // userData.uid="". By bypassing the cookie store and shipping the
-        // full Cookie header manually, we keep the session intact across
-        // the geo-redirect.
         request.httpShouldHandleCookies = false
         let allCookies = HTTPCookieStorage.shared.cookies ?? []
         let yandexCookies = allCookies.filter { $0.domain.contains("yandex") }
-        // Last-seen-wins dedupe (cookies for both .com and .ru domains often
-        // share names; the freshest value is what passport just set).
+
         var dedup: [String: HTTPCookie] = [:]
         for c in yandexCookies { dedup[c.name] = c }
         let cookieHeader = dedup.values.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
@@ -605,10 +538,6 @@ final class CatalogService: ObservableObject {
     }
 }
 
-/// Forwards a custom merged Cookie header onto every redirect target so the
-/// authenticated session survives `yandex.com → yandex.ru` geo-redirects.
-/// PWL passport only sets `Session_id` on `.yandex.com`; the default
-/// URLSession cookie store would not attach it to the `.yandex.ru` redirect.
 final class ProfileFetchRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     let cookieHeader: String
     private(set) var redirectCount: Int = 0

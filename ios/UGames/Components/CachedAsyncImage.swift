@@ -1,15 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Drop-in replacement for SwiftUI's stock `AsyncImage(url:content:)`
-/// that caches decoded images in memory (NSCache) and raw response
-/// bytes on disk (URLCache.shared). Stock AsyncImage doesn't cache, so
-/// flipping between Home → Detail → Home re-fetched every cover from
-/// the network — visibly slow on flaky connections and wasteful on
-/// data.
-///
-/// API matches AsyncImage so callsites can swap one-for-one, including
-/// the trailing `content` closure that receives an `AsyncImagePhase`.
 struct CachedAsyncImage<Content: View>: View {
     let url: URL?
     let scale: CGFloat
@@ -38,18 +29,11 @@ struct CachedAsyncImage<Content: View>: View {
             return
         }
 
-        // 1. Memory cache hit — skip everything else.
         if let cached = ImageMemoryCache.shared.image(for: url) {
             phase = .success(Image(uiImage: cached))
             return
         }
 
-        // 2. Hit URLCache.shared first via a `.returnCacheDataElseLoad`
-        //    request, falling back to the network on miss. Yandex's
-        //    avatars URLs are content-hashed (the asset id is in the
-        //    path), so cached responses never go stale — using a
-        //    cache-first policy is safe and dramatically reduces
-        //    re-fetch traffic.
         var request = URLRequest(url: url)
         request.cachePolicy = .returnCacheDataElseLoad
         do {
@@ -66,16 +50,12 @@ struct CachedAsyncImage<Content: View>: View {
     }
 }
 
-/// Process-lifetime memory cache for decoded UIImages. Distinct from
-/// URLCache (which stores raw response bytes) because re-decoding a
-/// JPEG is the actual cost on scroll — we want already-decoded bitmaps
-/// ready to draw.
 final class ImageMemoryCache: @unchecked Sendable {
     static let shared = ImageMemoryCache()
 
     private let cache: NSCache<NSURL, UIImage> = {
         let c = NSCache<NSURL, UIImage>()
-        c.totalCostLimit = 60 * 1024 * 1024  // 60 MB of decoded pixels
+        c.totalCostLimit = 60 * 1024 * 1024
         return c
     }()
 
@@ -84,8 +64,6 @@ final class ImageMemoryCache: @unchecked Sendable {
     }
 
     func set(_ img: UIImage, for url: URL) {
-        // Cost ≈ uncompressed RGBA size. Helps NSCache evict the
-        // largest images first when totalCostLimit is breached.
         let cost = Int(img.size.width * img.size.height * img.scale * img.scale * 4)
         cache.setObject(img, forKey: url as NSURL, cost: cost)
     }

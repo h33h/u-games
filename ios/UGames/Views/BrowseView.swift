@@ -35,10 +35,7 @@ struct BrowseView: View {
         }
         .task { await viewModel.loadInitialIfNeeded() }
         .onChange(of: viewModel.searchFocusRequest) { _ in
-            // Two-step: drop focus first, then set it on the next runloop
-            // tick. iOS won't refocus a field that's already considered
-            // focused, and the @FocusState can desync after a tab switch
-            // — toggling forces an actual first-responder change.
+
             searchFocused = false
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 250_000_000)
@@ -49,9 +46,7 @@ struct BrowseView: View {
 
     @ViewBuilder
     private var topBar: some View {
-        HStack(spacing: UGSpace.s) {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(UGColor.textSecondary)
+        UGSearchBarShell {
             TextField(
                 "",
                 text: Binding(
@@ -75,11 +70,6 @@ struct BrowseView: View {
                 }
             }
         }
-        .padding(.horizontal, UGSpace.l)
-        .padding(.vertical, UGSpace.s)
-        .background(UGColor.surface)
-        .overlay(RoundedRectangle(cornerRadius: UGRadius.m).stroke(UGColor.divider))
-        .clipShape(RoundedRectangle(cornerRadius: UGRadius.m))
         .padding(.horizontal, UGSpace.m)
         .padding(.top, UGSpace.s)
     }
@@ -90,20 +80,19 @@ struct BrowseView: View {
         if visible.isEmpty && viewModel.isLoading {
             VStack { Spacer(); ProgressView().tint(UGColor.textPrimary); Spacer() }
         } else if visible.isEmpty, let err = viewModel.error {
-            VStack {
-                Spacer()
-                Text(err).foregroundColor(UGColor.textSecondary).font(UGFont.body).multilineTextAlignment(.center)
-                Spacer()
-            }
-            .padding(UGSpace.xxl)
+            EmptyState(
+                systemIcon: "wifi.slash",
+                title: "Couldn't load",
+                message: err,
+                ctaLabel: "Try again",
+                onCta: { Task { await viewModel.refresh() } }
+            )
         } else if visible.isEmpty && viewModel.mode == .search {
-            VStack {
-                Spacer()
-                Text("No games match \"\(viewModel.searchQuery)\"")
-                    .foregroundColor(UGColor.textSecondary).font(UGFont.body)
-                Spacer()
-            }
-            .padding(UGSpace.xxl)
+            EmptyState(
+                systemIcon: "magnifyingglass",
+                title: "No matches",
+                message: "No games match \"\(viewModel.searchQuery)\""
+            )
         } else {
             ScrollView {
                 LazyVGrid(columns: columns, spacing: UGSpace.l) {
@@ -115,8 +104,6 @@ struct BrowseView: View {
                             onFavoriteToggle: { favoritesStore.toggle(game) },
                         )
                         .onAppear {
-                            // Trigger pagination once we render the last
-                            // tile; the VM guards against duplicate calls.
                             if let last = visible.last, game.id == last.id,
                                viewModel.games.count != lastTriggerGamesCount {
                                 lastTriggerGamesCount = viewModel.games.count
@@ -143,4 +130,3 @@ struct BrowseView: View {
         }
     }
 }
-

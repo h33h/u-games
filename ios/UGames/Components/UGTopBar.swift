@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// Plain push-style top bar: leading chevron back-button + centered-ish
-/// title. Used by Profile and About. GameDetail still rolls its own
-/// because it sits over imagery and uses circular icon buttons instead.
 struct UGTopBar: View {
     let title: String
     let onBack: () -> Void

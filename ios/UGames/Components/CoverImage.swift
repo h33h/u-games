@@ -1,17 +1,5 @@
 import SwiftUI
 
-/// Network-loaded cover image with a solid `mainColor` fallback, sized
-/// to fill its frame and clipped at its bounds. Centralises the
-/// `placeholder + GeometryReader { CachedAsyncImage { ... .frame .clipped } }`
-/// recipe that every card surface (Hero, Tile, Wide, Square, StoryCard,
-/// detail screenshots, profile avatar) was duplicating.
-///
-/// Usage:
-/// ```
-/// CoverImage(url: URL(string: game.coverUrl), placeholder: halo)
-///     .frame(width: 130, height: 130)
-///     .haloChrome(halo, size: .lg)
-/// ```
 struct CoverImage: View {
     let url: URL?
     var placeholder: Color = UGColor.elevated

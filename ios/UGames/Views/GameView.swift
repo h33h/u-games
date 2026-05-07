@@ -13,12 +13,6 @@ struct GameView: View {
     @StateObject private var orient: OrientationStore = .shared
 
     var body: some View {
-        // Derive the current orientation from the actual layout size rather
-        // than from `UIDevice.current.orientation`. UIDevice's reading is
-        // unreliable until orientation notifications are turned on (and
-        // returns `.unknown`/`.faceUp`/`.faceDown` when the phone is flat),
-        // which used to make the rotate-overlay flash on entry. The view's
-        // size is the source of truth for what the user sees.
         GeometryReader { proxy in
             let isPortrait = proxy.size.height >= proxy.size.width
             content(isPortrait: isPortrait)
@@ -40,7 +34,6 @@ struct GameView: View {
                 )
             }
 
-            // Tap-to-reveal hot zone — small enough to not steal touches.
             Color.clear
                 .frame(width: 64, height: 64)
                 .contentShape(Rectangle())
@@ -103,9 +96,6 @@ struct GameView: View {
     }
 }
 
-/// Full-screen overlay shown when the running game requested an orientation
-/// that the device is not currently in. Rotation is detected via
-/// `screen.orientation.lock()` calls trapped by the SDK stub.
 private struct RotateDeviceOverlay: View {
     let target: OrientationStore.Required
     let onBack: () -> Void

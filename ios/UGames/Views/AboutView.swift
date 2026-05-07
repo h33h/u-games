@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Minimal About screen. Push-style: receives `onBack` from the caller.
 struct AboutView: View {
     let onBack: () -> Void
 

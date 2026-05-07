@@ -1,11 +1,6 @@
 import Foundation
 import WebKit
 
-/// Bridges WKWebView's WKHTTPCookieStore to URLSession's HTTPCookieStorage so
-/// that catalog HTTP requests share the same session as the in-app WebView
-/// (game iframe, auth screen). Without this, signing in via the auth WebView
-/// wouldn't be visible to /games/ HTML fetch and the user would appear
-/// anonymous to our profile loader.
 final class SharedCookieStore: NSObject, @unchecked Sendable {
     static let shared = SharedCookieStore()
 
@@ -18,8 +13,7 @@ final class SharedCookieStore: NSObject, @unchecked Sendable {
         super.init()
         sharedStorage.cookieAcceptPolicy = .always
         webStore.add(self)
-        // Initial copy WK -> shared so any persisted cookies become visible
-        // to URLSession before the first request.
+
         copyFromWebToShared()
     }
 
@@ -32,12 +26,6 @@ final class SharedCookieStore: NSObject, @unchecked Sendable {
         }
     }
 
-    /// Awaitable variant of `copyFromWebToShared`. Resolves after every cookie
-    /// currently in WKHTTPCookieStore has been mirrored into HTTPCookieStorage.
-    /// Use this before issuing a URLSession request that depends on the latest
-    /// authenticated session — the observer-driven mirror is async and may not
-    /// yet have copied a Session_id set during a redirect chain that just
-    /// finished in WKWebView.
     func syncToShared() async {
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
             webStore.getAllCookies { [weak self] cookies in
@@ -50,8 +38,6 @@ final class SharedCookieStore: NSObject, @unchecked Sendable {
         }
     }
 
-    /// Used by "Sign out": drops every Yandex cookie from both stores so the
-    /// next request to `yandex.com/games/` is anonymous again.
     func clearYandexCookies() async {
         for cookie in sharedStorage.cookies ?? [] where cookie.domain.contains("yandex") {
             sharedStorage.deleteCookie(cookie)

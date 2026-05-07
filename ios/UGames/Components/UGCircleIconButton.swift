@@ -1,19 +1,14 @@
 import SwiftUI
 
-/// Round translucent-black icon button used for hero overlays
-/// (back / heart / share / close) on top of imagery. Replaces the
-/// repeated `Button { Image .frame .background(.black 0.55) .clipShape(Circle) }`
-/// blocks across Hero, GameDetail, GameCard heart, and the screenshots
-/// fullscreen viewer.
 struct UGCircleIconButton: View {
     let systemName: String
     var tint: Color = UGColor.textPrimary
-    /// Diameter of the tappable disc.
+
     var diameter: CGFloat = UGSize.buttonL
-    /// Glyph weight + size.
+
     var iconSize: CGFloat = 16
     var iconWeight: Font.Weight = .semibold
-    var background: Color = Color.black.opacity(0.55)
+    var background: Color = UGColor.overlayBg
     let action: () -> Void
 
     var body: some View {

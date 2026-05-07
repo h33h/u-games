@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Editorial Hero card for Home. Phase 1 STUB: image background + gradient.
-/// Phase 2 will autoplay videoUrl through AVPlayerLayer when present.
 struct HeroSection: View {
     let game: Game
     let onPlay: () -> Void
@@ -27,10 +25,7 @@ struct HeroSection: View {
         .frame(height: UGSize.heroH)
         .frame(maxWidth: .infinity)
         .haloChrome(halo, size: .xl)
-        // Tap anywhere on the card opens the same Detail flow as the
-        // Play button. SwiftUI's button hit-test takes precedence at
-        // the Save / Share / Play-now sub-targets, so they keep
-        // working independently.
+
         .contentShape(RoundedRectangle(cornerRadius: UGRadius.xl))
         .onTapGesture { onPlay() }
     }

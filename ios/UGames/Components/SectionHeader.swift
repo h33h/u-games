@@ -1,12 +1,8 @@
 import SwiftUI
 
-/// Title strip used to introduce a horizontal row or content block.
-/// Optionally renders a "See all →" trailing button when `seeAllAction`
-/// is non-nil.
 struct SectionHeader: View {
     let title: String
     var seeAllAction: (() -> Void)? = nil
-    var horizontalPadding: CGFloat = UGSpace.l
 
     var body: some View {
         HStack {
@@ -28,13 +24,10 @@ struct SectionHeader: View {
                 .buttonStyle(.borderless)
             }
         }
-        .padding(.horizontal, horizontalPadding)
+        .padding(.horizontal, UGSpace.l)
     }
 }
 
-/// Uppercase, letter-spaced "eyebrow" label (ABOUT / SCREENSHOTS /
-/// INFORMATION / SPOTLIGHT). The text is uppercased here so callers
-/// can pass mixed-case strings without having to remember.
 struct UGEyebrow: View {
     let text: String
 

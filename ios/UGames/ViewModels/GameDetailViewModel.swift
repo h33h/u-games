@@ -1,11 +1,6 @@
 import Foundation
 import Combine
 
-/// Drives `GameDetailView`. Loads "More like this" via the
-/// `similar_games` endpoint and exposes the seed `Game` directly. Keep
-/// the seed mutable so any callsite that wants to swap to a fresher
-/// `Game` (e.g. after a feed refetch) can — Phase 3 doesn't, but we
-/// don't lose anything by keeping the door open.
 @MainActor
 final class GameDetailViewModel: ObservableObject {
     @Published private(set) var game: Game
@@ -37,7 +32,7 @@ final class GameDetailViewModel: ObservableObject {
         similarError = nil
         defer { isLoadingSimilar = false }
         let result = await service.fetchSimilar(appId: game.appId)
-        // Drop the same game if the server happens to include it.
+
         similar = result.filter { $0.appId != game.appId }
     }
 

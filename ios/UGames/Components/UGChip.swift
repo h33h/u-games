@@ -1,22 +1,13 @@
 import SwiftUI
 
-/// Pill text label. Replaces the half-dozen ad-hoc `Text + .padding +
-/// .background + .clipShape(Capsule)` blobs scattered through the
-/// catalog views.
 struct UGChip: View {
     let text: String
     var style: Style = .neutral
 
     enum Style {
-        /// Soft monochrome chip on dark surfaces (rating · count, age,
-        /// hero meta facts).
         case neutral
-        /// Brand-tinted soft chip ("✦ FEATURED TODAY", "YANDEX PLUS").
         case accentSoft
-        /// Black overlay chip used on top of imagery, foreground accent
-        /// (Tile rating "★ 4.9").
         case overlayRating
-        /// Black overlay chip for neutral overlay text (page counter).
         case overlay
     }
 
@@ -49,13 +40,10 @@ struct UGChip: View {
         switch style {
         case .neutral: Color.white.opacity(0.08)
         case .accentSoft: UGColor.accent.opacity(0.18)
-        case .overlayRating, .overlay: Color.black.opacity(0.55)
+        case .overlayRating, .overlay: UGColor.overlayBg
         }
     }
 
-    // Component-internal paddings: tied to the chip's visual identity,
-    // not the site-level spacing rhythm — kept as raw CGFloats so the
-    // chip's geometry is independent of `UGSpace`.
     private var horizontalPadding: CGFloat {
         switch style {
         case .neutral: 9

@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// Profile tab. Replaces the old `ProfileSheet` modal — full-screen layout
-/// with a hero-section (avatar, name, optional Plus pill) and a list of
-/// "Settings" rows. Long-press on the avatar still opens diagnostic logs.
 struct ProfileView: View {
     @ObservedObject var service: CatalogService
     let onBack: () -> Void

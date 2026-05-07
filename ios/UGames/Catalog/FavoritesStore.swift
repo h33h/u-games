@@ -1,10 +1,6 @@
 import Foundation
 import Combine
 
-/// Persists the user's favorited games as JSON in UserDefaults. Mirrors
-/// Android's Room-backed favorites table without dragging in SwiftData.
-/// (Recents are NOT persisted locally — they come from Yandex's
-/// server-side `recentGames` field tied to the authenticated profile.)
 @MainActor
 final class FavoritesStore: ObservableObject {
     static let shared = FavoritesStore()

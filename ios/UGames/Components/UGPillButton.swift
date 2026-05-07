@@ -1,12 +1,5 @@
 import SwiftUI
 
-/// Brand gradient CTA button. Used wherever the user takes the primary
-/// action: ▶ Play now, Try again, Browse games, View on GitHub.
-///
-/// The default `.capsule` shape matches in-canvas CTAs (Hero / Detail).
-/// Modal/empty states historically used a `RoundedRectangle(14)` —
-/// expose `.rounded` for that variant so the styling stays in one
-/// place but the visual difference is preserved.
 struct UGPillButton: View {
     let title: String
     var shape: Shape = .capsule
@@ -29,16 +22,10 @@ struct UGPillButton: View {
         }
     }
 
-    /// Two presets matching the in-app button sizes: `.regular` for
-    /// hero/empty-state CTAs, `.large` for the sticky Play-now CTA on
-    /// GameDetail (touch target prominence).
     enum Size {
         case regular
         case large
 
-        // Component-internal paddings — kept as raw CGFloats because
-        // they're part of the button's identity, not site-level
-        // spacing rhythm.
         var horizontalPadding: CGFloat {
             switch self { case .regular: 22; case .large: 28 }
         }
@@ -64,8 +51,6 @@ struct UGPillButton: View {
     }
 
     private var horizontalPadding: CGFloat {
-        // `.rounded` historically used tighter horizontal padding (18)
-        // for empty-state CTAs. Capsules use the size enum.
         switch shape {
         case .capsule: size.horizontalPadding
         case .rounded: 18

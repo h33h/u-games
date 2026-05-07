@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// Editorial Home screen. Single ScrollView, sections separated by
-/// uniform spacing. Header (eyebrow + greeting + avatar) flows under
-/// the status bar so the Hero card sets the visual tone immediately.
 struct HomeView: View {
     @ObservedObject var viewModel: HomeViewModel
     let onGameClick: (Game) -> Void
@@ -24,8 +21,15 @@ struct HomeView: View {
                     )
                     .padding(.horizontal, UGSpace.l)
 
-                    SearchStub(onTap: onOpenBrowse)
-                        .padding(.horizontal, UGSpace.l)
+                    UGSearchBarShell {
+                        Text("Search games")
+                            .font(UGFont.bodyS)
+                            .foregroundColor(UGColor.textMuted)
+                        Spacer()
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture(perform: onOpenBrowse)
+                    .padding(.horizontal, UGSpace.l)
 
                     if let hero = viewModel.hero {
                         HeroSection(
@@ -82,14 +86,11 @@ struct HomeView: View {
 
     @ViewBuilder
     private func wideRow(games: [Game]) -> some View {
-        // Per-item vertical padding makes each item's measured frame
-        // include the halo shadow. 20pt leaves clear room for the
-        // 14pt shadow + anti-alias bleed; previous 16pt was too tight.
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: UGSpace.m) {
                 ForEach(games) { g in
                     WideGameCard(game: g, onTap: { onGameClick(g) })
-                        .padding(.vertical, UGSpace.xl)
+                        .padding(.vertical, UGSpace.xxxl)
                 }
             }
             .padding(.horizontal, UGSpace.l)
@@ -147,28 +148,5 @@ private struct HomeHeader: View {
         formatter.dateFormat = "EEEE"
         let day = formatter.string(from: Date())
         return "\(day) · Top picks"
-    }
-}
-
-private struct SearchStub: View {
-    let onTap: () -> Void
-
-    var body: some View {
-        HStack(spacing: UGSpace.s) {
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundColor(UGColor.textMuted)
-            Text("Search games")
-                .font(UGFont.bodyS)
-                .foregroundColor(UGColor.textMuted)
-            Spacer()
-        }
-        .padding(.horizontal, UGSpace.l)
-        .padding(.vertical, UGSpace.m)
-        .background(UGColor.surface)
-        .overlay(RoundedRectangle(cornerRadius: UGRadius.m).stroke(UGColor.divider))
-        .clipShape(RoundedRectangle(cornerRadius: UGRadius.m))
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
     }
 }

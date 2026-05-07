@@ -5,14 +5,8 @@ import WebKit
 @main
 struct UGamesApp: App {
     init() {
-        // Bridge WKWebView's cookies into URLSession.shared so catalog HTTP
-        // requests see the same session as the in-app WebView (auth screen).
         _ = SharedCookieStore.shared
 
-        // URLCache used by `CachedAsyncImage` to keep cover thumbnails
-        // warm across launches. 30 MB memory + 250 MB disk is enough
-        // to hold a few hundred Yandex avatars URLs (covers,
-        // screenshots, icons) without bloating storage.
         URLCache.shared = URLCache(
             memoryCapacity: 30 * 1024 * 1024,
             diskCapacity: 250 * 1024 * 1024,
@@ -28,9 +22,6 @@ struct UGamesApp: App {
     }
 }
 
-/// Parse `ugames://app/<id>` deep links. Also tolerates
-/// `https://yandex.com/games/app/<id>` in case Universal Links are added
-/// later. Returns the appId or nil.
 func parseDeepLink(_ url: URL) -> Int64? {
     let scheme = url.scheme?.lowercased() ?? ""
     let segments = url.pathComponents.filter { $0 != "/" }
@@ -53,9 +44,6 @@ func parseDeepLink(_ url: URL) -> Int64? {
 }
 
 struct RootView: View {
-    /// Phase 3: routes form a *stack* so Detail → Game → Back lands back
-    /// on Detail rather than the catalog. The bottom of the stack is
-    /// implicit (`.catalog`); only pushed routes live here.
     @State private var routeStack: [Route] = []
     @State private var sharePayload: SharePayload?
     @StateObject private var catalogService = CatalogService()
@@ -70,17 +58,6 @@ struct RootView: View {
     private func reset(to route: Route) { routeStack = [route] }
 
     var body: some View {
-        // TabContainer is *always* mounted so its `selected` tab and
-        // @StateObject VMs (HomeVM/BrowseVM) survive Detail → Game →
-        // Back. Pushed routes overlay on top with a solid bg0
-        // background so TabContainer is fully hidden while a route
-        // is on screen but its state is intact when popped back.
-        //
-        // Previously RootView used `switch currentRoute { case .catalog
-        // ... }` which removed TabContainer from the view hierarchy
-        // every time we navigated, resetting `selected` to "home" and
-        // re-creating the VMs. That's the bug behind "Browse → Detail
-        // → Back kicks me to Home".
         ZStack {
             UGColor.bg0.ignoresSafeArea()
             TabContainer(
@@ -109,9 +86,6 @@ struct RootView: View {
         }
         .onOpenURL { url in
             if let appId = parseDeepLink(url) {
-                // Cold-start deep link bypasses Detail (we have only the
-                // appId, not a full Game) and lands straight in the
-                // WebView. Mirror Android's MainActivity.parseDeepLink.
                 reset(to: .game(appId: appId, title: ""))
             }
         }
@@ -142,10 +116,7 @@ struct RootView: View {
                 blockList: blockList,
                 onBack: {
                     pop()
-                    // Yandex's server-side recentGames updates on the
-                    // play session — let HomeViewModel know so it
-                    // re-fetches the feed and the just-played game
-                    // appears in the Recently played row.
+
                     catalogService.notifyGameSessionEnded()
                 },
             )
@@ -159,10 +130,6 @@ struct RootView: View {
         }
     }
 
-    /// Stable identity for the overlay so SwiftUI tears down + rebuilds
-    /// the host (and its `@StateObject`) only when the underlying route
-    /// content actually changes — e.g. Detail(A) → Similar tile →
-    /// Detail(B) replaces the host with a fresh VM and similar fetch.
     private func routeId(_ route: Route) -> String {
         switch route {
         case .catalog: return "catalog"
@@ -182,20 +149,12 @@ enum Route: Equatable {
     case logs
 }
 
-/// Identifiable wrapper so SwiftUI's `.sheet(item:)` can present the
-/// system share sheet driven by an Optional. New `id` per invocation
-/// makes the sheet re-present even if the same game is shared twice in
-/// a row.
 struct SharePayload: Identifiable, Equatable {
     let id = UUID()
     let title: String
     let url: URL?
 }
 
-/// Owns a `GameDetailViewModel` via `@StateObject` so the VM survives
-/// SwiftUI body re-renders. RootView feeds it via `.id(game.appId)` so
-/// navigating Detail(A) → Similar(B) → Detail(B) tears the host down
-/// and creates a fresh VM with fresh similar-fetch.
 private struct GameDetailHost: View {
     let game: Game
     @ObservedObject var catalogService: CatalogService
@@ -240,8 +199,6 @@ private struct GameDetailHost: View {
     }
 }
 
-/// Bridges UIActivityViewController for SwiftUI. Single-purpose: share a
-/// game's playUrl + title from GameDetailView's top icon.
 struct ShareSheet: UIViewControllerRepresentable {
     let payload: SharePayload
 

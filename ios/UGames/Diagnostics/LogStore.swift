@@ -1,11 +1,6 @@
 import Foundation
 import SwiftUI
 
-/// Diagnostic log buffer. In-memory ring of the last `maxEntries` events
-/// emitted by the inject scripts (via `webkit.messageHandlers.ugamesLog`)
-/// and by native code (auth watcher, profile fetch, cookie state). Use
-/// LogsView to inspect at runtime; long-press the profile button on the
-/// catalog topbar to open it.
 struct LogEntry: Identifiable, Hashable {
     let id = UUID()
     let timestamp: Date
@@ -40,8 +35,6 @@ final class LogStore: ObservableObject {
     }
 }
 
-/// Thread-safe entry point for non-MainActor callers (URLSession completion
-/// blocks, WKScriptMessageHandler closures, watcher tasks).
 enum Log {
     static func write(_ tag: String, _ message: String) {
         Task { @MainActor in LogStore.shared.log(tag, message) }

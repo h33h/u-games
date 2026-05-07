@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// Parse a "#RRGGBB" or "#AARRGGBB" hex string into a SwiftUI Color.
-/// Returns nil for blank, malformed, or wrong-length strings — callers
-/// should fall back to a default (e.g. UGColor.surface).
 extension Color {
     init?(hex: String?) {
         guard let raw = hex?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else { return nil }

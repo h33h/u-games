@@ -6,25 +6,9 @@ struct AuthView: View {
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            Color.black.ignoresSafeArea()
+            UGColor.bg0.ignoresSafeArea()
             VStack(spacing: 0) {
-                HStack(spacing: 8) {
-                    Button(action: onClose) {
-                        Image(systemName: "chevron.left")
-                            .resizable()
-                            .frame(width: 14, height: 22)
-                            .foregroundColor(.white)
-                            .padding(8)
-                    }
-                    Text("Sign in to Yandex")
-                        .foregroundColor(.white)
-                        .font(.headline)
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-                .padding(.top, 8)
-                .padding(.bottom, 4)
-
+                UGTopBar(title: "Sign in to Yandex", onBack: onClose)
                 AuthWebView(onSignedIn: onClose)
                     .ignoresSafeArea(edges: .bottom)
             }
@@ -37,11 +21,6 @@ private struct AuthWebView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(onSignedIn: onSignedIn) }
 
-    /// Use yandex.ru/passport.yandex.ru for Russian-locale devices. Yandex
-    /// runs separate session realms per TLD: passport.yandex.com only ever
-    /// issues Session_id for `.yandex.com`, and yandex.ru's SSR rejects that
-    /// session when serving userData. For Russian users the auth must go
-    /// through passport.yandex.ru directly so Session_id lands on `.yandex.ru`.
     static var preferredYandexHost: String {
         let lang = Locale.preferredLanguages.first ?? Locale.current.identifier
         return lang.hasPrefix("ru") ? "yandex.ru" : "yandex.com"
@@ -67,9 +46,7 @@ private struct AuthWebView: UIViewRepresentable {
     func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
         config.websiteDataStore = .default()
-        // Log bridge — same as GameWebView, so passport-side scripts can also
-        // post diagnostic events. Useful to confirm we land on the page we
-        // expect (PWL flow, /finish?, etc.).
+
         let logBridge = WKUserScript(
             source: """
             (function(){
@@ -112,7 +89,6 @@ private struct AuthWebView: UIViewRepresentable {
     func updateUIView(_ uiView: WKWebView, context: Context) {}
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
-
         func userContentController(_ userContentController: WKUserContentController,
                                    didReceive message: WKScriptMessage) {
             guard message.name == "ugamesLog" else { return }
@@ -140,13 +116,6 @@ private struct AuthWebView: UIViewRepresentable {
 
         deinit { watcherTask?.cancel() }
 
-        /// Cookie-driven auth completion. Yandex's passport flow keeps
-        /// changing: /pwl-yandex/auth/add (passwordless login),
-        /// /webauthn-reg, /finish?, /profile/setup, /auth/welcome, etc. —
-        /// chasing each dead-end URL pattern is fragile. Once Session_id is
-        /// set on .yandex.com the user is authenticated regardless of which
-        /// passport screen WKWebView happens to land on. Force-load /games/
-        /// so `check(_:)` dismisses on the next navigation event.
         func startSessionWatcher(webView: WKWebView) {
             watcherTask?.cancel()
             Log.write("auth", "Session_id watcher started (poll=400ms)")
@@ -161,11 +130,7 @@ private struct AuthWebView: UIViewRepresentable {
                     let yandexCookies = cookies.filter {
                         $0.domain.contains("yandex.com") || $0.domain.contains("yandex.ru")
                     }
-                    // Wait for Session_id on the PREFERRED domain — yandex.ru
-                    // for Russian locale, yandex.com otherwise. Otherwise an
-                    // old `.yandex.com` Session_id from a prior auth attempt
-                    // would trigger an early dismiss before passport.yandex.ru
-                    // has finished issuing the `.yandex.ru` session.
+
                     let preferredDomain = AuthWebView.preferredYandexHost
                     let sessionPresent = yandexCookies.contains { c in
                         c.name == "Session_id" && c.domain.contains(preferredDomain)
@@ -183,12 +148,7 @@ private struct AuthWebView: UIViewRepresentable {
                         Log.write("auth", "force-loading \(target.absoluteString)")
                         webView.load(URLRequest(url: target))
                     }
-                    // 2.5s grace lets WebView complete the geo-redirect chain
-                    // (yandex.com → yandex.ru for Russian users). During that
-                    // chain Yandex SSO server emits Set-Cookie:Session_id on
-                    // BOTH `.yandex.com` and `.yandex.ru` — without this grace
-                    // we dismiss too early and the .yandex.ru session is never
-                    // established, leaving the catalog fetch anonymous.
+
                     try? await Task.sleep(nanoseconds: 2_500_000_000)
                     if Task.isCancelled || self.dismissed { return }
                     self.dismissed = true
@@ -211,11 +171,6 @@ private struct AuthWebView: UIViewRepresentable {
                 webView.load(URLRequest(url: AuthWebView.gamesRootURL))
                 return
             }
-            // No URL-based dismiss here. The watcher waits for Session_id and
-            // gives WebView a 2.5s grace to complete the geo-redirect chain
-            // (yandex.com → yandex.ru) before dismissing — that's what gets
-            // the `.yandex.ru` session cookies set. Dismissing on first sight
-            // of /games/ short-circuits that and leaves auth half-finished.
         }
 
         func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {

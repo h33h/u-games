@@ -9,12 +9,6 @@ struct GameWebView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(scripts: scripts) }
 
-    /// Whether to pre-fetch the page HTML, inject our PWA chrome killers
-    /// directly into <head>, and load via loadHTMLString(baseURL:). This is
-    /// what the Android AdBlockingClient does, and it eliminates the
-    /// "intermediate description sheet" flash before our documentStart-script
-    /// CSS gets a chance to apply on a slow first paint. Falls back silently
-    /// to a vanilla load() when the prefetch fails.
     private static func shouldPrefetch(_ url: URL) -> Bool {
         let s = url.absoluteString
         let isYandexGames = s.hasPrefix("https://yandex.com/games/") || s.hasPrefix("https://yandex.ru/games/")
@@ -29,10 +23,6 @@ struct GameWebView: UIViewRepresentable {
         config.preferences.javaScriptCanOpenWindowsAutomatically = true
         config.defaultWebpagePreferences.preferredContentMode = .mobile
 
-        // Layer 0: log bridge. Defines window.__yga_log so the inject
-        // scripts can post diagnostic events back to the native LogStore
-        // via WKScriptMessageHandler. forMainFrameOnly:false so the bridge
-        // is also available inside the game iframe (the SDK stub uses it).
         let logBridge = WKUserScript(
             source: """
             (function(){
@@ -55,7 +45,6 @@ struct GameWebView: UIViewRepresentable {
         config.userContentController.addUserScript(logBridge)
         config.userContentController.add(context.coordinator, name: "ugamesLog")
 
-        // Layer 1: documentStart user scripts.
         let mainScript = WKUserScript(
             source: scripts.mainFrameScript,
             injectionTime: .atDocumentStart,
@@ -69,7 +58,6 @@ struct GameWebView: UIViewRepresentable {
         config.userContentController.addUserScript(mainScript)
         config.userContentController.addUserScript(stubScript)
 
-        // Layer 3: URL block-list compiled into WKContentRuleList.
         WKContentRuleListStore.default()?.compileContentRuleList(
             forIdentifier: "ya-ads",
             encodedContentRuleList: blockList.contentRuleListJSON()
@@ -85,8 +73,7 @@ struct GameWebView: UIViewRepresentable {
         webView.allowsBackForwardNavigationGestures = true
         webView.scrollView.bounces = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
-        // Black background eliminates the white flash before our PWA-CSS
-        // hides the catalog chrome.
+
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
         webView.isOpaque = false
@@ -110,14 +97,7 @@ struct GameWebView: UIViewRepresentable {
         if webView.url != url {
             webView.load(URLRequest(url: url))
         }
-        // Only emit the visibility-change script when the paused flag
-        // actually flips. Earlier we ran it on every recomposition, which
-        // overrode `document.visibilityState` getter mid-game-init and
-        // tripped some games (e.g. Construct 3 / GamePush titles like
-        // game id 388978) into a "GamePush Timeout 5000ms" boot loop.
-        // Skip the very first update when paused is false — the page
-        // already starts in the visible state, so the no-op script we'd
-        // emit is just dead weight that races init.
+
         let last = context.coordinator.lastPausedState
         if last == nil && !paused {
             context.coordinator.lastPausedState = paused
@@ -152,14 +132,8 @@ struct GameWebView: UIViewRepresentable {
     }
 
     final class Coordinator: NSObject, WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler {
-
-        /// Tracks the last applied paused state so updateUIView only re-runs
-        /// the visibility-change script when the flag actually flips. Optional
-        /// so the FIRST update is a no-op (the default page state already
-        /// matches `paused == false`).
         var lastPausedState: Bool? = nil
 
-        // Receives `window.__yga_log(tag, msg)` calls from the inject scripts.
         func userContentController(_ userContentController: WKUserContentController,
                                    didReceive message: WKScriptMessage) {
             guard message.name == "ugamesLog" else { return }
@@ -178,10 +152,7 @@ struct GameWebView: UIViewRepresentable {
                 msg = rawMsg
             }
             Log.write(tag, msg)
-            // Side-channel: when the SDK stub traps screen.orientation.lock()
-            // it sends tag="orient" with the requested target string. Update
-            // the global OrientationStore so GameView can show/hide the
-            // rotate overlay.
+
             if tag == "orient" {
                 Task { @MainActor in OrientationStore.shared.setFromString(rawMsg) }
             }
@@ -199,33 +170,13 @@ struct GameWebView: UIViewRepresentable {
             self.hostView = webView
         }
 
-        /// Pre-fetch the HTML via URLSession (uses HTTPCookieStorage.shared,
-        /// which SharedCookieStore mirrors from WKWebView), splice our
-        /// PWA-CSS + scripts into <head>, then loadHTMLString with baseURL set
-        /// to the actual page URL. This guarantees our chrome-killers apply
-        /// before the first paint, mirroring AdBlockingClient on Android.
-        ///
-        /// On any failure (timeout, non-HTML response) we fall back to the
-        /// vanilla request load — documentStart user scripts still apply, the
-        /// description sheet may just briefly flash before our CSS hides it.
         func loadWithInjection(
             into webView: WKWebView,
             request: URLRequest,
             scripts: InjectedScripts
         ) {
             var prefetchRequest = request
-            // DON'T force `identity` here. Yandex's SSR uses the request's
-            // Accept-Encoding to decide which CDN mirror to embed into
-            // __playPageData__.gameSrc. With `identity` it serves the
-            // non-brotli mirror, whose iframe HTML is missing the
-            // `<script src="/sdk/_/v2.xxx.js">` tag — the result is
-            // window.YaGames never gets defined and Construct 3 / GamePush
-            // titles (e.g. game id 388978) trip on
-            //   GamePush Initialization Yandex SDK failed:
-            //   TypeError: undefined is not an object (evaluating 'window.YaGames.init')
-            // URLSession decompresses gzip/br automatically, so the body
-            // we receive is already plain UTF-8 HTML — no need to ask the
-            // server for uncompressed bytes.
+
             prefetchRequest.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
             URLSession.shared.dataTask(with: prefetchRequest) { [weak webView] data, response, _ in
                 guard let webView = webView else { return }
@@ -240,9 +191,6 @@ struct GameWebView: UIViewRepresentable {
                 }
                 let rewritten = Self.injectIntoHead(html, scripts: scripts)
                 DispatchQueue.main.async {
-                    // baseURL must be the navigation URL so relative links,
-                    // cookies (.yandex.com) and the page-level CSP all resolve
-                    // exactly like a normal navigation.
                     webView.loadHTMLString(rewritten, baseURL: request.url)
                 }
             }.resume()
@@ -253,7 +201,7 @@ struct GameWebView: UIViewRepresentable {
             let cssLiteral = jsString(scripts.pwaModeCss)
             let script = "<script id=\"__yga_inject__\">window.__yga_pwa_css_payload__=\(cssLiteral);\(scripts.honestPath);\(scripts.pwaModeJs)</script>"
             let payload = style + script
-            // Insert immediately after the opening <head ...> tag.
+
             guard let headRange = html.range(of: "<head", options: .caseInsensitive),
                   let openIdx = html.range(of: ">", range: headRange.upperBound..<html.endIndex)
             else {
@@ -280,9 +228,6 @@ struct GameWebView: UIViewRepresentable {
             return out
         }
 
-        // Layer 2: belt-and-braces re-injection at navigation milestones, in
-        // case the documentStart script registration didn't apply in time
-        // (older WebKit, race with React boot).
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
             Log.write("nav", "start \(webView.url?.absoluteString ?? "?")")
         }

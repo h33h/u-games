@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Tile card for grids (Browse / Favorites / Similar).
 struct TileGameCard: View {
     let game: Game
     let isFavorite: Bool
@@ -12,10 +11,6 @@ struct TileGameCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: UGSpace.s) {
-            // Cover ZStack: placeholder + image share the same clip + stroke,
-            // so the image never bleeds past the rounded border. Heart and
-            // rating pill are siblings inside the same ZStack so they
-            // overlap the cover, not the surrounding shadow.
             ZStack {
                 CoverImage(url: URL(string: game.coverUrl), placeholder: placeholder)
 
@@ -38,9 +33,6 @@ struct TileGameCard: View {
             .aspectRatio(16.0/10.0, contentMode: .fit)
             .haloChrome(halo, size: .lg)
 
-            // Title + meta wrapped in a fixed-height block so cards in the
-            // same row don't end up at different heights when one has a
-            // 1-line title and the next has 2 lines / no meta.
             VStack(alignment: .leading, spacing: UGSpace.xs) {
                 Text(game.title)
                     .font(UGFont.bodyS)
@@ -83,7 +75,6 @@ struct TileGameCard: View {
     }
 }
 
-/// Wide card (140×96) for Continue / Trending / Favorites rows on Home.
 struct WideGameCard: View {
     let game: Game
     let onTap: () -> Void
@@ -125,7 +116,6 @@ struct WideGameCard: View {
     }
 }
 
-/// 130×130 icon card with title underneath. Per-genre rows on Home.
 struct SquareGameCard: View {
     let game: Game
     let onTap: () -> Void

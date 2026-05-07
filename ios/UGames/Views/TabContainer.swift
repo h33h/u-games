@@ -1,11 +1,5 @@
 import SwiftUI
 
-/// Phase-2 tab container. Hosts Home / Browse / Favorites tabs; Profile is
-/// pushed from the avatar in Home/Browse top-bars. About is a sub-push
-/// from Profile. Game / Auth / Logs still live at the parent `RootView`
-/// level — phase 3 may move them in.
-///
-/// Tab-bar hides whenever a "pushed" view (Profile or About) is on screen.
 struct TabContainer: View {
     @ObservedObject var catalogService: CatalogService
     @ObservedObject var favoritesStore: FavoritesStore
@@ -103,8 +97,7 @@ struct TabContainer: View {
                 onGameClick: onGameOpen,
                 onOpenBrowse: {
                     selected = "browse"
-                    // Bump focus AFTER the tab switch so BrowseView is on
-                    // screen by the time @FocusState becomes true.
+
                     Task { @MainActor in
                         try? await Task.sleep(nanoseconds: 100_000_000)
                         browseVM.requestSearchFocus()

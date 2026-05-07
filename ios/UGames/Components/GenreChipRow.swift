@@ -6,10 +6,6 @@ struct GenreChipRow: View {
     let onSelect: (String?) -> Void
 
     var body: some View {
-        // Per-chip vertical padding so each item's measured frame
-        // includes the active chip's accent shadow halo. Plain HStack
-        // padding doesn't keep the halo from getting clipped by the
-        // ScrollView's viewport.
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: UGSpace.s) {
                 chip(label: "All", value: nil)

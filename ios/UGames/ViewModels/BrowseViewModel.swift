@@ -1,7 +1,5 @@
 import Foundation
 
-/// Backs `BrowseView` — feed pagination + category filter (server-side
-/// via `?tab=<name>`) + paginated REST search.
 @MainActor
 final class BrowseViewModel: ObservableObject {
     enum Mode { case feed, search }
@@ -15,9 +13,7 @@ final class BrowseViewModel: ObservableObject {
     @Published private(set) var categories: [GameCategory] = []
     @Published var selectedCategory: GameCategory? = nil
     @Published private(set) var mode: Mode = .feed
-    /// Monotonically increasing tick. BrowseView reads it via .onChange to
-    /// pull keyboard focus into the search field — used by HomeView's
-    /// search-stub so the user lands inside an already-focused input.
+
     @Published private(set) var searchFocusRequest: Int = 0
 
     private let service: CatalogService
@@ -45,7 +41,7 @@ final class BrowseViewModel: ObservableObject {
         isLoading = true
         error = nil
         defer { isLoading = false }
-        // Categories load once per session.
+
         if categories.isEmpty {
             categories = (try? await service.fetchCategories()) ?? []
         }
@@ -102,9 +98,6 @@ final class BrowseViewModel: ObservableObject {
         Task { await refresh() }
     }
 
-    /// Convenience for callers that only know the name or localized title
-    /// of a category (e.g. HomeView's "See all" handler). Loads categories
-    /// if not yet cached, then matches by `name` first then `title`.
     func setCategoryByName(_ raw: String) {
         Task {
             if categories.isEmpty {

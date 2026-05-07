@@ -398,7 +398,40 @@ final class CatalogService: ObservableObject {
 
             let datePublished = game["datePublished"] as? String
 
-            return AppDetail(description: description, screenshots: screenshots, datePublished: datePublished)
+            // `genre` may be a string or an array — JSON-LD allows both.
+            let genres: [String]
+            if let arr = game["genre"] as? [String] {
+                genres = arr.map { decodeHtmlEntities($0) }
+            } else if let single = game["genre"] as? String {
+                genres = [decodeHtmlEntities(single)]
+            } else {
+                genres = []
+            }
+
+            let languages: [String]
+            if let arr = game["inLanguage"] as? [String] {
+                languages = arr
+            } else if let single = game["inLanguage"] as? String {
+                languages = [single]
+            } else {
+                languages = []
+            }
+
+            let author: String? = {
+                let n = (game["author"] as? [String: Any])?["name"] as? String
+                let cleaned = n.flatMap { decodeHtmlEntities($0) }?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return (cleaned?.isEmpty == false) ? cleaned : nil
+            }()
+
+            return AppDetail(
+                description: description,
+                screenshots: screenshots,
+                datePublished: datePublished,
+                genres: genres,
+                languages: languages,
+                author: author
+            )
         } catch {
             return .empty
         }
@@ -631,6 +664,9 @@ enum GameDecoder {
         let developer = (item["developer"] as? [String: Any])?["name"] as? String ?? ""
         let coverUrl = cover.map { "\($0)pjpg250x140" } ?? ""
         let iconUrl = (icon ?? cover).map { "\($0)pjpg256x256" } ?? ""
+        let ageRating = ((item["features"] as? [String: Any])?["age_rating"] as? String)?
+            .trimmingCharacters(in: .whitespaces)
+        let ageRatingClean = (ageRating?.isEmpty == true) ? nil : ageRating
         return Game(
             appId: appId,
             title: title,
@@ -643,7 +679,8 @@ enum GameDecoder {
             mainColor: mainColor,
             iconMainColor: iconMainColor,
             videoUrl: videoUrl,
-            coverPrefixUrl: cover
+            coverPrefixUrl: cover,
+            ageRating: ageRatingClean
         )
     }
 }

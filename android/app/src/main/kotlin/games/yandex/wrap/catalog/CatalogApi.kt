@@ -227,6 +227,10 @@ class CatalogApi(private val httpClient: HttpClient) {
      * fit the expected `prefix-url + suffix` pattern we leave it alone.
      */
     suspend fun appDetail(appId: Long, lang: String = "en"): AppDetail = withContext(Dispatchers.IO) {
+        val empty = AppDetail(
+            description = null, screenshots = emptyList(), datePublished = null,
+            genres = emptyList(), languages = emptyList(), author = null,
+        )
         val host = preferredYandexHost()
         val effectiveLang = if (host == "yandex.ru") "ru" else lang
         val url = "https://$host/games/app/$appId?lang=$effectiveLang"
@@ -240,19 +244,17 @@ class CatalogApi(private val httpClient: HttpClient) {
         val html = try {
             profileHttp.newCall(request).execute().use { it.body?.string().orEmpty() }
         } catch (_: Throwable) {
-            return@withContext AppDetail(description = null, screenshots = emptyList(), datePublished = null)
+            return@withContext empty
         }
-        val ldJson = extractJsonLd(html)
-            ?: return@withContext AppDetail(description = null, screenshots = emptyList(), datePublished = null)
+        val ldJson = extractJsonLd(html) ?: return@withContext empty
         val parsed = runCatching { lenientJson.parseToJsonElement(ldJson) as? JsonObject }.getOrNull()
-            ?: return@withContext AppDetail(description = null, screenshots = emptyList(), datePublished = null)
+            ?: return@withContext empty
         val graph = parsed["@graph"] as? JsonArray ?: JsonArray(emptyList())
         val gameNode = graph.firstOrNull { node ->
             val obj = node as? JsonObject ?: return@firstOrNull false
             val type = obj["@type"]?.jsonPrimitive?.contentOrNull
             type == "SoftwareApplication" || type == "VideoGame" || type == "MobileApplication"
-        } as? JsonObject
-            ?: return@withContext AppDetail(description = null, screenshots = emptyList(), datePublished = null)
+        } as? JsonObject ?: return@withContext empty
 
         // Prefer the rich multi-paragraph description on `mainEntityOfPage`;
         // the top-level `description` is the short OG tagline.
@@ -271,7 +273,33 @@ class CatalogApi(private val httpClient: HttpClient) {
 
         val datePublished = gameNode["datePublished"]?.jsonPrimitive?.contentOrNull
 
-        AppDetail(description = description, screenshots = screenshots, datePublished = datePublished)
+        // `genre` may be a single string or an array — JSON-LD allows either.
+        val genres: List<String> = when (val g = gameNode["genre"]) {
+            is JsonArray -> g.mapNotNull { it.jsonPrimitive.contentOrNull?.let(::decodeHtmlEntities) }
+            is JsonObject -> emptyList()
+            null -> emptyList()
+            else -> g.jsonPrimitive.contentOrNull?.let(::decodeHtmlEntities)?.let(::listOf) ?: emptyList()
+        }
+
+        // `inLanguage` may also be either shape.
+        val languages: List<String> = when (val l = gameNode["inLanguage"]) {
+            is JsonArray -> l.mapNotNull { it.jsonPrimitive.contentOrNull }
+            null -> emptyList()
+            else -> l.jsonPrimitive.contentOrNull?.let(::listOf) ?: emptyList()
+        }
+
+        val author = (gameNode["author"] as? JsonObject)?.get("name")?.jsonPrimitive?.contentOrNull
+            ?.let(::decodeHtmlEntities)
+            ?.takeIf { it.isNotBlank() }
+
+        AppDetail(
+            description = description,
+            screenshots = screenshots,
+            datePublished = datePublished,
+            genres = genres,
+            languages = languages,
+            author = author,
+        )
     }
 
     /** Pull the contents of `<script type="application/ld+json">…</script>`. */
@@ -518,6 +546,9 @@ class CatalogApi(private val httpClient: HttpClient) {
         val developer = (item["developer"] as? JsonObject)
             ?.get("name")?.jsonPrimitive?.contentOrNull
             ?: ""
+        val ageRating = (item["features"] as? JsonObject)
+            ?.get("age_rating")?.jsonPrimitive?.contentOrNull
+            ?.takeIf { it.isNotBlank() }
         return Game(
             appId = appId,
             title = title,
@@ -531,6 +562,7 @@ class CatalogApi(private val httpClient: HttpClient) {
             iconMainColor = iconMainColor,
             videoUrl = videoUrl,
             coverPrefixUrl = coverPrefix,
+            ageRating = ageRating,
         )
     }
 

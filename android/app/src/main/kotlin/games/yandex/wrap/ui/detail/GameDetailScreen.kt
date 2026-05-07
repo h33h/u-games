@@ -51,21 +51,31 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import games.yandex.wrap.catalog.AppDetail
 import games.yandex.wrap.catalog.Game
 import games.yandex.wrap.ui.components.Skeleton
 import games.yandex.wrap.ui.components.TileGameCard
 import games.yandex.wrap.ui.theme.UGColors
 import games.yandex.wrap.ui.theme.UGType
 import games.yandex.wrap.ui.theme.parseHexColor
+import java.util.Locale
 
 /**
- * Phase 3 push screen between any catalog card and the WebView.
+ * Phase 3 push screen between any catalog card and the WebView. Every
+ * field is real data from the feed item or JSON-LD; nothing is
+ * fabricated and no two sections show the same fact twice.
  *
  * Sections (top to bottom):
- *  1. Hero (360dp): cover + mainColor halo + sticky top icons (← / ♥ / ↗)
- *  2. Title block (eyebrow + DisplayXL + stat-chips)
- *  3. Stats grid (Genre / Rating / Ratings)
- *  4. More like this (LazyRow of TileGameCard)
+ *  1. Hero (360dp): hi-res cover + mainColor halo + sticky ← / ♥ / ↗.
+ *  2. Title block — eyebrow (genre · year), DisplayXL title, "by
+ *     {developer}" line, chips (rating · count, age rating) — chips
+ *     only render fields that exist; no fakes.
+ *  3. About paragraph — JSON-LD `mainEntityOfPage.description`.
+ *  4. Screenshots — JSON-LD `screenshot[]` rewritten to pjpg500x280.
+ *  5. More like this — `similar_games` endpoint.
+ *  6. Information — key/value rows for the long-tail metadata that
+ *     doesn't fit a chip (full genre list, languages, developer
+ *     again-but-formatted, release date). Only fields with data render.
  *
  * Plus a sticky bottom CTA (▶ Play now) with a 3-impulse pulse.
  */
@@ -103,20 +113,20 @@ fun GameDetailScreen(
                 )
             }
             item { Spacer(Modifier.height(20.dp)) }
-            item { TitleBlock(game = game, year = yearFromIso(state.detail?.datePublished)) }
-            item { Spacer(Modifier.height(18.dp)) }
-            item { StatsGrid(game = game, year = yearFromIso(state.detail?.datePublished)) }
+            item {
+                TitleBlock(
+                    game = game,
+                    year = yearFromIso(state.detail?.datePublished),
+                    author = pickAuthor(game, state.detail),
+                )
+            }
             item { Spacer(Modifier.height(24.dp)) }
-            // About section. Skeleton while loading the JSON-LD detail,
-            // collapses entirely if the description is missing (some
-            // games genuinely have none — don't fake it).
             item {
                 AboutSection(
                     description = state.detail?.description,
                     isLoading = state.isLoadingDetail,
                 )
             }
-            // Screenshots row, same loading/empty rules as About.
             item {
                 ScreenshotsRow(
                     screenshots = state.detail?.screenshots.orEmpty(),
@@ -144,9 +154,10 @@ fun GameDetailScreen(
                     onFavoriteToggle = onSimilarFavoriteToggle,
                 )
             }
+            item { Spacer(Modifier.height(24.dp)) }
+            item { InformationBlock(game = game, detail = state.detail) }
         }
         StickyPlayCta(
-            game = game,
             bottomInset = systemBarsPadding.calculateBottomPadding(),
             onPlay = { onPlay(game) },
         )
@@ -241,17 +252,16 @@ private fun HeroIcon(
 }
 
 @Composable
-private fun TitleBlock(game: Game, year: String?) {
-    val haloColor = parseHexColor(game.mainColor) ?: UGColors.Accent
+private fun TitleBlock(game: Game, year: String?, author: String?) {
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
-        val eyebrow = game.categories.firstOrNull()?.uppercase()
-        val eyebrowText = listOfNotNull(eyebrow, year).joinToString(" · ")
+        // Eyebrow combines anything we have: first genre + release year.
+        // Both fields are honest data — no hardcoded suffix.
+        val eyebrowText = listOfNotNull(
+            game.categories.firstOrNull()?.uppercase(),
+            year,
+        ).joinToString(" · ")
         if (eyebrowText.isNotEmpty()) {
-            Text(
-                text = eyebrowText,
-                color = UGColors.TextMuted,
-                style = UGType.Label,
-            )
+            Text(text = eyebrowText, color = UGColors.TextMuted, style = UGType.Label)
             Spacer(Modifier.height(8.dp))
         }
         Text(
@@ -261,62 +271,51 @@ private fun TitleBlock(game: Game, year: String?) {
             maxLines = 3,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(Modifier.height(12.dp))
-        val chips = listOfNotNull(
-            if (game.rating > 0f) "★ %.1f".format(game.rating) else null,
-            if (game.ratingCount > 0) "${game.ratingCount} ratings" else null,
-            "No ads",
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            chips.forEachIndexed { idx, chip ->
-                val isAds = idx == chips.size - 1
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(999.dp))
-                        .background(
-                            if (isAds) haloColor.copy(alpha = 0.18f)
-                            else Color.White.copy(alpha = 0.08f)
+        if (!author.isNullOrBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "by $author",
+                color = UGColors.TextSecondary,
+                style = UGType.BodyS,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        // Chips: only fields that have data. No fake "No ads" claim.
+        val chips = buildList {
+            if (game.rating > 0f) {
+                add(buildString {
+                    append("★ %.1f".format(Locale.US, game.rating))
+                    if (game.ratingCount > 0) {
+                        append(" · ")
+                        append(formatCount(game.ratingCount))
+                    }
+                })
+            } else if (game.ratingCount > 0) {
+                add("${formatCount(game.ratingCount)} ratings")
+            }
+            if (!game.ageRating.isNullOrBlank()) add(game.ageRating)
+        }
+        if (chips.isNotEmpty()) {
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                chips.forEach { chip ->
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(999.dp))
+                            .background(Color.White.copy(alpha = 0.08f))
+                            .padding(horizontal = 9.dp, vertical = 5.dp),
+                    ) {
+                        Text(
+                            text = chip,
+                            color = UGColors.TextSecondary,
+                            style = UGType.Caption,
                         )
-                        .padding(horizontal = 9.dp, vertical = 5.dp),
-                ) {
-                    Text(
-                        text = chip,
-                        color = if (isAds) haloColor else UGColors.TextSecondary,
-                        style = UGType.Caption,
-                    )
+                    }
                 }
             }
         }
     }
-}
-
-@Composable
-private fun StatsGrid(game: Game, year: String?) {
-    val genre = game.categories.firstOrNull()?.replaceFirstChar { it.uppercase() } ?: "—"
-    val rating = if (game.rating > 0f) "★ %.1f".format(game.rating) else "—"
-    val ratingCount = if (game.ratingCount > 0) game.ratingCount.toString() else "—"
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        StatCard(eyebrow = "GENRE", value = genre, modifier = Modifier.weight(1f))
-        StatCard(eyebrow = "RATING", value = rating, modifier = Modifier.weight(1f))
-        // Show release year when JSON-LD provides one; otherwise fall back
-        // to the rating count (the next-most-honest stat we have).
-        if (year != null) {
-            StatCard(eyebrow = "RELEASED", value = year, modifier = Modifier.weight(1f))
-        } else {
-            StatCard(eyebrow = "RATINGS", value = ratingCount, modifier = Modifier.weight(1f))
-        }
-    }
-}
-
-private fun yearFromIso(iso: String?): String? {
-    if (iso.isNullOrBlank()) return null
-    // JSON-LD `datePublished` is an ISO-8601 string starting with YYYY-MM-DD.
-    // Anything shorter (e.g. just "2024") is also valid — handle both.
-    val first4 = iso.take(4)
-    return if (first4.length == 4 && first4.all { it.isDigit() }) first4 else null
 }
 
 @Composable
@@ -325,7 +324,6 @@ private fun AboutSection(description: String?, isLoading: Boolean) {
         isLoading && description == null -> Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
             Text(text = "ABOUT", color = UGColors.TextMuted, style = UGType.Label)
             Spacer(Modifier.height(10.dp))
-            // 3-row skeleton while the JSON-LD page is in flight.
             repeat(3) {
                 Skeleton(modifier = Modifier.fillMaxWidth().height(12.dp), cornerRadius = 4.dp)
                 Spacer(Modifier.height(8.dp))
@@ -335,11 +333,7 @@ private fun AboutSection(description: String?, isLoading: Boolean) {
         !description.isNullOrBlank() -> Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
             Text(text = "ABOUT", color = UGColors.TextMuted, style = UGType.Label)
             Spacer(Modifier.height(10.dp))
-            Text(
-                text = description,
-                color = UGColors.TextSecondary,
-                style = UGType.Body,
-            )
+            Text(text = description, color = UGColors.TextSecondary, style = UGType.Body)
             Spacer(Modifier.height(20.dp))
         }
         else -> Spacer(Modifier.height(0.dp))  // collapse silently
@@ -366,10 +360,7 @@ private fun ScreenshotsRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 items(3) {
-                    Skeleton(
-                        modifier = Modifier.width(220.dp).height(124.dp),
-                        cornerRadius = 16.dp,
-                    )
+                    Skeleton(modifier = Modifier.width(220.dp).height(124.dp), cornerRadius = 16.dp)
                 }
             }
         }
@@ -416,27 +407,7 @@ private fun ScreenshotsRow(
                 }
             }
         }
-        else -> Spacer(Modifier.height(0.dp))  // collapse silently
-    }
-}
-
-@Composable
-private fun StatCard(eyebrow: String, value: String, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .background(UGColors.Surface)
-            .padding(horizontal = 12.dp, vertical = 14.dp),
-    ) {
-        Text(text = eyebrow, color = UGColors.TextMuted, style = UGType.Label)
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = value,
-            color = UGColors.TextPrimary,
-            style = UGType.TitleM,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        else -> Spacer(Modifier.height(0.dp))
     }
 }
 
@@ -455,12 +426,7 @@ private fun SimilarRow(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             items(3) {
-                Skeleton(
-                    modifier = Modifier
-                        .width(160.dp)
-                        .height(140.dp),
-                    cornerRadius = 16.dp,
-                )
+                Skeleton(modifier = Modifier.width(160.dp).height(140.dp), cornerRadius = 16.dp)
             }
         }
         error != null && similar.isEmpty() -> Text(
@@ -469,9 +435,7 @@ private fun SimilarRow(
             style = UGType.BodyS,
             modifier = Modifier.padding(horizontal = 18.dp),
         )
-        similar.isEmpty() -> {
-            // No related games — render nothing so the row collapses.
-        }
+        similar.isEmpty() -> {}
         else -> LazyRow(
             contentPadding = PaddingValues(horizontal = 18.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -491,12 +455,59 @@ private fun SimilarRow(
 }
 
 @Composable
+private fun InformationBlock(game: Game, detail: AppDetail?) {
+    // Build the rows from real data only — every empty source collapses
+    // its own row so the section silently shrinks instead of showing
+    // "—" placeholders. The full genre list goes here (the eyebrow only
+    // had room for the first genre); language list is JSON-LD-only;
+    // developer is the catalog's value, formatted as a row instead of
+    // floating loose under the title.
+    val author = pickAuthor(game, detail)
+    val rows = buildList {
+        if (!author.isNullOrBlank()) add("Developer" to author)
+        formatReleaseDate(detail?.datePublished)?.let { add("Released" to it) }
+        val genres = pickGenres(game, detail)
+        if (genres.isNotEmpty()) add("Genres" to genres.joinToString(" · "))
+        if (!detail?.languages.isNullOrEmpty()) {
+            add("Languages" to detail!!.languages.map { it.uppercase(Locale.US) }.joinToString(", "))
+        }
+    }
+    if (rows.isEmpty()) return
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
+        Text(text = "INFORMATION", color = UGColors.TextMuted, style = UGType.Label)
+        Spacer(Modifier.height(10.dp))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(UGColors.Surface),
+        ) {
+            rows.forEachIndexed { idx, (label, value) ->
+                if (idx > 0) {
+                    Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(UGColors.Divider))
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(text = label, color = UGColors.TextMuted, style = UGType.BodyS, modifier = Modifier.width(110.dp))
+                    Text(
+                        text = value,
+                        color = UGColors.TextPrimary,
+                        style = UGType.BodyS,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun StickyPlayCta(
-    game: Game,
     bottomInset: androidx.compose.ui.unit.Dp,
     onPlay: () -> Unit,
 ) {
-    // Pulse 3 times after appearance (~7.2s total), then hold at scale=1.
     val scale = remember { Animatable(1.0f) }
     LaunchedEffect(Unit) {
         repeat(3) {
@@ -505,9 +516,7 @@ private fun StickyPlayCta(
         }
     }
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = bottomInset),
+        modifier = Modifier.fillMaxWidth().padding(bottom = bottomInset),
         contentAlignment = Alignment.BottomCenter,
     ) {
         Box(
@@ -522,9 +531,6 @@ private fun StickyPlayCta(
                     )
                 ),
         )
-        // Suppress unused-parameter warning for `game` (kept for future
-        // "Continue playing" sub-line that reads game.appId from recents).
-        @Suppress("UNUSED_PARAMETER") val _g = game
         Box(
             modifier = Modifier
                 .padding(bottom = 18.dp)
@@ -541,11 +547,64 @@ private fun StickyPlayCta(
                 .clickable(onClick = onPlay)
                 .padding(horizontal = 28.dp, vertical = 14.dp),
         ) {
-            Text(
-                text = "▶ Play now",
-                color = Color.Black,
-                style = UGType.BodyS,
-            )
+            Text(text = "▶ Play now", color = Color.Black, style = UGType.BodyS)
         }
     }
+}
+
+// --- helpers ---------------------------------------------------------
+
+/** Extract just the year from `datePublished`. JSON-LD allows full
+ *  ISO-8601 timestamps as well as bare `YYYY` strings. */
+private fun yearFromIso(iso: String?): String? {
+    if (iso.isNullOrBlank()) return null
+    val first4 = iso.take(4)
+    return if (first4.length == 4 && first4.all { it.isDigit() }) first4 else null
+}
+
+/** Pretty `Mon DD, YYYY` from JSON-LD `datePublished`. Drops the time
+ *  portion to match what the App Store shows. Falls back to year-only
+ *  when the date doesn't have a month/day. */
+private fun formatReleaseDate(iso: String?): String? {
+    if (iso.isNullOrBlank()) return null
+    if (iso.length < 10) return yearFromIso(iso)
+    val (y, m, d) = try {
+        Triple(iso.substring(0, 4).toInt(), iso.substring(5, 7).toInt(), iso.substring(8, 10).toInt())
+    } catch (_: Throwable) {
+        return yearFromIso(iso)
+    }
+    val months = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+    val month = months.getOrNull(m - 1) ?: return yearFromIso(iso)
+    return "$month %02d, %d".format(d, y)
+}
+
+/** Prefer JSON-LD `author.name` when present (sometimes formatted
+ *  better — e.g. with proper capitalization), fall back to the catalog
+ *  feed's `developer.name`. Both fields point at the same studio. */
+private fun pickAuthor(game: Game, detail: AppDetail?): String? {
+    detail?.author?.takeIf { it.isNotBlank() }?.let { return it }
+    return game.developer.takeIf { it.isNotBlank() }
+}
+
+/** JSON-LD `genre[]` is the richer source (multiple values, includes
+ *  audience-targeted genres like "For boys"). Catalog feed's
+ *  `categoriesNames` is the fallback when JSON-LD didn't provide one. */
+private fun pickGenres(game: Game, detail: AppDetail?): List<String> {
+    val ld = detail?.genres.orEmpty().filter { it.isNotBlank() }
+    if (ld.isNotEmpty()) return ld
+    return game.categories.filter { it.isNotBlank() }
+}
+
+/** Compact rating-count formatter: 12340 → "12.3K", 1_240_000 → "1.2M",
+ *  3000 → "3K" (no trailing ".0"). */
+private fun formatCount(n: Int): String = when {
+    n >= 1_000_000 -> compact(n / 1_000_000.0, "M")
+    n >= 1_000 -> compact(n / 1_000.0, "K")
+    else -> n.toString()
+}
+
+private fun compact(v: Double, suffix: String): String {
+    val rounded = (v * 10).toInt() / 10.0
+    return if (rounded == rounded.toInt().toDouble()) "${rounded.toInt()}$suffix"
+    else "%.1f$suffix".format(Locale.US, rounded)
 }

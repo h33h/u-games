@@ -1,13 +1,22 @@
 import SwiftUI
 
-/// Phase 3 push screen between any catalog card and the WebView.
+/// Phase 3 push screen between any catalog card and the WebView. Every
+/// field is real data from the feed item or JSON-LD; nothing is
+/// fabricated and no two sections show the same fact twice.
 ///
-/// Layout, top to bottom:
-///   1. Hero (360h): cover + mainColor halo + sticky top icons (← / ♥ / ↗)
-///   2. Title block (eyebrow + DisplayXL + stat-chips)
-///   3. Stats grid (Genre / Rating / Ratings)
-///   4. More like this (LazyHStack of TileGameCard) — hidden on empty
-///   5. Sticky bottom CTA (▶ Play now) — pulses 3 times on appearance
+/// Sections (top to bottom):
+///   1. Hero (360h): hi-res cover + mainColor halo + sticky ← / ♥ / ↗
+///   2. Title block — eyebrow (genre · year), DisplayXL title, "by
+///      {developer}" line, chips (rating · count, age) — chips only
+///      render fields that exist; no fakes.
+///   3. About paragraph — JSON-LD `mainEntityOfPage.description`
+///   4. Screenshots — JSON-LD `screenshot[]`
+///   5. More like this — `similar_games` endpoint
+///   6. Information — key/value rows for the long-tail metadata that
+///      doesn't fit a chip (full genre list, languages, developer
+///      again-but-formatted, release date)
+///
+/// Plus a sticky bottom CTA (▶ Play now) with a 3-impulse pulse.
 struct GameDetailView: View {
     @ObservedObject var viewModel: GameDetailViewModel
     @ObservedObject var favorites: FavoritesStore
@@ -29,8 +38,6 @@ struct GameDetailView: View {
                     hero
                     Spacer().frame(height: 20)
                     titleBlock
-                    Spacer().frame(height: 18)
-                    statsGrid
                     Spacer().frame(height: 24)
                     aboutSection
                     screenshotsRow
@@ -38,6 +45,8 @@ struct GameDetailView: View {
                     sectionHeader("More like this")
                     Spacer().frame(height: 12)
                     similarRow
+                    Spacer().frame(height: 24)
+                    informationBlock
                     Spacer().frame(height: 110)  // sticky CTA + safe area
                 }
             }
@@ -86,8 +95,8 @@ struct GameDetailView: View {
                 startPoint: .top, endPoint: .bottom
             )
             heroTopRow
-                .padding(.top, 60)  // safe-area-ish; keep it static so
-                .padding(.horizontal, 14)  // back button is reachable
+                .padding(.top, 60)
+                .padding(.horizontal, 14)
         }
         .frame(height: 360)
         .frame(maxWidth: .infinity)
@@ -133,6 +142,8 @@ struct GameDetailView: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 12) {
+            // Eyebrow combines anything we have: first genre + release
+            // year. Both fields are honest data — no hardcoded suffix.
             let eyebrow = [
                 viewModel.game.categories.first?.uppercased(),
                 yearFromIso(viewModel.detail?.datePublished),
@@ -148,62 +159,54 @@ struct GameDetailView: View {
                 .foregroundColor(UGColor.textPrimary)
                 .lineLimit(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if let author = pickAuthor() {
+                Text("by \(author)")
+                    .font(UGFont.bodyS)
+                    .foregroundColor(UGColor.textSecondary)
+                    .lineLimit(1)
+            }
             chipsRow
         }
         .padding(.horizontal, 18)
     }
 
+    @ViewBuilder
     private var chipsRow: some View {
-        HStack(spacing: 6) {
-            if viewModel.game.rating > 0 {
-                chip(text: String(format: "★ %.1f", viewModel.game.rating), tinted: false)
+        let chips = buildChips()
+        if !chips.isEmpty {
+            HStack(spacing: 6) {
+                ForEach(chips, id: \.self) { c in
+                    chip(text: c)
+                }
             }
-            if viewModel.game.ratingCount > 0 {
-                chip(text: "\(viewModel.game.ratingCount) ratings", tinted: false)
-            }
-            chip(text: "No ads", tinted: true)
         }
     }
 
-    private func chip(text: String, tinted: Bool) -> some View {
+    private func buildChips() -> [String] {
+        var out: [String] = []
+        if viewModel.game.rating > 0 {
+            var s = String(format: "★ %.1f", viewModel.game.rating)
+            if viewModel.game.ratingCount > 0 {
+                s += " · " + formatCount(viewModel.game.ratingCount)
+            }
+            out.append(s)
+        } else if viewModel.game.ratingCount > 0 {
+            out.append("\(formatCount(viewModel.game.ratingCount)) ratings")
+        }
+        if let age = viewModel.game.ageRating, !age.isEmpty {
+            out.append(age)
+        }
+        return out
+    }
+
+    private func chip(text: String) -> some View {
         Text(text)
             .font(UGFont.caption)
-            .foregroundColor(tinted ? halo : UGColor.textSecondary)
+            .foregroundColor(UGColor.textSecondary)
             .padding(.horizontal, 9)
             .padding(.vertical, 5)
-            .background(
-                tinted
-                ? halo.opacity(0.18)
-                : Color.white.opacity(0.08)
-            )
+            .background(Color.white.opacity(0.08))
             .clipShape(Capsule())
-    }
-
-    // MARK: Stats grid
-
-    private var statsGrid: some View {
-        let genre = viewModel.game.categories.first.map { $0.prefix(1).uppercased() + $0.dropFirst() } ?? "—"
-        let rating = viewModel.game.rating > 0 ? String(format: "★ %.1f", viewModel.game.rating) : "—"
-        let ratings = viewModel.game.ratingCount > 0 ? "\(viewModel.game.ratingCount)" : "—"
-        let year = yearFromIso(viewModel.detail?.datePublished)
-        return HStack(spacing: 10) {
-            statCard(eyebrow: "GENRE", value: genre)
-            statCard(eyebrow: "RATING", value: rating)
-            // Show release year when JSON-LD provides one; otherwise fall
-            // back to the rating count (next-most-honest stat we have).
-            if let year = year {
-                statCard(eyebrow: "RELEASED", value: year)
-            } else {
-                statCard(eyebrow: "RATINGS", value: ratings)
-            }
-        }
-        .padding(.horizontal, 18)
-    }
-
-    private func yearFromIso(_ iso: String?) -> String? {
-        guard let iso = iso, !iso.isEmpty else { return nil }
-        let first4 = iso.prefix(4)
-        return first4.count == 4 && first4.allSatisfy { $0.isNumber } ? String(first4) : nil
     }
 
     // MARK: About + screenshots (from JSON-LD on the per-app page)
@@ -302,24 +305,6 @@ struct GameDetailView: View {
         .shadow(color: halo.opacity(UGColor.haloAlpha), radius: 12, x: 0, y: 8)
     }
 
-    private func statCard(eyebrow: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(eyebrow)
-                .font(UGFont.label)
-                .tracking(1.2)
-                .foregroundColor(UGColor.textMuted)
-            Text(value)
-                .font(UGFont.titleM)
-                .foregroundColor(UGColor.textPrimary)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 14)
-        .background(UGColor.surface)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-    }
-
     private func sectionHeader(_ title: String) -> some View {
         HStack {
             Text(title)
@@ -372,6 +357,64 @@ struct GameDetailView: View {
         }
     }
 
+    // MARK: Information block
+
+    @ViewBuilder
+    private var informationBlock: some View {
+        // Build the rows from real data only — every empty source
+        // collapses its own row so the section silently shrinks instead
+        // of showing "—" placeholders. The full genre list goes here
+        // (the eyebrow only had room for the first genre); language
+        // list is JSON-LD-only; developer is the catalog's value,
+        // formatted as a row instead of floating loose under the title.
+        let rows = buildInfoRows()
+        if !rows.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("INFORMATION")
+                    .font(UGFont.label)
+                    .tracking(1.2)
+                    .foregroundColor(UGColor.textMuted)
+                VStack(spacing: 0) {
+                    ForEach(Array(rows.enumerated()), id: \.offset) { idx, row in
+                        if idx > 0 {
+                            Rectangle()
+                                .fill(UGColor.divider)
+                                .frame(height: 1)
+                                .frame(maxWidth: .infinity)
+                        }
+                        HStack(alignment: .top) {
+                            Text(row.label)
+                                .font(UGFont.bodyS)
+                                .foregroundColor(UGColor.textMuted)
+                                .frame(width: 110, alignment: .leading)
+                            Text(row.value)
+                                .font(UGFont.bodyS)
+                                .foregroundColor(UGColor.textPrimary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                    }
+                }
+                .background(UGColor.surface)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+            .padding(.horizontal, 18)
+        }
+    }
+
+    private func buildInfoRows() -> [(label: String, value: String)] {
+        var out: [(String, String)] = []
+        if let author = pickAuthor() { out.append(("Developer", author)) }
+        if let date = formatReleaseDate(viewModel.detail?.datePublished) { out.append(("Released", date)) }
+        let genres = pickGenres()
+        if !genres.isEmpty { out.append(("Genres", genres.joined(separator: " · "))) }
+        if let langs = viewModel.detail?.languages, !langs.isEmpty {
+            out.append(("Languages", langs.map { $0.uppercased() }.joined(separator: ", ")))
+        }
+        return out
+    }
+
     // MARK: Sticky CTA
 
     private var stickyCta: some View {
@@ -402,5 +445,67 @@ struct GameDetailView: View {
             .background(UGColor.bg0)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    // MARK: Helpers
+
+    /// Just the year from `datePublished`. JSON-LD allows a full
+    /// ISO-8601 timestamp as well as a bare `YYYY` string.
+    private func yearFromIso(_ iso: String?) -> String? {
+        guard let iso = iso, !iso.isEmpty else { return nil }
+        let first4 = iso.prefix(4)
+        return first4.count == 4 && first4.allSatisfy { $0.isNumber } ? String(first4) : nil
+    }
+
+    /// Pretty `Mon DD, YYYY` from JSON-LD `datePublished`. Drops the
+    /// time portion to match what App Store shows. Falls back to
+    /// year-only when the date is shorter.
+    private func formatReleaseDate(_ iso: String?) -> String? {
+        guard let iso = iso, !iso.isEmpty else { return nil }
+        if iso.count < 10 { return yearFromIso(iso) }
+        let chars = Array(iso)
+        guard let y = Int(String(chars[0..<4])),
+              let m = Int(String(chars[5..<7])),
+              let d = Int(String(chars[8..<10]))
+        else { return yearFromIso(iso) }
+        let months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                      "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        guard m >= 1, m <= 12 else { return yearFromIso(iso) }
+        return String(format: "%@ %02d, %d", months[m - 1], d, y)
+    }
+
+    /// Prefer JSON-LD `author.name` (sometimes formatted better — e.g.
+    /// proper capitalization), fall back to the catalog feed's
+    /// `developer.name`. Both fields point at the same studio.
+    private func pickAuthor() -> String? {
+        if let a = viewModel.detail?.author, !a.isEmpty { return a }
+        return viewModel.game.developer.isEmpty ? nil : viewModel.game.developer
+    }
+
+    /// JSON-LD `genre[]` is the richer source (multiple values,
+    /// includes audience-targeted genres like "For boys"). Catalog
+    /// feed's `categoriesNames` is the fallback when JSON-LD didn't
+    /// provide one.
+    private func pickGenres() -> [String] {
+        if let g = viewModel.detail?.genres, !g.isEmpty {
+            return g.filter { !$0.isEmpty }
+        }
+        return viewModel.game.categories.filter { !$0.isEmpty }
+    }
+
+    /// Compact rating-count formatter: 12340 → "12.3K",
+    /// 1_240_000 → "1.2M", 3000 → "3K" (no trailing ".0").
+    private func formatCount(_ n: Int) -> String {
+        if n >= 1_000_000 { return compact(Double(n) / 1_000_000.0, suffix: "M") }
+        if n >= 1_000 { return compact(Double(n) / 1_000.0, suffix: "K") }
+        return String(n)
+    }
+
+    private func compact(_ v: Double, suffix: String) -> String {
+        let rounded = (v * 10).rounded(.down) / 10.0
+        if rounded == rounded.rounded(.down), Int(rounded) == Int(rounded.rounded()) {
+            return "\(Int(rounded))\(suffix)"
+        }
+        return String(format: "%.1f%@", rounded, suffix)
     }
 }

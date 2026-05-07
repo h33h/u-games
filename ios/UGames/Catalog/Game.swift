@@ -19,6 +19,10 @@ struct Game: Identifiable, Equatable, Hashable, Codable {
     /// suffix. Lets Detail render a high-res variant (e.g.
     /// `pjpg1280x720`) without duplicating the URL string.
     let coverPrefixUrl: String?
+    /// Pre-formatted age rating string from feed `features.age_rating`,
+    /// e.g. "12+". The catalog feed already classifies this — no need
+    /// to re-derive from JSON-LD `audience.requiredMinAge`.
+    let ageRating: String?
 
     init(
         appId: Int64,
@@ -32,7 +36,8 @@ struct Game: Identifiable, Equatable, Hashable, Codable {
         mainColor: String? = nil,
         iconMainColor: String? = nil,
         videoUrl: String? = nil,
-        coverPrefixUrl: String? = nil
+        coverPrefixUrl: String? = nil,
+        ageRating: String? = nil
     ) {
         self.appId = appId
         self.title = title
@@ -46,6 +51,7 @@ struct Game: Identifiable, Equatable, Hashable, Codable {
         self.iconMainColor = iconMainColor
         self.videoUrl = videoUrl
         self.coverPrefixUrl = coverPrefixUrl
+        self.ageRating = ageRating
     }
 
     var id: Int64 { appId }

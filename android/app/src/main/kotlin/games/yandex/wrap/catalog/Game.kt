@@ -19,6 +19,10 @@ data class Game(
      *  suffix appended. Lets the Detail screen ask for a high-res variant
      *  (e.g. `pjpg1280x720`) without duplicating the URL string. */
     val coverPrefixUrl: String? = null,
+    /** Pre-formatted age rating string from feed `features.age_rating`,
+     *  e.g. "12+", "18+". The catalog feed already classifies this for
+     *  us — no need to re-derive from JSON-LD `audience.requiredMinAge`. */
+    val ageRating: String? = null,
 ) {
     val playUrl: String get() = "https://yandex.com/games/app/$appId"
 

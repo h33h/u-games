@@ -20,4 +20,16 @@ data class AppDetail(
     /** ISO-8601 timestamp from JSON-LD `datePublished`. The UI renders
      *  just the year (the only honest "release year" Yandex exposes). */
     val datePublished: String?,
+    /** All genres listed in JSON-LD. The catalog feed only exposes
+     *  `categoriesNames`, which usually overlaps but isn't always
+     *  identical (JSON-LD includes audience-targeted genres like
+     *  "For boys" that the feed omits). */
+    val genres: List<String>,
+    /** Two-letter language codes (ISO 639) the game is localized for,
+     *  e.g. ["ru", "en"]. Empty when JSON-LD doesn't carry the field. */
+    val languages: List<String>,
+    /** JSON-LD `author.name`. Same semantics as `Game.developer` but
+     *  occasionally formatted differently — keep both so the UI can
+     *  fall back when one is empty. */
+    val author: String?,
 )

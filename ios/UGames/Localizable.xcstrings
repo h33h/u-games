@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "· %@ ratings" : {
+
+    },
     "An unofficial Yandex Games wrapper. Open source under MIT." : {
 
     },
@@ -13,10 +16,16 @@
     "Couldn't load related games" : {
 
     },
+    "End of %@" : {
+
+    },
     "Favorites · %@" : {
 
     },
     "No log entries yet.\nReproduce the issue, then re-open this view." : {
+
+    },
+    "Not rated yet" : {
 
     },
     "Profile" : {

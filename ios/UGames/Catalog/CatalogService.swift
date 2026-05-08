@@ -476,9 +476,20 @@ final class CatalogService: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         do {
             let (data, _) = try await httpData(for: request)
-            guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let feed = root["feed"] as? [[String: Any]] else { return [] }
-            return GameDecoder.flatten(feed)
+            guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+            if let games = root["games"] as? [[String: Any]] {
+                var seen = Set<Int64>()
+                var out: [Game] = []
+                for item in games {
+                    guard let game = GameDecoder.parse(item) else { continue }
+                    if seen.insert(game.appId).inserted { out.append(game) }
+                }
+                return out.stableSorted()
+            }
+            if let feed = root["feed"] as? [[String: Any]] {
+                return GameDecoder.flatten(feed)
+            }
+            return []
         } catch {
             return []
         }

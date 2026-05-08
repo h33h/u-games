@@ -4,6 +4,11 @@ enum ProfileRoute: Hashable {
     case about
 }
 
+enum HomeRoute: Hashable {
+    case game(Game)
+    case category(name: String, title: String)
+}
+
 struct TabContainer: View {
     @ObservedObject var catalogService: CatalogService
     @ObservedObject var favoritesStore: FavoritesStore
@@ -16,7 +21,7 @@ struct TabContainer: View {
     @StateObject private var homeVM: HomeViewModel
     @StateObject private var browseVM: BrowseViewModel
     @State private var selected: TabKey = .home
-    @State private var homePath: [Game] = []
+    @State private var homePath: [HomeRoute] = []
     @State private var browsePath: [Game] = []
     @State private var favoritesPath: [Game] = []
     @State private var profilePath: [ProfileRoute] = []
@@ -119,18 +124,32 @@ struct TabContainer: View {
         NavigationStack(path: $homePath) {
             HomeView(
                 viewModel: homeVM,
-                onGameClick: { game in homePath.append(game) },
+                onGameClick: { game in homePath.append(.game(game)) },
                 onOpenBrowseFiltered: { rawCategory in
                     browsePath.removeAll()
                     browseVM.setCategoryByName(rawCategory)
                     selected = .browse
                 },
+                onOpenCategory: { name, title in
+                    homePath.append(.category(name: name, title: title))
+                },
                 onProfileClick: { selected = .profile },
                 onLogsRequest: onLogsRequest,
                 onShareGame: onShareGame
             )
-            .navigationDestination(for: Game.self) { game in
-                gameDetailDestination(game: game, push: { homePath.append($0) })
+            .navigationDestination(for: HomeRoute.self) { route in
+                switch route {
+                case .game(let game):
+                    gameDetailDestination(game: game, push: { homePath.append(.game($0)) })
+                case .category(let name, let title):
+                    CategoryGamesDestination(
+                        catalogService: catalogService,
+                        favoritesStore: favoritesStore,
+                        categoryName: name,
+                        displayTitle: title,
+                        onGameClick: { homePath.append(.game($0)) }
+                    )
+                }
             }
             .toolbar(.hidden, for: .navigationBar)
         }
@@ -204,5 +223,27 @@ private struct AboutDestination: View {
     var body: some View {
         AboutView(onBack: { dismiss() })
             .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+private struct CategoryGamesDestination: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let catalogService: CatalogService
+    let favoritesStore: FavoritesStore
+    let categoryName: String
+    let displayTitle: String
+    let onGameClick: (Game) -> Void
+
+    var body: some View {
+        CategoryGamesView(
+            service: catalogService,
+            favoritesStore: favoritesStore,
+            categoryName: categoryName,
+            displayTitle: displayTitle,
+            onGameClick: onGameClick,
+            onBack: { dismiss() }
+        )
+        .toolbar(.hidden, for: .navigationBar)
     }
 }

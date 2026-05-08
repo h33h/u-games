@@ -4,6 +4,7 @@ struct HomeView: View {
     @ObservedObject var viewModel: HomeViewModel
     let onGameClick: (Game) -> Void
     let onOpenBrowseFiltered: (String) -> Void
+    let onOpenCategory: (_ categoryName: String, _ title: String) -> Void
     let onProfileClick: () -> Void
     let onLogsRequest: () -> Void
     let onShareGame: (Game) -> Void
@@ -75,7 +76,9 @@ struct HomeView: View {
                             ForEach(viewModel.genreRows, id: \.title) { row in
                                 SectionHeader(
                                     title: row.title,
-                                    seeAllAction: { onOpenBrowseFiltered(row.categoryName ?? row.title) }
+                                    seeAllAction: row.categoryName.map { name in
+                                        { onOpenCategory(name, row.title) }
+                                    }
                                 )
                                 squareRow(games: row.games)
                             }

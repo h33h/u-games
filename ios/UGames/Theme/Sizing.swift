@@ -26,6 +26,7 @@ enum UGSize {
     static let buttonM: CGFloat = 32
     static let buttonL: CGFloat = 36
     static let squareCard: CGFloat = 130
+    static let rowIcon: CGFloat = 64
     static let wideCardW: CGFloat = 140
     static let wideCardH: CGFloat = 96
     static let screenshotW: CGFloat = 220

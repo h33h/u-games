@@ -125,6 +125,7 @@ struct TabContainer: View {
             HomeView(
                 viewModel: homeVM,
                 onGameClick: { game in homePath.append(.game(game)) },
+                onPlayGame: onPlayGame,
                 onOpenBrowseFiltered: { rawCategory in
                     browsePath.removeAll()
                     browseVM.setCategoryByName(rawCategory)

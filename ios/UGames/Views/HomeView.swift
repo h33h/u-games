@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeView: View {
     @ObservedObject var viewModel: HomeViewModel
     let onGameClick: (Game) -> Void
+    let onPlayGame: (Game) -> Void
     let onOpenBrowseFiltered: (String) -> Void
     let onOpenCategory: (_ categoryName: String, _ title: String) -> Void
     let onProfileClick: () -> Void
@@ -35,7 +36,8 @@ struct HomeView: View {
                         if let hero = viewModel.hero {
                             HeroSection(
                                 game: hero,
-                                onPlay: { onGameClick(hero) },
+                                onTap: { onGameClick(hero) },
+                                onPlay: { onPlayGame(hero) },
                                 onFavorite: { viewModel.toggleFavorite(hero) },
                                 onShare: { onShareGame(hero) },
                             )
@@ -46,14 +48,14 @@ struct HomeView: View {
                                 .padding(.horizontal, UGSpace.l)
                         }
 
-                        if viewModel.hero == nil {
+                        if viewModel.isLoading || viewModel.hero == nil {
                             SkeletonSectionHeader()
                             SkeletonRowWide()
 
                             SkeletonStoryCard()
                                 .padding(.horizontal, UGSpace.l)
 
-                            ForEach(0..<2, id: \.self) { _ in
+                            ForEach(0..<3, id: \.self) { _ in
                                 SkeletonSectionHeader()
                                 SkeletonRowSquare()
                             }

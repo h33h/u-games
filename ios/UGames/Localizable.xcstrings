@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "·" : {
+
+    },
     "· %@ ratings" : {
 
     },
@@ -8,6 +11,9 @@
 
     },
     "Back to catalog" : {
+
+    },
+    "by" : {
 
     },
     "by %@" : {

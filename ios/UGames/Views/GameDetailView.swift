@@ -134,38 +134,86 @@ struct GameDetailView: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: UGSpace.m) {
-            let eyebrow = [
-                viewModel.game.categories.first?.uppercased(),
-                yearFromIso(viewModel.detail?.datePublished),
-            ].compactMap { $0 }.joined(separator: " · ")
-            if !eyebrow.isEmpty {
-                UGEyebrow(text: eyebrow)
-            }
+            eyebrowRow
             Text(viewModel.game.title)
                 .font(UGFont.displayXL)
                 .foregroundColor(UGColor.Text.primary)
                 .lineLimit(2)
                 .minimumScaleFactor(0.75)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if let author = pickAuthor() {
-                Text("by \(author)")
-                    .font(UGFont.bodyS)
-                    .foregroundColor(UGColor.Text.secondary)
-                    .lineLimit(1)
-            }
+            authorRow
             chipsRow
         }
         .padding(.horizontal, UGSpace.l)
     }
 
     @ViewBuilder
+    private var eyebrowRow: some View {
+        let category = viewModel.game.categories.first?.uppercased()
+        let year = yearFromIso(viewModel.detail?.datePublished)
+        let showYearSkeleton = year == nil && viewModel.isLoadingDetail
+        if category != nil || year != nil || showYearSkeleton {
+            HStack(spacing: 6) {
+                if let category {
+                    Text(category)
+                        .font(UGFont.label)
+                        .tracking(1.2)
+                        .foregroundColor(UGColor.Text.muted)
+                }
+                if let year {
+                    if category != nil {
+                        Text("·")
+                            .font(UGFont.label)
+                            .foregroundColor(UGColor.Text.muted)
+                    }
+                    Text(year)
+                        .font(UGFont.label)
+                        .tracking(1.2)
+                        .foregroundColor(UGColor.Text.muted)
+                } else if showYearSkeleton {
+                    if category != nil {
+                        Text("·")
+                            .font(UGFont.label)
+                            .foregroundColor(UGColor.Text.muted)
+                    }
+                    SkeletonLine(width: 32, height: 10)
+                }
+            }
+            .accessibilityAddTraits(.isHeader)
+        }
+    }
+
+    @ViewBuilder
+    private var authorRow: some View {
+        if let author = pickAuthor() {
+            Text("by \(author)")
+                .font(UGFont.bodyS)
+                .foregroundColor(UGColor.Text.secondary)
+                .lineLimit(1)
+        } else if viewModel.isLoadingDetail {
+            HStack(spacing: 4) {
+                Text("by")
+                    .font(UGFont.bodyS)
+                    .foregroundColor(UGColor.Text.secondary)
+                SkeletonLine(width: 120, height: 12)
+            }
+        }
+    }
+
+    @ViewBuilder
     private var chipsRow: some View {
         let chips = buildChips()
-        if !chips.isEmpty {
+        let knownAge = viewModel.game.ageRating.map { !$0.isEmpty } ?? false
+        let showAgeSkeleton = viewModel.isLoadingDetail && !knownAge
+        if !chips.isEmpty || showAgeSkeleton {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: UGSpace.s) {
                     ForEach(chips, id: \.self) { c in
                         UGChip(text: c, style: .neutral)
+                    }
+                    if showAgeSkeleton {
+                        Skeleton(cornerRadius: 999)
+                            .frame(width: 56, height: 28)
                     }
                 }
             }
@@ -205,9 +253,10 @@ struct GameDetailView: View {
         } else if viewModel.isLoadingDetail {
             VStack(alignment: .leading, spacing: UGSpace.s) {
                 UGEyebrow(text: "About")
-                ForEach(0..<3) { _ in
-                    Skeleton(cornerRadius: UGSpace.xs).frame(height: UGSpace.m)
-                }
+                SkeletonLine(height: 12).frame(maxWidth: .infinity)
+                SkeletonLine(height: 12).frame(maxWidth: .infinity)
+                SkeletonLine(height: 12).frame(maxWidth: .infinity)
+                SkeletonLine(width: 220, height: 12)
             }
             .padding(.horizontal, UGSpace.l)
             .padding(.bottom, UGSpace.xl)
@@ -325,6 +374,28 @@ struct GameDetailView: View {
                 .clipShape(RoundedRectangle(cornerRadius: UGRadius.l))
             }
             .padding(.horizontal, UGSpace.l)
+        } else if viewModel.isLoadingDetail {
+            VStack(alignment: .leading, spacing: UGSpace.s) {
+                UGEyebrow(text: "Information")
+                VStack(spacing: 0) {
+                    ForEach(0..<4, id: \.self) { idx in
+                        if idx > 0 {
+                            Divider().background(UGColor.Border.divider)
+                        }
+                        HStack(alignment: .center, spacing: UGSpace.s) {
+                            SkeletonLine(width: 84, height: 12)
+                                .frame(minWidth: UGSize.infoLabelCol, alignment: .leading)
+                            SkeletonLine(height: 12)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .padding(.horizontal, UGSpace.l)
+                        .padding(.vertical, UGSpace.l)
+                    }
+                }
+                .background(UGColor.Surface.raised)
+                .clipShape(RoundedRectangle(cornerRadius: UGRadius.l))
+            }
+            .padding(.horizontal, UGSpace.l)
         }
     }
 
@@ -356,7 +427,7 @@ struct GameDetailView: View {
                 onPlay(viewModel.game)
             }
             .scaleEffect(ctaScale)
-            .padding(.bottom, safeBottom + UGSpace.l)
+            .padding(.bottom, safeBottom + UGSpace.xxl)
         }
         .frame(maxWidth: .infinity)
     }

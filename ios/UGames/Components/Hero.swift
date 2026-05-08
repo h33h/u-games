@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HeroSection: View {
     let game: Game
+    let onTap: () -> Void
     let onPlay: () -> Void
     let onFavorite: () -> Void
     let onShare: () -> Void
@@ -10,28 +11,26 @@ struct HeroSection: View {
     private var placeholder: Color { Color(hex: game.mainColor) ?? UGColor.Surface.raised }
 
     var body: some View {
-        Button {
-            UGHaptics.tap()
-            onPlay()
-        } label: {
-            ZStack(alignment: .bottomLeading) {
-                CoverImage(
-                    url: URL(string: game.coverUrl(size: "pjpg1280x720")),
-                    placeholder: placeholder
-                )
-                LinearGradient(
-                    stops: [.init(color: .clear, location: 0.35), .init(color: .black.opacity(0.85), location: 1.0)],
-                    startPoint: .top, endPoint: .bottom
-                )
-                VStack { topRow; Spacer() }
-                bottomBlock
-            }
-            .frame(height: UGSize.heroH)
-            .frame(maxWidth: .infinity)
-            .haloChrome(halo, size: .xl)
-            .contentShape(RoundedRectangle(cornerRadius: UGRadius.xl))
+        ZStack(alignment: .bottomLeading) {
+            CoverImage(
+                url: URL(string: game.coverUrl(size: "pjpg1280x720")),
+                placeholder: placeholder
+            )
+            LinearGradient(
+                stops: [.init(color: .clear, location: 0.35), .init(color: .black.opacity(0.85), location: 1.0)],
+                startPoint: .top, endPoint: .bottom
+            )
+            VStack { topRow; Spacer() }
+            bottomBlock
         }
-        .buttonStyle(PressableCardStyle())
+        .frame(height: UGSize.heroH)
+        .frame(maxWidth: .infinity)
+        .haloChrome(halo, size: .xl)
+        .contentShape(RoundedRectangle(cornerRadius: UGRadius.xl))
+        .onTapGesture {
+            UGHaptics.tap()
+            onTap()
+        }
         .accessibilityElement(children: .contain)
     }
 
@@ -95,7 +94,7 @@ struct HeroSection: View {
                 categories: ["Puzzle"], developer: "studio",
                 mainColor: "#41B4F6"
             ),
-            onPlay: {}, onFavorite: {}, onShare: {}
+            onTap: {}, onPlay: {}, onFavorite: {}, onShare: {}
         )
         .padding(14)
     }

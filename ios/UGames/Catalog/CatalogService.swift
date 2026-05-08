@@ -38,6 +38,46 @@ final class CatalogService: ObservableObject {
 
     private let mobileUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 
+    private func httpData(for request: URLRequest, attempts: Int = 3) async throws -> (Data, URLResponse) {
+        let backoffMs: [UInt64] = [400, 1200]
+        var lastError: Error = URLError(.unknown)
+        for i in 0..<attempts {
+            if i > 0 {
+                let ms = backoffMs[min(i - 1, backoffMs.count - 1)]
+                try? await Task.sleep(nanoseconds: ms * 1_000_000)
+                if Task.isCancelled { throw CancellationError() }
+            }
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                if let http = response as? HTTPURLResponse, (500...599).contains(http.statusCode) {
+                    lastError = URLError(.badServerResponse)
+                    continue
+                }
+                return (data, response)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch let urlErr as URLError where Self.isTransient(urlErr) {
+                lastError = urlErr
+                continue
+            } catch {
+                throw error
+            }
+        }
+        throw lastError
+    }
+
+    private static func isTransient(_ err: URLError) -> Bool {
+        switch err.code {
+        case .timedOut, .networkConnectionLost, .notConnectedToInternet,
+             .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed,
+             .resourceUnavailable, .badServerResponse, .secureConnectionFailed,
+             .cannotLoadFromNetwork:
+            return true
+        default:
+            return false
+        }
+    }
+
     func loadInitial() async {
         if !games.isEmpty { return }
         await refreshFeed()
@@ -205,7 +245,7 @@ final class CatalogService: ObservableObject {
         var request = URLRequest(url: components.url!)
         request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await httpData(for: request)
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let feed = root["feed"] as? [[String: Any]]
         else { return FeedWithBlocks(blocks: [], flatGames: [], recentGames: [], genres: [], nextPageId: nil, hasNext: false) }
@@ -259,7 +299,7 @@ final class CatalogService: ObservableObject {
         var request = URLRequest(url: components.url!)
         request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await httpData(for: request)
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let feed = root["feed"] as? [[String: Any]]
         else { return FeedPage(games: [], nextPageId: nil, hasNext: false) }
@@ -278,7 +318,7 @@ final class CatalogService: ObservableObject {
         var request = URLRequest(url: components.url!)
         request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("text/html", forHTTPHeaderField: "Accept")
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await httpData(for: request)
         guard let html = String(data: data, encoding: .utf8),
               let json = extractAppData(html),
               let parsed = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
@@ -312,7 +352,7 @@ final class CatalogService: ObservableObject {
         var request = URLRequest(url: components.url!)
         request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await httpData(for: request)
         guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let feed = root["feed"] as? [[String: Any]] else { return FeedPage(games: [], nextPageId: nil, hasNext: false) }
         let games = GameDecoder.flatten(feed)
@@ -332,7 +372,7 @@ final class CatalogService: ObservableObject {
         request.setValue("text/html", forHTTPHeaderField: "Accept")
         request.setValue("\(preferredLang),en;q=0.9", forHTTPHeaderField: "Accept-Language")
         do {
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, _) = try await httpData(for: request)
             guard let html = String(data: data, encoding: .utf8) else { return .empty }
             guard let ldJson = extractJsonLd(html) else { return .empty }
             guard let parsed = try JSONSerialization.jsonObject(with: Data(ldJson.utf8)) as? [String: Any],
@@ -435,7 +475,7 @@ final class CatalogService: ObservableObject {
         request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         do {
-            let (data, _) = try await URLSession.shared.data(for: request)
+            let (data, _) = try await httpData(for: request)
             guard let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let feed = root["feed"] as? [[String: Any]] else { return [] }
             return GameDecoder.flatten(feed)
@@ -454,7 +494,7 @@ final class CatalogService: ObservableObject {
         request.setValue(mobileUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
         request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await httpData(for: request)
         guard let html = String(data: data, encoding: .utf8) else { return [] }
         guard let json = extractAppData(html) else { return [] }
         guard let parsed = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],

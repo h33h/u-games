@@ -22,61 +22,64 @@ struct HomeView: View {
                     )
                     .padding(.horizontal, UGSpace.l)
 
-                    if let hero = viewModel.hero {
-                        HeroSection(
-                            game: hero,
-                            onPlay: { onGameClick(hero) },
-                            onFavorite: { viewModel.toggleFavorite(hero) },
-                            onShare: { onShareGame(hero) },
+                    if viewModel.hero == nil, !viewModel.isLoading, let err = viewModel.error {
+                        EmptyState(
+                            systemIcon: "wifi.slash",
+                            title: "Couldn't load",
+                            message: err,
+                            ctaLabel: "Try again",
+                            onCta: { Task { await viewModel.refresh() } }
                         )
-                        .padding(.horizontal, UGSpace.l)
                     } else {
-                        Skeleton(cornerRadius: UGRadius.xl)
-                            .frame(height: UGSize.heroH)
+                        if let hero = viewModel.hero {
+                            HeroSection(
+                                game: hero,
+                                onPlay: { onGameClick(hero) },
+                                onFavorite: { viewModel.toggleFavorite(hero) },
+                                onShare: { onShareGame(hero) },
+                            )
                             .padding(.horizontal, UGSpace.l)
-                    }
+                        } else {
+                            Skeleton(cornerRadius: UGRadius.xl)
+                                .frame(height: UGSize.heroH)
+                                .padding(.horizontal, UGSpace.l)
+                        }
 
-                    if viewModel.hero == nil {
-                        SkeletonSectionHeader()
-                        SkeletonRowWide()
-
-                        SkeletonStoryCard()
-                            .padding(.horizontal, UGSpace.l)
-
-                        ForEach(0..<2, id: \.self) { _ in
+                        if viewModel.hero == nil {
                             SkeletonSectionHeader()
-                            SkeletonRowSquare()
-                        }
-                    } else {
-                        if !viewModel.feedRecent.isEmpty {
-                            SectionHeader(title: "My games")
-                            wideRow(games: viewModel.feedRecent)
-                        }
+                            SkeletonRowWide()
 
-                        if let spotlight = viewModel.spotlight {
-                            StoryCard(
-                                title: spotlight.title,
-                                subtitle: "SPOTLIGHT · \(spotlight.title.uppercased())",
-                                games: Array(spotlight.games.prefix(3)),
-                                onTap: { onOpenBrowseFiltered(spotlight.title) },
-                            )
-                            .padding(.horizontal, UGSpace.l)
-                        }
+                            SkeletonStoryCard()
+                                .padding(.horizontal, UGSpace.l)
 
-                        ForEach(viewModel.genreRows, id: \.title) { row in
-                            SectionHeader(
-                                title: row.title,
-                                seeAllAction: { onOpenBrowseFiltered(row.categoryName ?? row.title) }
-                            )
-                            squareRow(games: row.games)
-                        }
-                    }
+                            ForEach(0..<2, id: \.self) { _ in
+                                SkeletonSectionHeader()
+                                SkeletonRowSquare()
+                            }
+                        } else {
+                            if !viewModel.feedRecent.isEmpty {
+                                SectionHeader(title: "My games")
+                                wideRow(games: viewModel.feedRecent)
+                            }
 
-                    if let err = viewModel.error, viewModel.hero == nil {
-                        Text(err)
-                            .font(UGFont.bodyS)
-                            .foregroundColor(UGColor.Feedback.danger)
-                            .padding(.horizontal, UGSpace.l)
+                            if let spotlight = viewModel.spotlight {
+                                StoryCard(
+                                    title: spotlight.title,
+                                    subtitle: "SPOTLIGHT · \(spotlight.title.uppercased())",
+                                    games: Array(spotlight.games.prefix(3)),
+                                    onTap: { onOpenBrowseFiltered(spotlight.title) },
+                                )
+                                .padding(.horizontal, UGSpace.l)
+                            }
+
+                            ForEach(viewModel.genreRows, id: \.title) { row in
+                                SectionHeader(
+                                    title: row.title,
+                                    seeAllAction: { onOpenBrowseFiltered(row.categoryName ?? row.title) }
+                                )
+                                squareRow(games: row.games)
+                            }
+                        }
                     }
 
                     Spacer().frame(height: UGSize.tabBarInset)

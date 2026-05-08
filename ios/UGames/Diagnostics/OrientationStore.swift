@@ -17,11 +17,10 @@ final class OrientationStore: ObservableObject {
     func reset() { required = nil }
 
     func setFromString(_ s: String) {
-        let lower = s.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-        if lower.hasPrefix("landscape") {
-            required = .landscape
-        } else if lower.hasPrefix("portrait") {
-            required = .portrait
+        switch s.lowercased() {
+        case "landscape": required = .landscape
+        case "portrait": required = .portrait
+        default: break
         }
     }
 }

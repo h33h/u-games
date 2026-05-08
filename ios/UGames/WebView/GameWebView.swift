@@ -153,9 +153,8 @@ struct GameWebView: UIViewRepresentable {
             }
             Log.write(tag, msg)
 
-            if tag == "orient" {
-                Task { @MainActor in OrientationStore.shared.setFromString(rawMsg) }
-            }
+            // `orient` messages are diagnostic only; the native shell drives
+            // OrientationStore from the SSR probe of __playPageData__.
         }
 
         private weak var hostView: WKWebView?

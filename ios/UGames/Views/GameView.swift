@@ -11,6 +11,9 @@ struct GameView: View {
     @State private var showBack: Bool = true
     @State private var revision: Int = 0
     @State private var exiting: Bool = false
+    @State private var orientationProbed: Bool = false
+    // Latches once the WebView mounts so a later rotation can't tear it down.
+    @State private var webViewSpawned: Bool = false
     @StateObject private var orient: OrientationStore = .shared
 
     var body: some View {
@@ -24,17 +27,19 @@ struct GameView: View {
 
     @ViewBuilder
     private func content(isPortrait: Bool) -> some View {
-        let overlayVisible = isOverlayVisible(isPortrait: isPortrait)
+        let mismatch = orientationMismatch(isPortrait: isPortrait)
+        let allowMount = webViewSpawned || (orientationProbed && !mismatch)
         ZStack(alignment: .topLeading) {
             Color.black.ignoresSafeArea()
-            if let url = URL(string: "https://yandex.com/games/app/\(appId)") {
+            if allowMount, let url = URL(string: "https://yandex.com/games/app/\(appId)") {
                 GameWebView(
                     url: url,
                     scripts: scripts,
                     blockList: blockList,
-                    paused: overlayVisible,
+                    paused: mismatch,
                 )
                 .ignoresSafeArea()
+                .onAppear { webViewSpawned = true }
             }
 
             Color.clear
@@ -58,8 +63,12 @@ struct GameView: View {
                 .transition(.opacity)
             }
 
-            if overlayVisible, let target = orient.required {
+            if mismatch, let target = orient.required {
                 RotateDeviceOverlay(target: target, onBack: handleBack)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+            } else if !orientationProbed && !webViewSpawned {
+                LoadingOverlay()
                     .ignoresSafeArea()
                     .transition(.opacity)
             }
@@ -77,6 +86,7 @@ struct GameView: View {
             orient.reset()
             orient.gameActive = true
             scheduleHide()
+            probeOrientation()
         }
         .onDisappear {
             orient.reset()
@@ -102,7 +112,7 @@ struct GameView: View {
         }
     }
 
-    private func isOverlayVisible(isPortrait: Bool) -> Bool {
+    private func orientationMismatch(isPortrait: Bool) -> Bool {
         switch orient.required {
         case .landscape: return isPortrait
         case .portrait: return !isPortrait
@@ -120,6 +130,82 @@ struct GameView: View {
         }
     }
 
+    // Fetch the play page and read `gameSettings.features.orientation` from
+    // __playPageData__, mirroring Yandex's own gameOrientation getter.
+    private func probeOrientation() {
+        guard !orientationProbed else { return }
+        guard let url = URL(string: "https://yandex.com/games/app/\(appId)") else {
+            orientationProbed = true
+            return
+        }
+        Task {
+            await Self.fetchOrientationHint(url: url)
+            await MainActor.run { orientationProbed = true }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            if !orientationProbed {
+                Log.write("orient", "probe timeout")
+                orientationProbed = true
+            }
+        }
+    }
+
+    private static func fetchOrientationHint(url: URL) async {
+        var request = URLRequest(url: url, timeoutInterval: 6)
+        request.setValue(
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+            forHTTPHeaderField: "User-Agent"
+        )
+        request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse,
+                  http.statusCode == 200,
+                  let html = String(data: data, encoding: .utf8)
+            else { return }
+            if let hint = parseOrientationHint(html) {
+                Log.write("orient", "probe hint: \(hint) (playPageData)")
+                await MainActor.run { OrientationStore.shared.setFromString(hint) }
+            } else {
+                Log.write("orient", "probe: no requirement (rotatable)")
+            }
+        } catch {
+            Log.write("orient", "probe error: \((error as NSError).localizedDescription)")
+        }
+    }
+
+    private static func parseOrientationHint(_ html: String) -> String? {
+        guard let payload = extractPlayPageDataJSON(html),
+              let data = payload.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return nil }
+
+        func featureOrientation(_ key: String) -> String? {
+            guard let parent = root[key] as? [String: Any],
+                  let features = parent["features"] as? [String: Any],
+                  let value = features["orientation"] as? String
+            else { return nil }
+            return value.lowercased()
+        }
+        for raw in [featureOrientation("gameSettings"), featureOrientation("gameData")] {
+            guard let v = raw else { continue }
+            if v == "landscape" || v == "portrait" { return v }
+        }
+        return nil
+    }
+
+    // Yandex SSR ships __playPageData__ as the body of an inert
+    // `<script id="__playPageData__" type="mime/invalid">{...JSON...}</script>`.
+    private static func extractPlayPageDataJSON(_ html: String) -> String? {
+        let needles = ["id=\"__playPageData__\"", "id='__playPageData__'"]
+        guard let attr = needles.lazy.compactMap({ html.range(of: $0) }).first,
+              html.range(of: "<script", options: .backwards, range: html.startIndex..<attr.upperBound) != nil,
+              let tagClose = html.range(of: ">", range: attr.upperBound..<html.endIndex),
+              let bodyEnd = html.range(of: "</script>", range: tagClose.upperBound..<html.endIndex)
+        else { return nil }
+        return String(html[tagClose.upperBound..<bodyEnd.lowerBound])
+    }
+
     private func requestPortrait() {
         guard let scene = UIApplication.shared
             .connectedScenes
@@ -128,6 +214,18 @@ struct GameView: View {
         else { return }
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait)) { _ in }
         scene.keyWindow?.rootViewController?.setNeedsUpdateOfSupportedInterfaceOrientations()
+    }
+}
+
+private struct LoadingOverlay: View {
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.96).ignoresSafeArea()
+            ProgressView()
+                .progressViewStyle(.circular)
+                .tint(.white)
+                .scaleEffect(1.4)
+        }
     }
 }
 

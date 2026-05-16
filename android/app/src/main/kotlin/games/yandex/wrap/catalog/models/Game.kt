@@ -35,5 +35,9 @@ data class Game(
      *  must stick to known-good values: `pjpg1280x720`, `pjpg500x280`,
      *  `pjpg256x256`, `pjpg250x140`, `orig`. */
     fun coverUrl(size: String): String =
-        coverPrefixUrl?.let { it + size } ?: coverUrl
+        (coverPrefixUrl ?: coverUrl.takeIf { it.endsWith("/") })?.let { it + size } ?: coverUrl
+
+    fun iconUrl(size: String): String =
+        iconUrl.takeIf { it.endsWith("/") }?.let { it + size }
+            ?: iconUrl.ifEmpty { coverUrl(size) }
 }

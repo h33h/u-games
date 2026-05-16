@@ -58,6 +58,12 @@ struct Game: Identifiable, Equatable, Hashable, Codable {
 
     func coverUrl(size: String) -> String {
         if let p = coverPrefixUrl { return p + size }
+        if coverUrl.hasSuffix("/") { return coverUrl + size }
         return coverUrl
+    }
+
+    func iconUrl(size: String) -> String {
+        if iconUrl.hasSuffix("/") { return iconUrl + size }
+        return iconUrl.isEmpty ? coverUrl(size: size) : iconUrl
     }
 }

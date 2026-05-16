@@ -298,7 +298,7 @@ struct GameDetailView: View {
     }
 
     private func screenshotTile(url: String) -> some View {
-        CoverImage(url: URL(string: url))
+        CoverImage(url: URL(string: screenshotUrl(url, size: "pjpg500x280")))
             .frame(width: UGSize.screenshotW, height: UGSize.screenshotH)
             .haloChrome(halo, size: .sm)
     }
@@ -549,6 +549,10 @@ struct ScreenshotsFullscreenView: View {
             .opacity(anyZoomed ? 0.0 : 1.0)
             .animation(.easeOut(duration: 0.18), value: anyZoomed)
         }
+    }
+
+    private func screenshotUrl(_ url: String, size: String) -> String {
+        url.hasSuffix("/") ? url + size : url
     }
 
     private func upgradeToOrig(_ url: String) -> String {

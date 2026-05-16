@@ -88,7 +88,7 @@ fun StoryCard(
                     .background(placeholder),
             ) {
                 AsyncImage(
-                    model = g.iconUrl.ifEmpty { g.coverUrl },
+                    model = g.iconUrl("pjpg256x256"),
                     contentDescription = g.title,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),

@@ -16,7 +16,7 @@ struct YandexCatalogRemoteDataSource {
         lang: String = "en",
         tab: String? = nil
     ) async throws -> FeedWithBlocks {
-        let root = try await jsonObject(
+        let data = try await responseData(
             for: http.request(
                 url: config.yandex.feedApi(),
                 accept: "application/json",
@@ -28,7 +28,7 @@ struct YandexCatalogRemoteDataSource {
                 )
             )
         )
-        return parser.feedWithBlocks(from: root)
+        return parser.feedWithBlocks(from: data)
     }
 
     func fetchSearchPaginated(
@@ -37,7 +37,7 @@ struct YandexCatalogRemoteDataSource {
         gamesPerPage: Int = 24,
         lang: String = "en"
     ) async throws -> FeedPage {
-        let root = try await jsonObject(
+        let data = try await responseData(
             for: http.request(
                 url: config.yandex.searchApi(),
                 accept: "application/json",
@@ -50,11 +50,11 @@ struct YandexCatalogRemoteDataSource {
                 ])
             )
         )
-        return parser.feedPage(from: root)
+        return parser.feedPage(from: data)
     }
 
     func fetchCategories(lang: String = "en") async throws -> [GameCategory] {
-        let root = try await jsonObject(
+        let data = try await responseData(
             for: http.request(
                 url: config.yandex.tagsApi(),
                 accept: "application/json",
@@ -62,11 +62,11 @@ struct YandexCatalogRemoteDataSource {
                 queryItems: [URLQueryItem(name: "lang", value: "ru")]
             )
         )
-        return parser.categories(fromTags: root)
+        return parser.categories(fromTags: data)
     }
 
     func fetchFeed(pageId: String?, gamesPerPage: Int = 24, lang: String = "en") async throws -> FeedPage {
-        let root = try await jsonObject(
+        let data = try await responseData(
             for: http.request(
                 url: config.yandex.feedApi(),
                 accept: "application/json",
@@ -78,7 +78,7 @@ struct YandexCatalogRemoteDataSource {
                 )
             )
         )
-        return parser.feedPage(from: root)
+        return parser.feedPage(from: data)
     }
 
     func fetchAppDetail(appId: Int64, lang: String = "en") async -> AppDetail? {
@@ -92,8 +92,8 @@ struct YandexCatalogRemoteDataSource {
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONSerialization.data(withJSONObject: ["appID": appId, "format": "app"])
-            let root = try await jsonObject(for: request)
-            return parser.appDetail(fromGetGame: root)
+            let data = try await responseData(for: request)
+            return parser.appDetail(fromGetGame: data)
         } catch {
             return nil
         }
@@ -114,15 +114,15 @@ struct YandexCatalogRemoteDataSource {
             ])
         )
         do {
-            let root = try await jsonObject(for: request)
-            return parser.similarGames(from: root)
+            let data = try await responseData(for: request)
+            return parser.similarGames(from: data)
         } catch {
             return []
         }
     }
 
     func fetchSearch(query: String, lang: String = "en") async throws -> [Game] {
-        let root = try await jsonObject(
+        let data = try await responseData(
             for: http.request(
                 url: config.yandex.searchApi(),
                 accept: "application/json",
@@ -134,7 +134,7 @@ struct YandexCatalogRemoteDataSource {
                 ])
             )
         )
-        return parser.feedPage(from: root).games
+        return parser.feedPage(from: data).games
     }
 
     func fetchProfile(cookieHeader: String, lang: String = "en") async throws -> (UserProfile?, Int, Int, String) {
@@ -150,8 +150,7 @@ struct YandexCatalogRemoteDataSource {
         }
         let (data, response) = try await http.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-        let root = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
-        return (parser.userProfile(from: root), status, 0, String(data: data, encoding: .utf8) ?? "")
+        return (parser.userProfile(from: data), status, 0, String(data: data, encoding: .utf8) ?? "")
     }
 
     private func feedQuery(
@@ -185,8 +184,8 @@ struct YandexCatalogRemoteDataSource {
         pairs.compactMap { name, value in value.map { URLQueryItem(name: name, value: $0) } }
     }
 
-    private func jsonObject(for request: URLRequest) async throws -> [String: Any] {
+    private func responseData(for request: URLRequest) async throws -> Data {
         let (data, _) = try await http.data(for: request)
-        return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        return data
     }
 }

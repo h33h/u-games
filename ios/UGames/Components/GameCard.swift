@@ -22,9 +22,9 @@ struct GameCard: View {
     private var coverUrl: URL? {
         switch style {
         case .tile, .wide:
-            URL(string: game.coverUrl)
+            URL(string: game.coverUrl(size: "pjpg250x140"))
         case .square:
-            URL(string: game.iconUrl.isEmpty ? game.coverUrl : game.iconUrl)
+            URL(string: game.iconUrl(size: "pjpg256x256"))
         }
     }
 

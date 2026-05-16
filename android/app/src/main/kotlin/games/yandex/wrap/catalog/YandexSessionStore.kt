@@ -1,26 +1,24 @@
 package games.yandex.wrap.catalog
 
 import android.webkit.CookieManager
-import games.yandex.wrap.config.AppConfig
 import kotlinx.coroutines.delay
 
 class YandexSessionStore(
-    private val config: AppConfig,
     private val cookieManager: CookieManager = CookieManager.getInstance(),
 ) {
     suspend fun sessionCookieHeader(timeoutMs: Long = 3000): String {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            val header = buildCookieHeader()
+            val header = cookieHeader()
             if (header.contains("Session_id=")) return header
             delay(150)
         }
-        return buildCookieHeader()
+        return cookieHeader()
     }
 
-    private fun buildCookieHeader(): String {
+    fun cookieHeader(): String {
         val merged = LinkedHashMap<String, String>()
-        for (origin in config.yandex.cookieOrigins()) {
+        for (origin in listOf("https://yandex.ru", "https://passport.yandex.ru")) {
             val raw = cookieManager.getCookie(origin).orEmpty()
             if (raw.isEmpty()) continue
             for (pair in raw.split(';')) {
@@ -36,7 +34,7 @@ class YandexSessionStore(
     }
 
     suspend fun clearSession() {
-        for (origin in config.yandex.cookieOrigins()) {
+        for (origin in listOf("https://yandex.ru", "https://passport.yandex.ru")) {
             val raw = cookieManager.getCookie(origin) ?: continue
             for (pair in raw.split(';')) {
                 val name = pair.substringBefore('=').trim()

@@ -41,8 +41,6 @@ class UGamesApplication : Application(), ImageLoaderFactory {
     val catalogRepository get() = container.catalogRepository
     val favoritesRepository get() = container.favoritesRepository
     val profileRepository get() = container.profileRepository
-    val appConfig get() = container.config
-
     val injectedScripts: InjectedScripts by lazy { InjectedScripts.load(this) }
 
     val blockList: BlockList by lazy { BlockList.load(this) }

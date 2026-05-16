@@ -15,7 +15,6 @@ final class AuthState: ObservableObject {
 }
 
 struct AuthView: View {
-    let config: AppConfig
     let onClose: () -> Void
 
     @StateObject private var state = AuthState()
@@ -26,7 +25,7 @@ struct AuthView: View {
             VStack(spacing: 0) {
                 UGTopBar(title: "Sign in to Yandex", onBack: onClose)
                 ZStack {
-                    AuthWebView(config: config, state: state, onSignedIn: onClose)
+                    AuthWebView(state: state, onSignedIn: onClose)
                         .ignoresSafeArea(edges: .bottom)
                     if let err = state.loadError {
                         AuthErrorOverlay(message: err, onRetry: { state.retry() })
@@ -78,17 +77,16 @@ private struct AuthErrorOverlay: View {
 }
 
 private struct AuthWebView: UIViewRepresentable {
-    let config: AppConfig
     @ObservedObject var state: AuthState
     let onSignedIn: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(config: config, state: state, onSignedIn: onSignedIn)
+        Coordinator(state: state, onSignedIn: onSignedIn)
     }
 
     func makeUIView(context: Context) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        config.websiteDataStore = .default()
+        let webViewConfig = WKWebViewConfiguration()
+        webViewConfig.websiteDataStore = .default()
 
         let logBridge = WKUserScript(
             source: """
@@ -109,18 +107,16 @@ private struct AuthWebView: UIViewRepresentable {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
         )
-        config.userContentController.addUserScript(logBridge)
-        config.userContentController.add(context.coordinator, name: "ugamesLog")
+        webViewConfig.userContentController.addUserScript(logBridge)
+        webViewConfig.userContentController.add(context.coordinator, name: "ugamesLog")
 
-        let web = WKWebView(frame: .zero, configuration: config)
+        let web = WKWebView(frame: .zero, configuration: webViewConfig)
         web.navigationDelegate = context.coordinator
         web.allowsBackForwardNavigationGestures = true
         web.backgroundColor = .black
         web.isOpaque = false
-        var request = URLRequest(url: config.yandex.passportAuthURL())
-        request.setValue(config.http.userAgent, forHTTPHeaderField: "User-Agent")
-        Log.write("auth", "AuthView opened: passportHost=\(config.yandex.passportOrigin().host ?? "?") retpath=\(config.yandex.gamesHome().absoluteString) gamesHost=\(config.yandex.origin().host ?? "?")")
-        web.load(request)
+        Log.write("auth", "AuthView opened: passportHost=passport.yandex.ru retpath=https://yandex.ru/games/ gamesHost=yandex.ru")
+        web.load(URLRequest(url: URL(string: "https://passport.yandex.ru/auth?retpath=https%3A%2F%2Fyandex.ru%2Fgames%2F")!))
         context.coordinator.startSessionWatcher(webView: web)
         return web
     }
@@ -129,13 +125,12 @@ private struct AuthWebView: UIViewRepresentable {
         if state.reloadToken != context.coordinator.lastReloadToken {
             context.coordinator.lastReloadToken = state.reloadToken
             context.coordinator.firstLoadDone = false
-            uiView.load(URLRequest(url: config.yandex.passportAuthURL()))
+            uiView.load(URLRequest(url: URL(string: "https://passport.yandex.ru/auth?retpath=https%3A%2F%2Fyandex.ru%2Fgames%2F")!))
             Log.write("auth", "manual retry reload token=\(state.reloadToken)")
         }
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
-        let config: AppConfig
         let state: AuthState
         let onSignedIn: () -> Void
         private var dismissed = false
@@ -143,8 +138,7 @@ private struct AuthWebView: UIViewRepresentable {
         var firstLoadDone = false
         var lastReloadToken: Int = 0
 
-        init(config: AppConfig, state: AuthState, onSignedIn: @escaping () -> Void) {
-            self.config = config
+        init(state: AuthState, onSignedIn: @escaping () -> Void) {
             self.state = state
             self.onSignedIn = onSignedIn
         }
@@ -193,8 +187,8 @@ private struct AuthWebView: UIViewRepresentable {
                     guard sessionPresent else { continue }
                     let current = webView.url?.absoluteString ?? ""
                     Log.write("auth", "Session_id detected after \(ticks*400)ms; current=\(current)")
-                    let target = config.yandex.gamesHome()
-                    if !config.yandex.isGamesUrl(current) {
+                    let target = URL(string: "https://yandex.ru/games/")!
+                    if !current.hasPrefix("https://yandex.ru/games/") {
                         Log.write("auth", "force-loading \(target.absoluteString)")
                         webView.load(URLRequest(url: target))
                     }
@@ -217,7 +211,7 @@ private struct AuthWebView: UIViewRepresentable {
             guard !dismissed, let url = webView.url?.absoluteString else { return }
             if url.contains("/webauthn-reg") || url.contains("/finish?") {
                 Log.write("auth", "skip dead-end \(url)")
-                webView.load(URLRequest(url: config.yandex.gamesHome()))
+                webView.load(URLRequest(url: URL(string: "https://yandex.ru/games/")!))
                 return
             }
         }

@@ -1,7 +1,9 @@
 package games.yandex.wrap.catalog
 
-import games.yandex.wrap.config.AppConfig
+import games.yandex.wrap.utils.Constants
+import games.yandex.wrap.network.isTransientNetworkError
 import games.yandex.wrap.util.dedupeBy
+import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -10,20 +12,8 @@ import kotlin.test.assertTrue
 
 class ArchitectureCleanupTest {
     @Test
-    fun yandexEndpointsCentralizeHostsUserAgentAndRoutes() {
-        val config = AppConfig.defaultForLocale(language = "ru")
-
-        assertEquals("https://yandex.ru/games/", config.yandex.gamesHome().toString())
-        assertEquals("https://passport.yandex.ru", config.yandex.passportOrigin().toString())
-        assertEquals("https://yandex.ru/games/api/catalogue/v2/feed/", config.yandex.feedApi().toString())
-        assertEquals("https://yandex.ru/games/api/catalogue/v2/search/", config.yandex.searchApi().toString())
-        assertEquals("https://yandex.ru/games/api/catalogue/v2/similar_games/", config.yandex.similarApi().toString())
-        assertEquals("https://yandex.ru/games/api/catalogue/v2/get_game", config.yandex.gameDetailApi().toString())
-        assertEquals("https://yandex.ru/games/api/catalogue/v2/tags/", config.yandex.tagsApi().toString())
-        assertEquals("https://yandex.ru/games/api/catalogue/v2/user_info", config.yandex.userInfoApi().toString())
-        assertEquals("https://yandex.ru/games/app/42", config.yandex.gameUrl(42).toString())
-        assertEquals(listOf("https://yandex.ru", "https://passport.yandex.ru"), config.yandex.cookieOrigins())
-        assertTrue(config.http.userAgent.contains("Mobile"))
+    fun yandexConstantsCentralizeSharedHostsAndRoutes() {
+        assertEquals("yandex.ru", Constants.Network.host)
     }
 
     @Test
@@ -40,10 +30,9 @@ class ArchitectureCleanupTest {
     }
 
     @Test
-    fun networkPolicyClassifiesTransientErrorsWithoutCatalogTypes() {
-        assertTrue(NetworkErrorPolicy.isTransient(HttpStatusException(503)))
-        assertTrue(NetworkErrorPolicy.isTransient(HttpStatusException(599)))
-        assertFalse(NetworkErrorPolicy.isTransient(HttpStatusException(404)))
+    fun throwableExtensionClassifiesTransientNetworkErrors() {
+        assertTrue(IOException("network").isTransientNetworkError)
+        assertFalse(IllegalStateException("decode").isTransientNetworkError)
     }
 
     @Test

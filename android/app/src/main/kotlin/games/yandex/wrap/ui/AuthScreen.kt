@@ -33,7 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import games.yandex.wrap.config.AppConfig
+import games.yandex.wrap.utils.Constants
 import games.yandex.wrap.diagnostics.LogStore
 import games.yandex.wrap.diagnostics.UgamesLogJsBridge
 import games.yandex.wrap.webview.installLogBridgeShim
@@ -41,14 +41,14 @@ import kotlinx.coroutines.delay
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun AuthScreen(config: AppConfig, onClose: () -> Unit) {
+fun AuthScreen(onClose: () -> Unit) {
     BackHandler(onBack = onClose)
     val webViewRef = remember { mutableStateOf<WebView?>(null) }
     val dismissed = remember { mutableStateOf(false) }
 
-    val passportHost = remember { config.yandex.passportOrigin().host }
-    val authUrl = remember { config.yandex.authUrl().toString() }
-    val gamesRootUrl = remember { config.yandex.gamesHome().toString() }
+    val passportHost = remember { "passport.yandex.ru" }
+    val authUrl = remember { "https://passport.yandex.ru/auth?retpath=https%3A%2F%2Fyandex.ru%2Fgames%2F" }
+    val gamesRootUrl = remember { "https://yandex.ru/games/" }
 
     // Cookie-driven auth completion. Yandex's passport flow keeps changing
     // (/pwl-yandex/auth/add, /webauthn-reg, /finish?, /profile/setup,
@@ -58,19 +58,19 @@ fun AuthScreen(config: AppConfig, onClose: () -> Unit) {
     LaunchedEffect(Unit) {
         LogStore.log(
             "auth",
-            "AuthView opened: passportHost=$passportHost retpath=${config.yandex.gamesHome()} gamesHost=${config.yandex.origin().host}",
+            "AuthView opened: passportHost=$passportHost retpath=https://yandex.ru/games/ gamesHost=yandex.ru",
         )
         val cm = CookieManager.getInstance()
         var ticks = 0
         while (!dismissed.value) {
             delay(400)
             ticks++
-            val raw = cm.getCookie(config.yandex.origin().toString()).orEmpty()
+            val raw = cm.getCookie("https://yandex.ru").orEmpty()
             val sessionPresent = raw.split(';').any { it.trim().startsWith("Session_id=") }
             if (ticks % 5 == 0) {
                 LogStore.log(
                     "cookie",
-                    "tick=$ticks waiting for Session_id@${config.yandex.origin().host}; cookieLen=${raw.length}",
+                    "tick=$ticks waiting for Session_id@${Constants.Network.host}; cookieLen=${raw.length}",
                 )
             }
             if (!sessionPresent) continue
@@ -78,7 +78,7 @@ fun AuthScreen(config: AppConfig, onClose: () -> Unit) {
             val wv = webViewRef.value ?: continue
             val current = wv.url.orEmpty()
             LogStore.log("auth", "Session_id detected after ${ticks * 400}ms; current=$current")
-            if (!config.yandex.isGamesUrl(current)) {
+            if (!current.startsWith("https://yandex.ru/games/")) {
                 LogStore.log("auth", "force-loading $gamesRootUrl")
                 wv.post { wv.loadUrl(gamesRootUrl) }
             }
@@ -87,7 +87,7 @@ fun AuthScreen(config: AppConfig, onClose: () -> Unit) {
             if (dismissed.value) return@LaunchedEffect
             dismissed.value = true
             val finalUrl = wv.url.orEmpty()
-            val yandexRaw = cm.getCookie(config.yandex.origin().toString()).orEmpty()
+            val yandexRaw = cm.getCookie("https://yandex.ru").orEmpty()
             val yandexSessions = if (yandexRaw.contains("Session_id=")) 1 else 0
             LogStore.log(
                 "auth",
@@ -118,7 +118,6 @@ fun AuthScreen(config: AppConfig, onClose: () -> Unit) {
                         domStorageEnabled = true
                         databaseEnabled = true
                         cacheMode = WebSettings.LOAD_DEFAULT
-                        userAgentString = config.http.userAgent
                     }
                     CookieManager.getInstance().setAcceptCookie(true)
                     CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
@@ -128,7 +127,7 @@ fun AuthScreen(config: AppConfig, onClose: () -> Unit) {
                     // confirm we land on the page we expect (PWL flow,
                     // /finish?, etc.).
                     addJavascriptInterface(UgamesLogJsBridge(), "ugamesLog")
-                    installLogBridgeShim(this, config)
+                    installLogBridgeShim(this)
 
                     webViewClient = object : WebViewClient() {
                         private fun checkUrl(view: WebView?, url: String?) {

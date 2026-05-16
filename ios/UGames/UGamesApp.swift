@@ -34,7 +34,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
-func parseDeepLink(_ url: URL, config: AppConfig = .live()) -> Int64? {
+func parseDeepLink(_ url: URL) -> Int64? {
     let scheme = url.scheme?.lowercased() ?? ""
     let segments = url.pathComponents.filter { $0 != "/" }
     switch scheme {
@@ -45,7 +45,7 @@ func parseDeepLink(_ url: URL, config: AppConfig = .live()) -> Int64? {
         return nil
     case "https", "http":
         if let host = url.host,
-           host == config.yandex.origin().host,
+           host == Constants.Network.host,
            let idx = segments.firstIndex(of: "app"), idx + 1 < segments.count {
             return Int64(segments[idx + 1])
         }
@@ -94,7 +94,6 @@ struct RootView: View {
             GameView(
                 appId: session.appId,
                 title: session.title,
-                config: environment.config,
                 scripts: injectedScripts,
                 blockList: blockList,
                 onBack: {
@@ -104,7 +103,7 @@ struct RootView: View {
             )
         }
         .fullScreenCover(isPresented: $authPresented) {
-            AuthView(config: environment.config, onClose: {
+            AuthView(onClose: {
                 authPresented = false
                 Task { await catalogService.refreshProfile() }
             })
@@ -116,7 +115,7 @@ struct RootView: View {
             ShareSheet(payload: payload)
         }
         .onOpenURL { url in
-            if let appId = parseDeepLink(url, config: environment.config) {
+            if let appId = parseDeepLink(url) {
                 gameSession = GameSession(appId: appId, title: "")
             }
         }

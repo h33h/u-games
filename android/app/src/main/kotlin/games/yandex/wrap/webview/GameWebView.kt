@@ -15,7 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
-import games.yandex.wrap.config.AppConfig
 import games.yandex.wrap.diagnostics.UgamesLogJsBridge
 
 @SuppressLint("SetJavaScriptEnabled")
@@ -24,7 +23,6 @@ fun GameWebView(
     url: String,
     scripts: InjectedScripts,
     blockList: BlockList,
-    config: AppConfig = AppConfig.defaultForLocale(),
     paused: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
@@ -61,7 +59,6 @@ fun GameWebView(
                 javaScriptCanOpenWindowsAutomatically = true
                 setSupportMultipleWindows(true)
                 cacheMode = WebSettings.LOAD_DEFAULT
-                userAgentString = config.http.userAgent
             }
 
             CookieManager.getInstance().setAcceptCookie(true)
@@ -74,11 +71,11 @@ fun GameWebView(
             // dispatch races registration and is lost.
             webView.addJavascriptInterface(UgamesLogJsBridge(), "ugamesLog")
 
-            webView.webViewClient = AdBlockingClient(savedBlockList, savedScripts, config)
+            webView.webViewClient = AdBlockingClient(savedBlockList, savedScripts)
             webView.webChromeClient = PopupHandler(ctx, container)
 
-            installLogBridgeShim(webView, config)
-            installDocumentStartScripts(webView, savedScripts, config)
+            installLogBridgeShim(webView)
+            installDocumentStartScripts(webView, savedScripts)
 
             WebView.setWebContentsDebuggingEnabled(true)
             webView.loadUrl(url)

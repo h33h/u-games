@@ -1,191 +1,79 @@
 import Foundation
 
 struct YandexCatalogRemoteDataSource {
-    let config: AppConfig
-    let http: CatalogHTTPClient
-    let parser: any CatalogParsing
+    let feedEndpoint: FeedEndpointService
+    let searchEndpoint: SearchEndpointService
+    let tagsEndpoint: TagsEndpointService
+    let gameDetailEndpoint: GameDetailEndpointService
+    let similarGamesEndpoint: SimilarGamesEndpointService
+    let userInfoEndpoint: UserInfoEndpointService
 
-    init(config: AppConfig, http: CatalogHTTPClient, parser: any CatalogParsing = YandexCatalogJsonParser()) {
-        self.config = config
-        self.http = http
-        self.parser = parser
+    init(networkService: NetworkService) {
+        self.feedEndpoint = FeedEndpointService(networkService: networkService)
+        self.searchEndpoint = SearchEndpointService(networkService: networkService)
+        self.tagsEndpoint = TagsEndpointService(networkService: networkService)
+        self.gameDetailEndpoint = GameDetailEndpointService(networkService: networkService)
+        self.similarGamesEndpoint = SimilarGamesEndpointService(networkService: networkService)
+        self.userInfoEndpoint = UserInfoEndpointService(networkService: networkService)
     }
 
     func fetchFeedWithBlocks(
         gamesPerPage: Int = 24,
-        lang: String = "en",
         tab: String? = nil
     ) async throws -> FeedWithBlocks {
-        let data = try await responseData(
-            for: http.request(
-                url: config.yandex.feedApi(),
-                accept: "application/json",
-                queryItems: feedQuery(
-                    gamesPerPage: gamesPerPage,
-                    lang: lang,
-                    tab: tab,
-                    blockAware: true
-                )
-            )
-        )
-        return parser.feedWithBlocks(from: data)
+        try await feedEndpoint.feed(
+            gamesPerPage: gamesPerPage
+        ).feedWithBlocks
     }
 
     func fetchSearchPaginated(
         query: String,
         pageId: String? = nil,
-        gamesPerPage: Int = 24,
-        lang: String = "en"
+        gamesPerPage: Int = 24
     ) async throws -> FeedPage {
-        let data = try await responseData(
-            for: http.request(
-                url: config.yandex.searchApi(),
-                accept: "application/json",
-                queryItems: compactQueryItems([
-                    ("query", query),
-                    ("lang", lang),
-                    ("platform", config.yandex.platform),
-                    ("games_count", String(gamesPerPage)),
-                    ("page_id", pageId),
-                ])
-            )
-        )
-        return parser.feedPage(from: data)
+        try await searchEndpoint.search(
+            query: query,
+            pageId: pageId,
+            gamesPerPage: gamesPerPage
+        ).feedPage
     }
 
-    func fetchCategories(lang: String = "en") async throws -> [GameCategory] {
-        let data = try await responseData(
-            for: http.request(
-                url: config.yandex.tagsApi(),
-                accept: "application/json",
-                acceptLanguage: "ru,en;q=0.9",
-                queryItems: [URLQueryItem(name: "lang", value: "ru")]
-            )
-        )
-        return parser.categories(fromTags: data)
+    func fetchCategories() async throws -> [GameCategory] {
+        try await tagsEndpoint.tags().categories
     }
 
-    func fetchFeed(pageId: String?, gamesPerPage: Int = 24, lang: String = "en") async throws -> FeedPage {
-        let data = try await responseData(
-            for: http.request(
-                url: config.yandex.feedApi(),
-                accept: "application/json",
-                queryItems: feedQuery(
-                    gamesPerPage: gamesPerPage,
-                    lang: lang,
-                    pageId: pageId,
-                    blockAware: false
-                )
-            )
-        )
-        return parser.feedPage(from: data)
+    func fetchFeed(pageId: String?, gamesPerPage: Int = 24) async throws -> FeedPage {
+        try await feedEndpoint.feed(
+            gamesPerPage: gamesPerPage,
+            pageId: pageId
+        ).feedPage
     }
 
-    func fetchAppDetail(appId: Int64, lang: String = "en") async -> AppDetail? {
+    func fetchAppDetail(appId: Int64) async -> AppDetail? {
         do {
-            var request = http.request(
-                url: config.yandex.gameDetailApi(),
-                accept: "application/json",
-                acceptLanguage: "ru,en;q=0.9",
-                queryItems: [URLQueryItem(name: "lang", value: "ru")]
-            )
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONSerialization.data(withJSONObject: ["appID": appId, "format": "app"])
-            let data = try await responseData(for: request)
-            return parser.appDetail(fromGetGame: data)
+            return try await gameDetailEndpoint.detail(appId: appId).appDetail
         } catch {
             return nil
         }
     }
 
-    func fetchSimilar(appId: Int64, lang: String = "en") async -> [Game] {
-        let request = http.request(
-            url: config.yandex.similarApi(),
-            accept: "application/json",
-            queryItems: compactQueryItems([
-                ("app_id", String(appId)),
-                ("games_count", "16"),
-                ("int", "true"),
-                ("lang", lang),
-                ("page_type", "game"),
-                ("platform", config.yandex.platform),
-                ("standalone", "false"),
-            ])
-        )
+    func fetchSimilar(appId: Int64) async -> [Game] {
         do {
-            let data = try await responseData(for: request)
-            return parser.similarGames(from: data)
+            return try await similarGamesEndpoint.similar(appId: appId).gamesDomain
         } catch {
             return []
         }
     }
 
-    func fetchSearch(query: String, lang: String = "en") async throws -> [Game] {
-        let data = try await responseData(
-            for: http.request(
-                url: config.yandex.searchApi(),
-                accept: "application/json",
-                queryItems: compactQueryItems([
-                    ("query", query),
-                    ("lang", "ru"),
-                    ("platform", config.yandex.platform),
-                    ("games_count", "24"),
-                ])
-            )
-        )
-        return parser.feedPage(from: data).games
+    func fetchSearch(query: String) async throws -> [Game] {
+        try await searchEndpoint.search(
+            query: query,
+            gamesPerPage: 24
+        ).feedPage.games
     }
 
-    func fetchProfile(cookieHeader: String, lang: String = "en") async throws -> (UserProfile?, Int, Int, String) {
-        var request = http.request(
-            url: config.yandex.userInfoApi(),
-            accept: "application/json",
-            acceptLanguage: "ru,en;q=0.9",
-            queryItems: [URLQueryItem(name: "lang", value: "ru")]
-        )
-        request.httpShouldHandleCookies = false
-        if !cookieHeader.isEmpty {
-            request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
-        }
-        let (data, response) = try await http.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-        return (parser.userProfile(from: data), status, 0, String(data: data, encoding: .utf8) ?? "")
-    }
-
-    private func feedQuery(
-        gamesPerPage: Int,
-        lang: String,
-        pageId: String? = nil,
-        tab: String? = nil,
-        blockAware: Bool
-    ) -> [URLQueryItem] {
-        var pairs: [(String, String?)] = [
-            ("with_promos", "true"),
-            ("lang", lang),
-            ("games_count", String(gamesPerPage)),
-            ("with_recent_games", "true"),
-            ("platform", config.yandex.platform),
-            ("client_width", String(config.yandex.clientWidth)),
-            ("client_height", String(config.yandex.clientHeight)),
-            ("page_id", pageId),
-            ("tab", tab?.isEmpty == false ? tab : nil),
-        ]
-        if blockAware {
-            pairs.append(("suggested_width", "3"))
-            pairs.append(("suggested_rows", "8"))
-        } else {
-            pairs.append(("categorized_size", "5"))
-        }
-        return compactQueryItems(pairs)
-    }
-
-    private func compactQueryItems(_ pairs: [(String, String?)]) -> [URLQueryItem] {
-        pairs.compactMap { name, value in value.map { URLQueryItem(name: name, value: $0) } }
-    }
-
-    private func responseData(for request: URLRequest) async throws -> Data {
-        let (data, _) = try await http.data(for: request)
-        return data
+    func fetchProfile() async throws -> (UserProfile?, Int, Int, String) {
+        let response = try await userInfoEndpoint.profile()
+        return (response.userProfile, 0, 0, "")
     }
 }

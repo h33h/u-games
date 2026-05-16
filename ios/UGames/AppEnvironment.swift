@@ -1,18 +1,16 @@
 import Foundation
 
 struct AppEnvironment {
-    let config: AppConfig
     let remote: YandexCatalogRemoteDataSource
     let sessionStore: YandexSessionStore
 
     static let live: AppEnvironment = {
-        let config = AppConfig.live()
-        let http = CatalogHTTPClient(config: config)
-        let parser = YandexCatalogJsonParser()
-        let sessionStore = YandexSessionStore(config: config)
+        let sessionStore = YandexSessionStore()
+        let networkService = NetworkService(cookieHeaderProvider: {
+            sessionStore.cookieHeader().header
+        })
         return AppEnvironment(
-            config: config,
-            remote: YandexCatalogRemoteDataSource(config: config, http: http, parser: parser),
+            remote: YandexCatalogRemoteDataSource(networkService: networkService),
             sessionStore: sessionStore
         )
     }()

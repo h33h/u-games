@@ -1,8 +1,6 @@
 import Foundation
 
 struct YandexSessionStore {
-    let config: AppConfig
-
     func sessionCookieHeader(timeoutSeconds: TimeInterval = 3.0) async -> (header: String, names: String, count: Int) {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         while Date() < deadline {
@@ -15,8 +13,8 @@ struct YandexSessionStore {
         return cookieHeader()
     }
 
-    private func cookieHeader() -> (header: String, names: String, count: Int) {
-        let origins = config.yandex.cookieOrigins().compactMap(URL.init(string:))
+    func cookieHeader() -> (header: String, names: String, count: Int) {
+        let origins = ["https://yandex.ru", "https://passport.yandex.ru"].compactMap(URL.init(string:))
         let yandexCookies = origins.flatMap { HTTPCookieStorage.shared.cookies(for: $0) ?? [] }
         var dedup: [String: HTTPCookie] = [:]
         for cookie in yandexCookies { dedup[cookie.name] = cookie }

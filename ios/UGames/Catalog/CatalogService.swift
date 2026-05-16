@@ -101,7 +101,7 @@ final class CatalogService: ObservableObject {
             do {
                 let cookie = await sessionStore.sessionCookieHeader(timeoutSeconds: 0)
                 Log.write("profile", "fetch begin cookies=\(cookie.count)[\(cookie.names)]")
-                let (p, status, hops, html) = try await remote.fetchProfile(cookieHeader: cookie.header)
+                let (p, status, hops, html) = try await remote.fetchProfile()
                 Log.write("profile", "fetch http status=\(status) bodyLen=\(html.count) hops=\(hops)")
                 Log.write("profile", "attempt#\(i + 1) -> isAuth=\(p?.isAuthorized ?? false) login=\(p?.login ?? "") uid-len=\(p?.displayName.count ?? 0)")
                 if let p, p.isAuthorized {
@@ -123,39 +123,37 @@ final class CatalogService: ObservableObject {
 
     func fetchFeedWithBlocks(
         gamesPerPage: Int = 24,
-        lang: String = "en",
         tab: String? = nil
     ) async throws -> FeedWithBlocks {
-        try await remote.fetchFeedWithBlocks(gamesPerPage: gamesPerPage, lang: lang, tab: tab)
+        try await remote.fetchFeedWithBlocks(gamesPerPage: gamesPerPage, tab: tab)
     }
 
     func fetchSearchPaginated(
         query: String,
         pageId: String? = nil,
-        gamesPerPage: Int = 24,
-        lang: String = "en"
+        gamesPerPage: Int = 24
     ) async throws -> FeedPage {
-        try await remote.fetchSearchPaginated(query: query, pageId: pageId, gamesPerPage: gamesPerPage, lang: lang)
+        try await remote.fetchSearchPaginated(query: query, pageId: pageId, gamesPerPage: gamesPerPage)
     }
 
-    func fetchCategories(lang: String = "en") async throws -> [GameCategory] {
-        try await remote.fetchCategories(lang: lang)
+    func fetchCategories() async throws -> [GameCategory] {
+        try await remote.fetchCategories()
     }
 
-    func fetchFeed(pageId: String?, gamesPerPage: Int = 24, lang: String = "en") async throws -> FeedPage {
-        try await remote.fetchFeed(pageId: pageId, gamesPerPage: gamesPerPage, lang: lang)
+    func fetchFeed(pageId: String?, gamesPerPage: Int = 24) async throws -> FeedPage {
+        try await remote.fetchFeed(pageId: pageId, gamesPerPage: gamesPerPage)
     }
 
-    func fetchAppDetail(appId: Int64, lang: String = "en") async -> AppDetail? {
-        await remote.fetchAppDetail(appId: appId, lang: lang)
+    func fetchAppDetail(appId: Int64) async -> AppDetail? {
+        await remote.fetchAppDetail(appId: appId)
     }
 
-    func fetchSimilar(appId: Int64, lang: String = "en") async -> [Game] {
-        await remote.fetchSimilar(appId: appId, lang: lang)
+    func fetchSimilar(appId: Int64) async -> [Game] {
+        await remote.fetchSimilar(appId: appId)
     }
 
-    func fetchSearch(query: String, lang: String = "en") async throws -> [Game] {
-        try await remote.fetchSearch(query: query, lang: lang)
+    func fetchSearch(query: String) async throws -> [Game] {
+        try await remote.fetchSearch(query: query)
     }
 
     private func onQueryChanged(_ q: String) {

@@ -45,7 +45,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import games.yandex.wrap.diagnostics.OrientationStore
-import games.yandex.wrap.config.AppConfig
 import games.yandex.wrap.webview.BlockList
 import games.yandex.wrap.webview.GameWebView
 import games.yandex.wrap.webview.InjectedScripts
@@ -57,7 +56,6 @@ fun GameScreen(
     title: String,
     scripts: InjectedScripts,
     blockList: BlockList,
-    config: AppConfig,
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
@@ -91,10 +89,9 @@ fun GameScreen(
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
         GameWebView(
-            url = config.yandex.gameUrl(appId).toString(),
+            url = "https://yandex.ru/games/app/$appId",
             scripts = scripts,
             blockList = blockList,
-            config = config,
             paused = rotateOverlayVisible,
             modifier = Modifier.fillMaxSize(),
         )

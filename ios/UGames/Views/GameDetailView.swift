@@ -303,6 +303,10 @@ struct GameDetailView: View {
             .haloChrome(halo, size: .sm)
     }
 
+    private func screenshotUrl(_ url: String, size: String) -> String {
+        url.hasSuffix("/") ? url + size : url
+    }
+
     @ViewBuilder
     private var similarRow: some View {
         if viewModel.isLoadingSimilar {

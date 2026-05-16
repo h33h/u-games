@@ -3,25 +3,24 @@ import SwiftUI
 
 struct GameWebView: UIViewRepresentable {
     let url: URL
-    let config: AppConfig
     let scripts: InjectedScripts
     let blockList: BlockList
     var paused: Bool = false
 
-    func makeCoordinator() -> Coordinator { Coordinator(config: config, scripts: scripts) }
+    func makeCoordinator() -> Coordinator { Coordinator(scripts: scripts) }
 
-    private static func shouldPrefetch(_ url: URL, config: AppConfig) -> Bool {
+    private static func shouldPrefetch(_ url: URL) -> Bool {
         let s = url.absoluteString
-        return config.yandex.isGamesUrl(s) && (s.contains("/games/app/") || s.contains("/games/play/"))
+        return s.hasPrefix("https://yandex.ru/games/") && (s.contains("/games/app/") || s.contains("/games/play/"))
     }
 
     func makeUIView(context: Context) -> WKWebView {
-        let config = WKWebViewConfiguration()
-        config.websiteDataStore = .default()
-        config.allowsInlineMediaPlayback = true
-        config.mediaTypesRequiringUserActionForPlayback = []
-        config.preferences.javaScriptCanOpenWindowsAutomatically = true
-        config.defaultWebpagePreferences.preferredContentMode = .mobile
+        let webViewConfig = WKWebViewConfiguration()
+        webViewConfig.websiteDataStore = .default()
+        webViewConfig.allowsInlineMediaPlayback = true
+        webViewConfig.mediaTypesRequiringUserActionForPlayback = []
+        webViewConfig.preferences.javaScriptCanOpenWindowsAutomatically = true
+        webViewConfig.defaultWebpagePreferences.preferredContentMode = .mobile
 
         let logBridge = WKUserScript(
             source: """
@@ -42,8 +41,8 @@ struct GameWebView: UIViewRepresentable {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
         )
-        config.userContentController.addUserScript(logBridge)
-        config.userContentController.add(context.coordinator, name: "ugamesLog")
+        webViewConfig.userContentController.addUserScript(logBridge)
+        webViewConfig.userContentController.add(context.coordinator, name: "ugamesLog")
 
         let mainScript = WKUserScript(
             source: scripts.mainFrameScript,
@@ -55,19 +54,19 @@ struct GameWebView: UIViewRepresentable {
             injectionTime: .atDocumentStart,
             forMainFrameOnly: false
         )
-        config.userContentController.addUserScript(mainScript)
-        config.userContentController.addUserScript(stubScript)
+        webViewConfig.userContentController.addUserScript(mainScript)
+        webViewConfig.userContentController.addUserScript(stubScript)
 
         WKContentRuleListStore.default()?.compileContentRuleList(
             forIdentifier: "ya-ads",
             encodedContentRuleList: blockList.contentRuleListJSON()
         ) { ruleList, _ in
             if let ruleList = ruleList {
-                config.userContentController.add(ruleList)
+                webViewConfig.userContentController.add(ruleList)
             }
         }
 
-        let webView = WKWebView(frame: .zero, configuration: config)
+        let webView = WKWebView(frame: .zero, configuration: webViewConfig)
         webView.uiDelegate = context.coordinator
         webView.navigationDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = true
@@ -78,9 +77,8 @@ struct GameWebView: UIViewRepresentable {
         webView.scrollView.backgroundColor = .black
         webView.isOpaque = false
 
-        var request = URLRequest(url: url)
-        request.setValue(config.http.userAgent, forHTTPHeaderField: "User-Agent")
-        if Self.shouldPrefetch(url, config: config) {
+        let request = URLRequest(url: url)
+        if Self.shouldPrefetch(url) {
             context.coordinator.loadWithInjection(into: webView, request: request, scripts: scripts)
         } else {
             webView.load(request)
@@ -156,11 +154,9 @@ struct GameWebView: UIViewRepresentable {
 
         private weak var hostView: WKWebView?
         private var popup: WKWebView?
-        private let config: AppConfig
         private let scripts: InjectedScripts
 
-        init(config: AppConfig, scripts: InjectedScripts) {
-            self.config = config
+        init(scripts: InjectedScripts) {
             self.scripts = scripts
         }
 
@@ -250,7 +246,7 @@ struct GameWebView: UIViewRepresentable {
 
         private func reinject(in webView: WKWebView) {
             guard let url = webView.url?.absoluteString else { return }
-            if config.yandex.isGamesUrl(url) {
+            if url.hasPrefix("https://yandex.ru/games/") {
                 webView.evaluateJavaScript(scripts.mainFrameScript, completionHandler: nil)
             }
         }

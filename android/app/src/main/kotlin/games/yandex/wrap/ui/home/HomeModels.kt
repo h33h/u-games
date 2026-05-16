@@ -1,6 +1,6 @@
 package games.yandex.wrap.ui.home
 
-import games.yandex.wrap.catalog.Game
+import games.yandex.wrap.catalog.models.Game
 
 data class SpotlightBlock(val title: String, val games: List<Game>)
 

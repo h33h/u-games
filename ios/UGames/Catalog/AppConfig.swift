@@ -1,10 +1,5 @@
 import Foundation
 
-enum YandexHost: String {
-    case com = "yandex.com"
-    case ru = "yandex.ru"
-}
-
 struct HTTPDefaults {
     let userAgent: String
     let acceptLanguage: String
@@ -16,36 +11,30 @@ struct HTTPDefaults {
 }
 
 struct YandexEndpoints {
-    let preferredHost: YandexHost
-    let apiHost: YandexHost
     let platform: String
     let clientWidth: Int
     let clientHeight: Int
 
     init(
-        preferredHost: YandexHost,
-        apiHost: YandexHost = .com,
         platform: String = "ios",
         clientWidth: Int = 390,
         clientHeight: Int = 844
     ) {
-        self.preferredHost = preferredHost
-        self.apiHost = apiHost
         self.platform = platform
         self.clientWidth = clientWidth
         self.clientHeight = clientHeight
     }
 
-    func origin(_ host: YandexHost? = nil) -> URL {
-        URL(string: "https://\((host ?? preferredHost).rawValue)")!
+    func origin() -> URL {
+        URL(string: "https://\(Self.yandexHost)")!
     }
 
-    func gamesHome(_ host: YandexHost? = nil) -> URL {
-        URL(string: "https://\((host ?? preferredHost).rawValue)/games/")!
+    func gamesHome() -> URL {
+        URL(string: "https://\(Self.yandexHost)/games/")!
     }
 
     func passportOrigin() -> URL {
-        URL(string: preferredHost == .ru ? "https://passport.yandex.ru" : "https://passport.yandex.com")!
+        URL(string: "https://passport.\(Self.yandexHost)")!
     }
 
     func passportAuthURL() -> URL {
@@ -57,45 +46,55 @@ struct YandexEndpoints {
     }
 
     func feedApi() -> URL {
-        URL(string: "https://\(apiHost.rawValue)/games/api/catalogue/v2/feed/")!
+        URL(string: "https://\(Self.yandexHost)/games/api/catalogue/v2/feed/")!
     }
 
     func searchApi() -> URL {
-        URL(string: "https://\(apiHost.rawValue)/games/api/catalogue/v2/search/")!
+        URL(string: "https://\(Self.yandexHost)/games/api/catalogue/v2/search/")!
     }
 
     func similarApi() -> URL {
-        URL(string: "https://\(apiHost.rawValue)/games/api/catalogue/v2/similar_games/")!
+        URL(string: "https://\(Self.yandexHost)/games/api/catalogue/v2/similar_games/")!
     }
 
-    func searchPage() -> URL {
-        URL(string: "https://\(apiHost.rawValue)/games/search")!
+    func gameDetailApi() -> URL {
+        URL(string: "https://\(Self.yandexHost)/games/api/catalogue/v2/get_game")!
     }
 
-    func gameUrl(_ appId: Int64, host: YandexHost? = nil) -> URL {
-        URL(string: "https://\((host ?? apiHost).rawValue)/games/app/\(appId)")!
+    func tagsApi() -> URL {
+        URL(string: "https://\(Self.yandexHost)/games/api/catalogue/v2/tags/")!
+    }
+
+    func userInfoApi() -> URL {
+        URL(string: "https://\(Self.yandexHost)/games/api/catalogue/v2/user_info")!
+    }
+
+    func gameUrl(_ appId: Int64) -> URL {
+        URL(string: "https://\(Self.yandexHost)/games/app/\(appId)")!
     }
 
     func isGamesUrl(_ url: String) -> Bool {
-        url.hasPrefix(gamesHome(.com).absoluteString) || url.hasPrefix(gamesHome(.ru).absoluteString)
+        url.hasPrefix(gamesHome().absoluteString)
     }
 
-    func cookieDonorOrigins() -> [String] {
-        [
-            origin(.com).absoluteString,
-            origin(.ru).absoluteString,
-            "https://passport.yandex.com",
-            "https://passport.yandex.ru",
-        ]
+    func cookieOrigins() -> [String] {
+        [origin().absoluteString, passportOrigin().absoluteString]
     }
+
+    private static let yandexHost = "yandex.ru"
+}
+
+extension YandexEndpoints {
+    static let live = YandexEndpoints()
 }
 
 struct AppConfig {
     let yandex: YandexEndpoints
     let http: HTTPDefaults
+}
 
+extension AppConfig {
     static func live(language: String = Locale.preferredLanguages.first ?? Locale.current.identifier) -> AppConfig {
-        let preferred: YandexHost = language.hasPrefix("ru") ? .ru : .com
-        return AppConfig(yandex: YandexEndpoints(preferredHost: preferred), http: .ios)
+        AppConfig(yandex: .live, http: .ios)
     }
 }

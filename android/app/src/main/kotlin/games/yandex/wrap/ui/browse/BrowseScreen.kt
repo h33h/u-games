@@ -55,7 +55,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import games.yandex.wrap.catalog.Game
+import games.yandex.wrap.catalog.models.Game
 import games.yandex.wrap.ui.components.GenreChipRow
 import games.yandex.wrap.ui.components.TileGameCard
 import games.yandex.wrap.ui.theme.UGColors

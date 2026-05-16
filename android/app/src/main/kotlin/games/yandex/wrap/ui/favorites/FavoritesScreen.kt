@@ -23,7 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import games.yandex.wrap.catalog.Game
+import games.yandex.wrap.catalog.models.Game
 import games.yandex.wrap.ui.components.EmptyState
 import games.yandex.wrap.ui.components.TileGameCard
 import games.yandex.wrap.ui.theme.UGColors

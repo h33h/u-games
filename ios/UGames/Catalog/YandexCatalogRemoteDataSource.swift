@@ -3,6 +3,13 @@ import Foundation
 struct YandexCatalogRemoteDataSource {
     let config: AppConfig
     let http: CatalogHTTPClient
+    let parser: any CatalogParsing
+
+    init(config: AppConfig, http: CatalogHTTPClient, parser: any CatalogParsing = YandexCatalogJsonParser()) {
+        self.config = config
+        self.http = http
+        self.parser = parser
+    }
 
     func fetchFeedWithBlocks(
         gamesPerPage: Int = 24,
@@ -21,7 +28,7 @@ struct YandexCatalogRemoteDataSource {
                 )
             )
         )
-        return CatalogFeedParser.feedWithBlocks(from: root)
+        return parser.feedWithBlocks(from: root)
     }
 
     func fetchSearchPaginated(
@@ -43,23 +50,19 @@ struct YandexCatalogRemoteDataSource {
                 ])
             )
         )
-        return CatalogFeedParser.feedPage(from: root)
+        return parser.feedPage(from: root)
     }
 
     func fetchCategories(lang: String = "en") async throws -> [GameCategory] {
-        let host = config.yandex.preferredHost
-        let preferredLang = effectiveLang(host: host, requested: lang)
-        let request = http.request(
-            url: config.yandex.gamesHome(host),
-            accept: "text/html",
-            acceptLanguage: "\(preferredLang),en;q=0.9",
-            queryItems: [URLQueryItem(name: "lang", value: preferredLang)]
+        let root = try await jsonObject(
+            for: http.request(
+                url: config.yandex.tagsApi(),
+                accept: "application/json",
+                acceptLanguage: "ru,en;q=0.9",
+                queryItems: [URLQueryItem(name: "lang", value: "ru")]
+            )
         )
-        let (data, _) = try await http.data(for: request)
-        guard let html = String(data: data, encoding: .utf8),
-              let json = CatalogHtmlParser.extractAppData(html)
-        else { return [] }
-        return CatalogHtmlParser.categories(fromAppData: json)
+        return parser.categories(fromTags: root)
     }
 
     func fetchFeed(pageId: String?, gamesPerPage: Int = 24, lang: String = "en") async throws -> FeedPage {
@@ -75,24 +78,22 @@ struct YandexCatalogRemoteDataSource {
                 )
             )
         )
-        return CatalogFeedParser.feedPage(from: root)
+        return parser.feedPage(from: root)
     }
 
     func fetchAppDetail(appId: Int64, lang: String = "en") async -> AppDetail? {
-        let host = config.yandex.preferredHost
-        let preferredLang = effectiveLang(host: host, requested: lang)
-        let request = http.request(
-            url: config.yandex.gameUrl(appId, host: host),
-            accept: "text/html",
-            acceptLanguage: "\(preferredLang),en;q=0.9",
-            queryItems: [URLQueryItem(name: "lang", value: preferredLang)]
-        )
         do {
-            let (data, _) = try await http.data(for: request)
-            guard let html = String(data: data, encoding: .utf8),
-                  let ldJson = CatalogHtmlParser.extractJsonLd(html)
-            else { return nil }
-            return CatalogHtmlParser.appDetail(fromJsonLd: ldJson)
+            var request = http.request(
+                url: config.yandex.gameDetailApi(),
+                accept: "application/json",
+                acceptLanguage: "ru,en;q=0.9",
+                queryItems: [URLQueryItem(name: "lang", value: "ru")]
+            )
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONSerialization.data(withJSONObject: ["appID": appId, "format": "app"])
+            let root = try await jsonObject(for: request)
+            return parser.appDetail(fromGetGame: root)
         } catch {
             return nil
         }
@@ -114,48 +115,43 @@ struct YandexCatalogRemoteDataSource {
         )
         do {
             let root = try await jsonObject(for: request)
-            return CatalogFeedParser.similarGames(from: root)
+            return parser.similarGames(from: root)
         } catch {
             return []
         }
     }
 
     func fetchSearch(query: String, lang: String = "en") async throws -> [Game] {
-        let request = http.request(
-            url: config.yandex.searchPage(),
-            accept: "text/html,application/xhtml+xml",
-            queryItems: compactQueryItems([("query", query), ("lang", lang)])
+        let root = try await jsonObject(
+            for: http.request(
+                url: config.yandex.searchApi(),
+                accept: "application/json",
+                queryItems: compactQueryItems([
+                    ("query", query),
+                    ("lang", "ru"),
+                    ("platform", config.yandex.platform),
+                    ("games_count", "24"),
+                ])
+            )
         )
-        let (data, _) = try await http.data(for: request)
-        guard let html = String(data: data, encoding: .utf8),
-              let json = CatalogHtmlParser.extractAppData(html),
-              let parsed = try JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any],
-              let search = parsed["search"] as? [String: Any],
-              let blocks = search["data"] as? [[String: Any]]
-        else { return [] }
-        return GameDecoder.flatten(blocks)
+        return parser.feedPage(from: root).games
     }
 
     func fetchProfile(cookieHeader: String, lang: String = "en") async throws -> (UserProfile?, Int, Int, String) {
-        let host = config.yandex.preferredHost
-        let preferredLang = effectiveLang(host: host, requested: lang)
         var request = http.request(
-            url: config.yandex.gamesHome(host),
-            accept: "text/html",
-            acceptLanguage: "\(preferredLang),en;q=0.9",
-            queryItems: [URLQueryItem(name: "lang", value: preferredLang)]
+            url: config.yandex.userInfoApi(),
+            accept: "application/json",
+            acceptLanguage: "ru,en;q=0.9",
+            queryItems: [URLQueryItem(name: "lang", value: "ru")]
         )
         request.httpShouldHandleCookies = false
         if !cookieHeader.isEmpty {
             request.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
         }
-        let delegate = ProfileFetchRedirectDelegate(cookieHeader: cookieHeader)
-        let (data, response) = try await URLSession.shared.data(for: request, delegate: delegate)
+        let (data, response) = try await http.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-        guard let html = String(data: data, encoding: .utf8),
-              let json = CatalogHtmlParser.extractAppData(html)
-        else { return (nil, status, delegate.redirectCount, "") }
-        return (CatalogHtmlParser.userProfile(fromAppData: json), status, delegate.redirectCount, html)
+        let root = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        return (parser.userProfile(from: root), status, 0, String(data: data, encoding: .utf8) ?? "")
     }
 
     private func feedQuery(
@@ -192,9 +188,5 @@ struct YandexCatalogRemoteDataSource {
     private func jsonObject(for request: URLRequest) async throws -> [String: Any] {
         let (data, _) = try await http.data(for: request)
         return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
-    }
-
-    private func effectiveLang(host: YandexHost, requested: String) -> String {
-        host == .ru ? "ru" : requested
     }
 }

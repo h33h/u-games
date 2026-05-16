@@ -1,4 +1,4 @@
-package games.yandex.wrap.catalog
+package games.yandex.wrap.catalog.models
 
 /**
  * One block from the `feed` array in `/api/catalogue/v2/feed/`.
@@ -17,11 +17,9 @@ data class FeedBlock(
 )
 
 /**
- * Result of [CatalogApi.firstFeedPageWithBlocks]: blocks (Home editorial),
+ * Result of the first feed page with blocks: blocks (Home editorial),
  * deduped flat list (Browse), and the server-side `recentGames` top-level
- * array. [genres] stays empty here — Yandex's JSON response doesn't include
- * navigation categories on mobile platforms, so [CatalogApi.fetchCategories]
- * scrapes them from the SSR HTML separately.
+ * array. [genres] stays empty here; navigation chips come from `/tags/`.
  */
 data class FeedWithBlocks(
     val blocks: List<FeedBlock>,
@@ -33,9 +31,7 @@ data class FeedWithBlocks(
 )
 
 /**
- * One category tab parsed from the SSR `__appData__.categoriesForTabs`.
- * [name] is the slug used as the `tab=` query param on `/feed/`; [title]
- * is the localized label shown on chips.
+ * One category/tag chip parsed from `/games/api/catalogue/v2/tags/`.
  */
 data class GameCategory(
     val name: String,

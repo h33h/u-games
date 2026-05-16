@@ -4,10 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import games.yandex.wrap.catalog.CatalogRepository
 import games.yandex.wrap.catalog.FavoritesRepository
-import games.yandex.wrap.catalog.FeedBlock
-import games.yandex.wrap.catalog.FeedWithBlocks
-import games.yandex.wrap.catalog.GameCategory
-import games.yandex.wrap.catalog.Game
+import games.yandex.wrap.catalog.models.FeedBlock
+import games.yandex.wrap.catalog.models.FeedWithBlocks
+import games.yandex.wrap.catalog.models.GameCategory
+import games.yandex.wrap.catalog.models.Game
 import games.yandex.wrap.catalog.ProfileRepository
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll

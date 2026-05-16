@@ -1,5 +1,6 @@
 package games.yandex.wrap.catalog
 
+import games.yandex.wrap.catalog.models.GameCategory
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
@@ -73,7 +74,7 @@ class CatalogParserTest {
             """.trimIndent(),
         ).jsonObject
 
-        val parsed = CatalogJsonParser().feedWithBlocks(root)
+        val parsed = YandexCatalogJsonParser().feedWithBlocks(root)
 
         assertEquals(listOf("Top", "More"), parsed.blocks.map { it.title })
         assertEquals(listOf(1L, 2L), parsed.flatGames.map { it.appId })
@@ -88,11 +89,21 @@ class CatalogParserTest {
     }
 
     @Test
-    fun htmlParserReadsCategoriesProfileAndJsonLdDetail() {
-        val htmlParser = CatalogHtmlParser(json)
-        val appData = """
+    fun jsonParserReadsTagsProfileAndGetGameDetail() {
+        val parser = YandexCatalogJsonParser(json)
+        val tagsRoot = json.parseToJsonElement(
+            """
             {
-              "categoriesForTabs": [{"name": "puzzles", "title": "Puzzles", "gamesCount": 42}],
+              "tags": [
+                {"slug": "puzzles_12", "title": "Puzzles", "info": {"games_count": 42}, "isService": false},
+                {"slug": "", "title": "Hidden", "info": {"games_count": 1}, "isService": false}
+              ]
+            }
+            """.trimIndent(),
+        ).jsonObject
+        val profileRoot = json.parseToJsonElement(
+            """
+            {
               "userData": {
                 "uid": "u1",
                 "login": "player",
@@ -102,40 +113,44 @@ class CatalogParserTest {
                 "yaplusEnabled": true
               }
             }
-        """.trimIndent()
-        val ldJson = """
+            """.trimIndent(),
+        ).jsonObject
+        val detailRoot = json.parseToJsonElement(
+            """
             {
-              "@graph": [
-                {
-                  "@type": "VideoGame",
-                  "mainEntityOfPage": {"description": "A &amp; B"},
-                  "screenshot": [{"url": "https://img/screen/orig"}],
-                  "datePublished": "2026-01-02",
-                  "genre": ["Arcade", "Puzzle"],
-                  "inLanguage": "en",
-                  "author": {"name": "Dev &amp; Co"}
+              "game": {
+                "description": "A &amp; B",
+                "categoriesNames": ["Arcade", "Puzzle"],
+                "developer": {"name": "Dev &amp; Co"},
+                "media": {
+                  "screenshots": {
+                    "mobile": [{"prefix-url": "https://img/mobile/"}],
+                    "desktop": [{"prefix-url": "https://img/desktop/"}]
+                  }
                 }
-              ]
+              }
             }
-        """.trimIndent()
+            """.trimIndent(),
+        ).jsonObject
 
-        val categories = htmlParser.categoriesFromAppData(appData)
-        val profile = assertNotNull(htmlParser.profileFromAppData(appData))
-        val detail = assertNotNull(htmlParser.appDetailFromJsonLd(ldJson))
+        val categories = parser.categoriesFromTags(tagsRoot)
+        val profile = assertNotNull(parser.profile(profileRoot))
+        val detail = assertNotNull(parser.appDetail(detailRoot))
 
-        assertEquals(GameCategory("puzzles", "Puzzles", 42), categories.single())
+        assertEquals(GameCategory("puzzles_12", "Puzzles", 42), categories.single())
         assertTrue(profile.isAuthorized)
         assertEquals("Player One", profile.displayName)
         assertEquals("player", profile.login)
         assertEquals("https://avatars.example/get-yapic/42/avatar/islands-300", profile.avatarUrl)
         assertTrue(profile.hasYaPlus)
         assertEquals("A & B", detail.description)
-        assertEquals(listOf("https://img/screen/pjpg500x280"), detail.screenshots)
-        assertEquals("2026-01-02", detail.datePublished)
+        assertEquals(listOf("https://img/mobile/pjpg500x280", "https://img/desktop/pjpg500x280"), detail.screenshots)
+        assertNull(detail.datePublished)
         assertEquals(listOf("Arcade", "Puzzle"), detail.genres)
-        assertEquals(listOf("en"), detail.languages)
+        assertEquals(emptyList(), detail.languages)
         assertEquals("Dev & Co", detail.author)
 
-        assertNull(htmlParser.profileFromAppData("""{"userData":{"uid":""}}"""))
+        val anonymous = json.parseToJsonElement("""{"userData":{"uid":""}}""").jsonObject
+        assertNull(parser.profile(anonymous))
     }
 }

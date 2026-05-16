@@ -4,8 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import games.yandex.wrap.catalog.CatalogRepository
 import games.yandex.wrap.catalog.FavoritesRepository
-import games.yandex.wrap.catalog.Game
-import games.yandex.wrap.catalog.GameCategory
+import games.yandex.wrap.catalog.models.Game
+import games.yandex.wrap.catalog.models.GameCategory
 import games.yandex.wrap.util.appendUniqueBy
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay

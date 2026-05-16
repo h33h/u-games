@@ -1,7 +1,7 @@
 package games.yandex.wrap.ui.browse
 
-import games.yandex.wrap.catalog.Game
-import games.yandex.wrap.catalog.GameCategory
+import games.yandex.wrap.catalog.models.Game
+import games.yandex.wrap.catalog.models.GameCategory
 
 /**
  * View-state for BrowseScreen. Genre filter is server-side via the

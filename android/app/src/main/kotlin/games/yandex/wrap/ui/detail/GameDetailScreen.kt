@@ -71,8 +71,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import games.yandex.wrap.catalog.AppDetail
-import games.yandex.wrap.catalog.Game
+import games.yandex.wrap.catalog.models.AppDetail
+import games.yandex.wrap.catalog.models.Game
 import games.yandex.wrap.ui.components.Skeleton
 import games.yandex.wrap.ui.components.TileGameCard
 import games.yandex.wrap.ui.theme.UGColors

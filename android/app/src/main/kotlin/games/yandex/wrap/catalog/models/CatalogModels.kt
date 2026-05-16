@@ -1,4 +1,4 @@
-package games.yandex.wrap.catalog
+package games.yandex.wrap.catalog.models
 
 data class FeedPage(
     val games: List<Game>,

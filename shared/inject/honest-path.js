@@ -1,4 +1,4 @@
-// Layer 1: honest-path. Inject in main frame (yandex.com) at documentStart.
+// Layer 1: honest-path. Inject in main frame (yandex.ru) at documentStart.
 // Hooks JSON.parse so when React reads __appData__/__playPageData__ scripts,
 // we rewrite the ad-related fields BEFORE the frontend acts on them.
 // Result: Yandex's own frontend skips loading GPT/Prebid/sticky banner.

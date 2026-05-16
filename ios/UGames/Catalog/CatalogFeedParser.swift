@@ -1,7 +1,16 @@
 import Foundation
 
-enum CatalogFeedParser {
-    static func feedWithBlocks(from root: [String: Any]) -> FeedWithBlocks {
+protocol CatalogParsing {
+    func feedWithBlocks(from root: [String: Any]) -> FeedWithBlocks
+    func feedPage(from root: [String: Any]) -> FeedPage
+    func similarGames(from root: [String: Any]) -> [Game]
+    func categories(fromTags root: [String: Any]) -> [GameCategory]
+    func appDetail(fromGetGame root: [String: Any]) -> AppDetail?
+    func userProfile(from root: [String: Any]) -> UserProfile?
+}
+
+struct YandexCatalogJsonParser: CatalogParsing {
+    func feedWithBlocks(from root: [String: Any]) -> FeedWithBlocks {
         guard let feed = root["feed"] as? [[String: Any]] else {
             return FeedWithBlocks(blocks: [], flatGames: [], recentGames: [], genres: [], nextPageId: nil, hasNext: false)
         }
@@ -27,7 +36,7 @@ enum CatalogFeedParser {
         )
     }
 
-    static func feedPage(from root: [String: Any]) -> FeedPage {
+    func feedPage(from root: [String: Any]) -> FeedPage {
         guard let feed = root["feed"] as? [[String: Any]] else {
             return FeedPage(games: [], nextPageId: nil, hasNext: false)
         }
@@ -35,7 +44,7 @@ enum CatalogFeedParser {
         return FeedPage(games: GameDecoder.flatten(feed), nextPageId: page.nextPageId, hasNext: page.hasNext)
     }
 
-    static func similarGames(from root: [String: Any]) -> [Game] {
+    func similarGames(from root: [String: Any]) -> [Game] {
         if let games = root["games"] as? [[String: Any]] {
             var seen = Set<Int64>()
             var out: [Game] = []
@@ -51,11 +60,114 @@ enum CatalogFeedParser {
         return []
     }
 
-    private static func pageInfo(from root: [String: Any]) -> (nextPageId: String?, hasNext: Bool) {
+    func categories(fromTags root: [String: Any]) -> [GameCategory] {
+        guard let tags = root["tags"] as? [[String: Any]] else { return [] }
+        return tags.compactMap { item in
+            guard let slug = item["slug"] as? String, !slug.isEmpty,
+                  let title = item["title"] as? String, !title.isEmpty
+            else { return nil }
+            let info = item["info"] as? [String: Any]
+            return GameCategory(
+                name: slug,
+                title: title,
+                gamesCount: (info?["games_count"] as? NSNumber)?.intValue ?? 0
+            )
+        }
+    }
+
+    func appDetail(fromGetGame root: [String: Any]) -> AppDetail? {
+        guard let game = root["game"] as? [String: Any] else { return nil }
+        let description = (game["description"] as? String).flatMap {
+            let trimmed = Self.decodeHtmlEntities($0).trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        let media = game["media"] as? [String: Any]
+        let screenshots = Self.screenshotUrls(from: media?["screenshots"])
+        let genres = ((game["categoriesNames"] as? [String]) ?? []).map(Self.decodeHtmlEntities)
+        let languages: [String]
+        if let arr = game["inLanguage"] as? [String] {
+            languages = arr
+        } else if let single = game["inLanguage"] as? String {
+            languages = [single]
+        } else {
+            languages = []
+        }
+        let author = ((game["developer"] as? [String: Any])?["name"] as? String)
+            .map(Self.decodeHtmlEntities)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return AppDetail(
+            description: description,
+            screenshots: screenshots,
+            datePublished: (game["datePublished"] as? String) ?? (game["releaseDate"] as? String),
+            genres: genres,
+            languages: languages,
+            author: (author?.isEmpty == false) ? author : nil
+        )
+    }
+
+    func userProfile(from root: [String: Any]) -> UserProfile? {
+        let userData = (root["userData"] as? [String: Any])
+            ?? (root["user"] as? [String: Any])
+            ?? root
+        let uid = (userData["uid"] as? String)
+            ?? (userData["id"] as? String)
+            ?? (userData["passportUid"] as? String)
+            ?? ""
+        guard !uid.isEmpty else { return nil }
+        let avatarsOrigin = (userData["avatarsOrigin"] as? String) ?? "https://avatars.mds.yandex.net"
+        let avatarId = (userData["avatarId"] as? String) ?? "0/0-0"
+        let avatarUrl = (userData["avatarUrl"] as? String)
+            ?? (avatarId == "0/0-0" ? "" : "\(avatarsOrigin)/get-yapic/\(avatarId)/islands-300")
+        return UserProfile(
+            isAuthorized: true,
+            displayName: (userData["displayName"] as? String) ?? (userData["name"] as? String) ?? "",
+            login: (userData["login"] as? String) ?? "",
+            avatarUrl: avatarUrl,
+            hasYaPlus: ((userData["yaplusEnabled"] as? Bool) ?? false) || ((userData["hasYaPlus"] as? Bool) ?? false)
+        )
+    }
+
+    private func pageInfo(from root: [String: Any]) -> (nextPageId: String?, hasNext: Bool) {
         let pageInfo = root["pageInfo"] as? [String: Any]
         let nextPageId = pageInfo?["nextPageId"] as? String
         let hasNext = (pageInfo?["hasNextPage"] as? Bool) ?? (nextPageId != nil)
         return (nextPageId, hasNext)
+    }
+
+    private static func screenshotUrls(from raw: Any?) -> [String] {
+        var urls: [String] = []
+        if let arr = raw as? [[String: Any]] {
+            urls.append(contentsOf: arr.compactMap(screenshotUrl))
+        } else if let dict = raw as? [String: Any] {
+            for value in dict.values {
+                guard let arr = value as? [[String: Any]] else { continue }
+                urls.append(contentsOf: arr.compactMap(screenshotUrl))
+            }
+        }
+        return urls.dedupeBy { $0 }
+    }
+
+    private static func screenshotUrl(_ item: [String: Any]) -> String? {
+        if let prefix = item["prefix-url"] as? String, !prefix.isEmpty {
+            return "\(prefix)pjpg500x280"
+        }
+        if let url = item["url"] as? String {
+            return rewriteAvatarSize(url, newSize: "pjpg500x280")
+        }
+        return nil
+    }
+
+    private static func rewriteAvatarSize(_ url: String, newSize: String) -> String {
+        guard let lastSlash = url.lastIndex(of: "/"), lastSlash != url.startIndex else { return url }
+        return String(url[..<url.index(after: lastSlash)]) + newSize
+    }
+
+    private static func decodeHtmlEntities(_ s: String) -> String {
+        s.replacingOccurrences(of: "&amp;", with: "&")
+            .replacingOccurrences(of: "&quot;", with: "\"")
+            .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
     }
 }
 

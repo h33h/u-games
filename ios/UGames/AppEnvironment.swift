@@ -8,10 +8,11 @@ struct AppEnvironment {
     static let live: AppEnvironment = {
         let config = AppConfig.live()
         let http = CatalogHTTPClient(config: config)
+        let parser = YandexCatalogJsonParser()
         let sessionStore = YandexSessionStore(config: config)
         return AppEnvironment(
             config: config,
-            remote: YandexCatalogRemoteDataSource(config: config, http: http),
+            remote: YandexCatalogRemoteDataSource(config: config, http: http, parser: parser),
             sessionStore: sessionStore
         )
     }()

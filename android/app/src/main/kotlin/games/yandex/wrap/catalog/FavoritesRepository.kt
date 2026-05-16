@@ -1,5 +1,6 @@
 package games.yandex.wrap.catalog
 
+import games.yandex.wrap.catalog.models.Game
 import games.yandex.wrap.data.FavoriteEntity
 import games.yandex.wrap.data.FavoritesDao
 import kotlinx.coroutines.flow.Flow

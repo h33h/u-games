@@ -44,12 +44,8 @@ func parseDeepLink(_ url: URL, config: AppConfig = .live()) -> Int64? {
         }
         return nil
     case "https", "http":
-        let yandexHosts = [
-            config.yandex.origin(.com).host,
-            config.yandex.origin(.ru).host,
-        ]
         if let host = url.host,
-           yandexHosts.contains(where: { $0.map { host.hasSuffix($0) } ?? false }),
+           host == config.yandex.origin().host,
            let idx = segments.firstIndex(of: "app"), idx + 1 < segments.count {
             return Int64(segments[idx + 1])
         }

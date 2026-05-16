@@ -1,6 +1,6 @@
 # U-Games — Yandex.Games без рекламы
 
-Нативные обёртки (Android + iOS) над `yandex.com/games`, которые запускают игры без рекламы и в полноэкранном PWA-стиле. Свой каталог игр загружается напрямую из публичного эндпоинта Yandex; авторизация Яндекс ID и сохранение прогресса работают штатно.
+Нативные обёртки (Android + iOS) над `yandex.ru/games`, которые запускают игры без рекламы и в полноэкранном PWA-стиле. Свой каталог игр загружается напрямую из JSON-эндпоинтов Yandex; авторизация Яндекс ID и сохранение прогресса работают штатно.
 
 ## Защита от рекламы — три слоя
 
@@ -71,7 +71,7 @@ adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 3. В списке найти `WebView in games.yandex.wrap` → Inspect.
 4. Tab Network: при запуске игры не должно быть запросов на:
    - `securepubads.g.doubleclick.net/gampad/ads?...`
-   - `mc.yandex.com/watch/*`
+   - `mc.yandex.ru/watch/*`
    - `pagead2.googlesyndication.com/*`
    - `fundingchoicesmessages.google.com/*`
 5. Tab Console: `JSON.parse(document.getElementById('__appData__').textContent).advPartnerInfo.advEnabledByPartner` → `false` (если honest-path сработал).
@@ -115,7 +115,7 @@ App Store не примет — это обёртка над сторонним 
 - `kotlin/games/yandex/wrap/webview/GameWebView.kt` — WebView setup, инжекция через `WebViewCompat.addDocumentStartJavaScript` с `allowedOriginRules`
 - `kotlin/games/yandex/wrap/webview/AdBlockingClient.kt` — `WebViewClient.shouldInterceptRequest` блокирует URL по списку
 - `kotlin/games/yandex/wrap/webview/PopupHandler.kt` — `WebChromeClient.onCreateWindow` для passport.yandex.ru OAuth popup
-- `kotlin/games/yandex/wrap/catalog/CatalogApi.kt` — Ktor клиент для `yandex.com/games/api/catalogue/v2/feed/`
+- `kotlin/games/yandex/wrap/catalog/CatalogApi.kt` — Ktor клиент для `yandex.ru/games/api/catalogue/v2/*`
 - `kotlin/games/yandex/wrap/data/AppDatabase.kt` — Room: cache + favorites
 
 ### iOS (`ios/`)

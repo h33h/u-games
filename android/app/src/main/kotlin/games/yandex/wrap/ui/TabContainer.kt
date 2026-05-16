@@ -29,8 +29,8 @@ sealed interface TabPushed {
     data object None : TabPushed
     // Fully-qualified `catalog.Game` because inside the `TabPushed` body the
     // unqualified `Game` token resolves to the nested `TabPushed.Game` class
-    // declared below, not to the imported `games.yandex.wrap.catalog.Game`.
-    data class GameDetail(val game: games.yandex.wrap.catalog.Game) : TabPushed
+    // declared below, not to the imported `games.yandex.wrap.catalog.models.Game`.
+    data class GameDetail(val game: games.yandex.wrap.catalog.models.Game) : TabPushed
     data class Game(val appId: Long, val title: String) : TabPushed
     data object Auth : TabPushed
     data object Logs : TabPushed

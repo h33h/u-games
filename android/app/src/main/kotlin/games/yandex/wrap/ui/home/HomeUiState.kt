@@ -1,7 +1,7 @@
 package games.yandex.wrap.ui.home
 
-import games.yandex.wrap.catalog.Game
-import games.yandex.wrap.catalog.UserProfile
+import games.yandex.wrap.catalog.models.Game
+import games.yandex.wrap.catalog.models.UserProfile
 
 /**
  * View-state for HomeScreen. Built by [HomeViewModel.digest] from the

@@ -1,4 +1,4 @@
-package games.yandex.wrap.catalog
+package games.yandex.wrap.catalog.models
 
 import games.yandex.wrap.config.AppConfig
 

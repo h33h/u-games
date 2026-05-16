@@ -13,7 +13,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
-import games.yandex.wrap.catalog.Game
+import games.yandex.wrap.catalog.models.Game
 import games.yandex.wrap.ui.AuthScreen
 import games.yandex.wrap.ui.GameScreen
 import games.yandex.wrap.ui.LogsScreen
@@ -195,7 +195,7 @@ class MainActivity : ComponentActivity() {
 
 /// Parse ugames://app/<id> deep links. Returns the appId if the URI matches,
 /// null otherwise (so callers fall back to the default Home tab). Tolerant
-/// of `https://yandex.com/games/app/<id>` intents in case Android claims
+/// of `https://yandex.ru/games/app/<id>` intents in case Android claims
 /// the URL via auto-verify even though we don't ship Digital Asset Links.
 private fun parseDeepLink(intent: Intent?): Long? {
     val uri: Uri = intent?.data ?: return null
@@ -206,7 +206,7 @@ private fun parseDeepLink(intent: Intent?): Long? {
             if (uri.host == "app") pathSegments.firstOrNull()?.toLongOrNull() else null
         }
         "https", "http" -> {
-            if (uri.host in setOf("yandex.com", "yandex.ru")) {
+            if (uri.host == "yandex.ru") {
                 val idx = pathSegments.indexOf("app")
                 if (idx >= 0 && idx + 1 < pathSegments.size) pathSegments[idx + 1].toLongOrNull() else null
             } else null

@@ -34,7 +34,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import games.yandex.wrap.config.AppConfig
-import games.yandex.wrap.config.YandexHost
 import games.yandex.wrap.diagnostics.LogStore
 import games.yandex.wrap.diagnostics.UgamesLogJsBridge
 import games.yandex.wrap.webview.installLogBridgeShim
@@ -47,7 +46,6 @@ fun AuthScreen(config: AppConfig, onClose: () -> Unit) {
     val webViewRef = remember { mutableStateOf<WebView?>(null) }
     val dismissed = remember { mutableStateOf(false) }
 
-    val preferredHost = remember { config.yandex.preferredHost }
     val passportHost = remember { config.yandex.passportOrigin().host }
     val authUrl = remember { config.yandex.authUrl().toString() }
     val gamesRootUrl = remember { config.yandex.gamesHome().toString() }
@@ -55,29 +53,24 @@ fun AuthScreen(config: AppConfig, onClose: () -> Unit) {
     // Cookie-driven auth completion. Yandex's passport flow keeps changing
     // (/pwl-yandex/auth/add, /webauthn-reg, /finish?, /profile/setup,
     // /auth/welcome, …) — chasing dead-end URL patterns is fragile. Once
-    // Session_id lands on the PREFERRED domain (yandex.ru for Russian users,
-    // yandex.com otherwise), the user is authenticated regardless of which
-    // passport screen WebView happens to land on. We force-load /games/ so
-    // navigation completes onto our retpath, then give WebView a 2.5s grace
-    // to absorb the .com→.ru SSO redirect chain that establishes the
-    // .yandex.ru session — without this grace the catalog fetch would still
-    // be anonymous on Russian-locale devices.
+    // Session_id on yandex.ru is enough to treat the WebView login as complete.
+    // URL patterns in Passport change often, so the watcher stays cookie-driven.
     LaunchedEffect(Unit) {
         LogStore.log(
             "auth",
-            "AuthView opened: passportHost=$passportHost retpath=${config.yandex.gamesHome()} gamesHost=${preferredHost.host}",
+            "AuthView opened: passportHost=$passportHost retpath=${config.yandex.gamesHome()} gamesHost=${config.yandex.origin().host}",
         )
         val cm = CookieManager.getInstance()
         var ticks = 0
         while (!dismissed.value) {
             delay(400)
             ticks++
-            val raw = cm.getCookie(config.yandex.origin(preferredHost).toString()).orEmpty()
+            val raw = cm.getCookie(config.yandex.origin().toString()).orEmpty()
             val sessionPresent = raw.split(';').any { it.trim().startsWith("Session_id=") }
             if (ticks % 5 == 0) {
                 LogStore.log(
                     "cookie",
-                    "tick=$ticks waiting for Session_id@${preferredHost.host}; cookieLen=${raw.length}",
+                    "tick=$ticks waiting for Session_id@${config.yandex.origin().host}; cookieLen=${raw.length}",
                 )
             }
             if (!sessionPresent) continue
@@ -89,21 +82,16 @@ fun AuthScreen(config: AppConfig, onClose: () -> Unit) {
                 LogStore.log("auth", "force-loading $gamesRootUrl")
                 wv.post { wv.loadUrl(gamesRootUrl) }
             }
-            // Grace window — the .com→.ru SSO chain takes ~1-2s on a real
-            // device. Dismissing on first sight of Session_id leaves the
-            // .yandex.ru session never established and the next /games/
-            // fetch comes back anonymous.
+            // Grace window lets WebView flush the final Passport cookies.
             delay(2500)
             if (dismissed.value) return@LaunchedEffect
             dismissed.value = true
             val finalUrl = wv.url.orEmpty()
-            val comRaw = cm.getCookie(config.yandex.origin(YandexHost.Com).toString()).orEmpty()
-            val ruRaw = cm.getCookie(config.yandex.origin(YandexHost.Ru).toString()).orEmpty()
-            val comSessions = if (comRaw.contains("Session_id=")) 1 else 0
-            val ruSessions = if (ruRaw.contains("Session_id=")) 1 else 0
+            val yandexRaw = cm.getCookie(config.yandex.origin().toString()).orEmpty()
+            val yandexSessions = if (yandexRaw.contains("Session_id=")) 1 else 0
             LogStore.log(
                 "auth",
-                "post-grace dismiss; finalUrl=$finalUrl comSessions=$comSessions ruSessions=$ruSessions",
+                "post-grace dismiss; finalUrl=$finalUrl yandexSessions=$yandexSessions",
             )
             onClose()
             return@LaunchedEffect
@@ -155,12 +143,8 @@ fun AuthScreen(config: AppConfig, onClose: () -> Unit) {
                                 return
                             }
                             // No URL-based dismiss here. The watcher waits for
-                            // Session_id on the preferred domain and gives
-                            // WebView a 2.5s grace to complete the .com→.ru
-                            // SSO chain — that's what gets the .yandex.ru
-                            // session cookies set. Dismissing on first sight
-                            // of /games/ short-circuits that and leaves auth
-                            // half-finished.
+                            // Session_id and gives WebView a short grace window
+                            // to complete cookie writes.
                         }
 
                         override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {

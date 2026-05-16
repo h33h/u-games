@@ -3,7 +3,7 @@ package games.yandex.wrap.ui.profile
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import games.yandex.wrap.catalog.ProfileRepository
-import games.yandex.wrap.catalog.UserProfile
+import games.yandex.wrap.catalog.models.UserProfile
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

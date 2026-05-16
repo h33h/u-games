@@ -91,16 +91,16 @@ final class CatalogService: ObservableObject {
         Log.write("profile", "refreshProfile begin")
         await SharedCookieStore.shared.syncToShared()
         Log.write("profile", "WK->shared sync done")
-        let waited = await sessionStore.waitForSessionCookie(timeoutSeconds: 3.0)
-        Log.write("profile", "Session_id wait: \(waited)")
+        let cookie = await sessionStore.sessionCookieHeader(timeoutSeconds: 3.0)
+        Log.write("profile", "Session_id wait: cookies=\(cookie.count) names=\(cookie.names)")
         let delaysMs: [UInt64] = [0, 350, 800, 1600]
         for i in 0..<attempts {
             if delaysMs[min(i, delaysMs.count - 1)] > 0 {
                 try? await Task.sleep(nanoseconds: delaysMs[min(i, delaysMs.count - 1)] * 1_000_000)
             }
             do {
-                let cookie = sessionStore.mergedYandexCookieHeader()
-                Log.write("profile", "fetch begin merged=\(cookie.count)[\(cookie.names)]")
+                let cookie = await sessionStore.sessionCookieHeader(timeoutSeconds: 0)
+                Log.write("profile", "fetch begin cookies=\(cookie.count)[\(cookie.names)]")
                 let (p, status, hops, html) = try await remote.fetchProfile(cookieHeader: cookie.header)
                 Log.write("profile", "fetch http status=\(status) bodyLen=\(html.count) hops=\(hops)")
                 Log.write("profile", "attempt#\(i + 1) -> isAuth=\(p?.isAuthorized ?? false) login=\(p?.login ?? "") uid-len=\(p?.displayName.count ?? 0)")

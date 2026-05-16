@@ -1,7 +1,7 @@
 package games.yandex.wrap.ui.detail
 
-import games.yandex.wrap.catalog.AppDetail
-import games.yandex.wrap.catalog.Game
+import games.yandex.wrap.catalog.models.AppDetail
+import games.yandex.wrap.catalog.models.Game
 
 /**
  * State for the GameDetail push screen. The `game` is the seed passed in

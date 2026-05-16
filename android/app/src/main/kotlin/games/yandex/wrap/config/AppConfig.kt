@@ -1,12 +1,6 @@
 package games.yandex.wrap.config
 
 import java.net.URI
-import java.util.Locale
-
-enum class YandexHost(val host: String) {
-    Com("yandex.com"),
-    Ru("yandex.ru"),
-}
 
 data class HttpDefaults(
     val userAgent: String,
@@ -14,33 +8,31 @@ data class HttpDefaults(
 )
 
 data class YandexEndpoints(
-    val preferredHost: YandexHost,
-    val apiHost: YandexHost = YandexHost.Com,
     val platform: String = "android_other",
     val clientWidth: Int = 412,
     val clientHeight: Int = 915,
 ) {
-    fun origin(host: YandexHost = preferredHost): URI = URI("https://${host.host}")
-    fun gamesHome(host: YandexHost = preferredHost): URI = URI("https://${host.host}/games/")
-    fun passportOrigin(): URI = URI("https://${if (preferredHost == YandexHost.Ru) "passport.yandex.ru" else "passport.yandex.com"}")
+    fun origin(): URI = URI("https://$YANDEX_HOST")
+    fun gamesHome(): URI = URI("https://$YANDEX_HOST/games/")
+    fun passportOrigin(): URI = URI("https://passport.$YANDEX_HOST")
     fun authUrl(): URI = URI("${passportOrigin()}/auth?retpath=${gamesHome().toString().urlEncoded()}")
-    fun gameUrl(appId: Long, host: YandexHost = apiHost): URI = URI("https://${host.host}/games/app/$appId")
-    fun feedApi(): URI = URI("https://${apiHost.host}/games/api/catalogue/v2/feed/")
-    fun searchApi(): URI = URI("https://${apiHost.host}/games/api/catalogue/v2/search/")
-    fun similarApi(): URI = URI("https://${apiHost.host}/games/api/catalogue/v2/similar_games/")
-    fun searchPage(): URI = URI("https://${apiHost.host}/games/search")
+    fun gameUrl(appId: Long): URI = URI("https://$YANDEX_HOST/games/app/$appId")
+    fun feedApi(): URI = URI("https://$YANDEX_HOST/games/api/catalogue/v2/feed/")
+    fun searchApi(): URI = URI("https://$YANDEX_HOST/games/api/catalogue/v2/search/")
+    fun similarApi(): URI = URI("https://$YANDEX_HOST/games/api/catalogue/v2/similar_games/")
+    fun gameDetailApi(): URI = URI("https://$YANDEX_HOST/games/api/catalogue/v2/get_game")
+    fun tagsApi(): URI = URI("https://$YANDEX_HOST/games/api/catalogue/v2/tags/")
+    fun userInfoApi(): URI = URI("https://$YANDEX_HOST/games/api/catalogue/v2/user_info")
 
     fun isGamesUrl(url: String): Boolean =
-        url.startsWith(gamesHome(YandexHost.Com).toString()) || url.startsWith(gamesHome(YandexHost.Ru).toString())
+        url.startsWith(gamesHome().toString())
 
     fun documentStartOrigins(): Set<String> = setOf(
-        "https://${YandexHost.Com.host}",
-        "https://${YandexHost.Ru.host}",
+        "https://$YANDEX_HOST",
     )
 
     fun logBridgeOrigins(): Set<String> = documentStartOrigins() + setOf(
-        passportOriginFor(YandexHost.Com),
-        passportOriginFor(YandexHost.Ru),
+        passportOrigin().toString(),
         "https://*.games.s3.yandex.net",
         "https://*.cdn.games.yandex.net",
         "https://*.gamecdn.yandex.net",
@@ -48,21 +40,11 @@ data class YandexEndpoints(
         "https://game-static.ru",
     )
 
-    fun cookieDonorOrigins(): List<String> = listOf(
-        origin(YandexHost.Com).toString(),
-        origin(YandexHost.Ru).toString(),
-        passportOriginFor(YandexHost.Com),
-        passportOriginFor(YandexHost.Ru),
-    )
+    fun cookieOrigins(): List<String> = listOf(origin().toString(), passportOrigin().toString())
 
-    fun cookieClearOrigins(): List<String> = cookieDonorOrigins() + listOf(
-        "https://games.yandex.com",
-        "https://games.yandex.ru",
-        "https://id.yandex.com",
-    )
-
-    private fun passportOriginFor(host: YandexHost): String =
-        "https://${if (host == YandexHost.Ru) "passport.yandex.ru" else "passport.yandex.com"}"
+    private companion object {
+        const val YANDEX_HOST = "yandex.ru"
+    }
 }
 
 data class AppConfig(
@@ -70,10 +52,9 @@ data class AppConfig(
     val http: HttpDefaults,
 ) {
     companion object {
-        fun defaultForLocale(language: String = Locale.getDefault().language): AppConfig {
-            val preferred = if (language.lowercase().startsWith("ru")) YandexHost.Ru else YandexHost.Com
+        fun defaultForLocale(language: String = ""): AppConfig {
             return AppConfig(
-                yandex = YandexEndpoints(preferredHost = preferred),
+                yandex = YandexEndpoints(),
                 http = HttpDefaults(
                     userAgent = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Mobile Safari/537.36",
                 ),

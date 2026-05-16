@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit
 
 /**
  * URL block-list (layer 3) + HTML response interception that injects PWA-CSS
- * directly into <head> of yandex.com/games HTML responses. This guarantees the
+ * directly into <head> of yandex.ru/games HTML responses. This guarantees the
  * catalog chrome is hidden BEFORE the first paint — fixes the "intermediate
  * description page" flash that documentStart-script injection couldn't
  * fully eliminate on slow devices.

@@ -119,7 +119,7 @@ private struct AuthWebView: UIViewRepresentable {
         web.isOpaque = false
         var request = URLRequest(url: config.yandex.passportAuthURL())
         request.setValue(config.http.userAgent, forHTTPHeaderField: "User-Agent")
-        Log.write("auth", "AuthView opened: passportHost=\(config.yandex.passportOrigin().host ?? "?") retpath=\(config.yandex.gamesHome().absoluteString) gamesHost=\(config.yandex.preferredHost.rawValue)")
+        Log.write("auth", "AuthView opened: passportHost=\(config.yandex.passportOrigin().host ?? "?") retpath=\(config.yandex.gamesHome().absoluteString) gamesHost=\(config.yandex.origin().host ?? "?")")
         web.load(request)
         context.coordinator.startSessionWatcher(webView: web)
         return web
@@ -180,16 +180,15 @@ private struct AuthWebView: UIViewRepresentable {
                     let cookies = await webView.configuration.websiteDataStore
                         .httpCookieStore.allCookiesAsync()
                     let yandexCookies = cookies.filter {
-                        $0.domain.contains("yandex.com") || $0.domain.contains("yandex.ru")
+                        $0.domain.contains("yandex.ru")
                     }
 
-                    let preferredDomain = config.yandex.preferredHost.rawValue
                     let sessionPresent = yandexCookies.contains { c in
-                        c.name == "Session_id" && c.domain.contains(preferredDomain)
+                        c.name == "Session_id" && c.domain.contains("yandex.ru")
                     }
                     if ticks % 5 == 0 {
                         let names = yandexCookies.map { "\($0.name)@\($0.domain)" }.sorted().joined(separator: ",")
-                        Log.write("cookie", "tick=\(ticks) waiting for Session_id@\(preferredDomain); have \(yandexCookies.count): \(names)")
+                        Log.write("cookie", "tick=\(ticks) waiting for Session_id@yandex.ru; have \(yandexCookies.count): \(names)")
                     }
                     guard sessionPresent else { continue }
                     let current = webView.url?.absoluteString ?? ""
@@ -206,9 +205,8 @@ private struct AuthWebView: UIViewRepresentable {
                     let finalURL = webView.url?.absoluteString ?? "?"
                     let postCookies = await webView.configuration.websiteDataStore
                         .httpCookieStore.allCookiesAsync()
-                    let comSessions = postCookies.filter { $0.domain.contains(".yandex.com") && $0.name == "Session_id" }.count
-                    let ruSessions  = postCookies.filter { $0.domain.contains(".yandex.ru") && $0.name == "Session_id" }.count
-                    Log.write("auth", "post-grace dismiss; finalURL=\(finalURL) comSessions=\(comSessions) ruSessions=\(ruSessions)")
+                    let yandexSessions = postCookies.filter { $0.domain.contains(".yandex.ru") && $0.name == "Session_id" }.count
+                    Log.write("auth", "post-grace dismiss; finalURL=\(finalURL) yandexSessions=\(yandexSessions)")
                     self.onSignedIn()
                     return
                 }

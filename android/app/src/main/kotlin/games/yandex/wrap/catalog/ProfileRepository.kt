@@ -1,5 +1,7 @@
 package games.yandex.wrap.catalog
 
+import games.yandex.wrap.catalog.models.UserProfile
+
 class ProfileRepository(
     private val api: CatalogApi,
     private val sessionStore: YandexSessionStore,
@@ -7,7 +9,7 @@ class ProfileRepository(
     suspend fun userProfile(): UserProfile? = api.userProfile()
 
     suspend fun userProfileWithRetry(attempts: Int = 4): UserProfile? {
-        sessionStore.waitForSessionCookie(timeoutMs = 3000)
+        sessionStore.sessionCookieHeader(timeoutMs = 3000)
         val delaysMs = longArrayOf(0, 350, 800, 1600)
         var last: UserProfile? = null
         for (i in 0 until attempts) {

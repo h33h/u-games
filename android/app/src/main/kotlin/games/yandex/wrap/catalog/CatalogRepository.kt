@@ -1,5 +1,10 @@
 package games.yandex.wrap.catalog
 
+import games.yandex.wrap.catalog.models.AppDetail
+import games.yandex.wrap.catalog.models.FeedPage
+import games.yandex.wrap.catalog.models.FeedWithBlocks
+import games.yandex.wrap.catalog.models.Game
+import games.yandex.wrap.catalog.models.GameCategory
 import games.yandex.wrap.data.GameCacheDao
 import games.yandex.wrap.data.GameCacheEntity
 

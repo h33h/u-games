@@ -6,7 +6,7 @@ authentication; mobile-friendly layout when User-Agent is mobile.
 ## Endpoint
 
 ```
-GET https://yandex.com/games/api/catalogue/v2/feed/
+GET https://yandex.ru/games/api/catalogue/v2/feed/
 ```
 
 ## Query parameters
@@ -96,7 +96,7 @@ https://avatars.mds.yandex.net/get-games/15351989/2a00000199f7d0b8950a31ebace1a3
 ## Game launch URL
 
 ```
-https://yandex.com/games/app/{appID}
+https://yandex.ru/games/app/{appID}
 ```
 
 The wrapper page creates an iframe pointing at `app-{appID}.games.s3.yandex.net`
@@ -106,7 +106,7 @@ postMessage handshake and breaks `init()`, so we always load the wrapper URL.
 ## Related endpoint
 
 ```
-GET https://yandex.com/games/api/catalogue/v2/similar_games/?app_id={appID}&games_count=16&lang=en&platform=android_other
+GET https://yandex.ru/games/api/catalogue/v2/similar_games/?app_id={appID}&games_count=16&lang=ru&platform=android_other
 ```
 
 Same item shape, used to populate the "Similar games" row.

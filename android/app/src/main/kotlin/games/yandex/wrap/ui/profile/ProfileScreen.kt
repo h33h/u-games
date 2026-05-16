@@ -43,7 +43,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import games.yandex.wrap.catalog.UserProfile
+import games.yandex.wrap.catalog.models.UserProfile
 import games.yandex.wrap.ui.theme.UGColors
 import games.yandex.wrap.ui.theme.UGType
 

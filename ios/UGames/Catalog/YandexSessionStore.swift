@@ -3,30 +3,21 @@ import Foundation
 struct YandexSessionStore {
     let config: AppConfig
 
-    func waitForSessionCookie(timeoutSeconds: TimeInterval) async -> String {
+    func sessionCookieHeader(timeoutSeconds: TimeInterval = 3.0) async -> (header: String, names: String, count: Int) {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
-        let yandex = config.yandex.origin(config.yandex.preferredHost)
-        var ticks = 0
         while Date() < deadline {
-            let cookies = HTTPCookieStorage.shared.cookies(for: yandex) ?? []
-            if cookies.contains(where: { $0.name == "Session_id" }) {
-                let names = cookies.map { $0.name }.sorted().joined(separator: ",")
-                return "found after \(ticks * 150)ms (cookies=\(cookies.count) names=\(names))"
+            let header = cookieHeader()
+            if header.names.contains("Session_id") {
+                return header
             }
             try? await Task.sleep(nanoseconds: 150_000_000)
-            ticks += 1
         }
-        let cookies = HTTPCookieStorage.shared.cookies(for: yandex) ?? []
-        let names = cookies.map { $0.name }.sorted().joined(separator: ",")
-        return "TIMEOUT after \(Int(timeoutSeconds * 1000))ms (cookies=\(cookies.count) names=\(names))"
+        return cookieHeader()
     }
 
-    func mergedYandexCookieHeader() -> (header: String, names: String, count: Int) {
-        let allCookies = HTTPCookieStorage.shared.cookies ?? []
-        let donors = config.yandex.cookieDonorOrigins()
-        let yandexCookies = allCookies.filter { cookie in
-            donors.contains { donor in cookie.domain.contains(URL(string: donor)!.host ?? "") }
-        }
+    private func cookieHeader() -> (header: String, names: String, count: Int) {
+        let origins = config.yandex.cookieOrigins().compactMap(URL.init(string:))
+        let yandexCookies = origins.flatMap { HTTPCookieStorage.shared.cookies(for: $0) ?? [] }
         var dedup: [String: HTTPCookie] = [:]
         for cookie in yandexCookies { dedup[cookie.name] = cookie }
         let header = dedup.values.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
@@ -36,33 +27,10 @@ struct YandexSessionStore {
     func clearSession() async {
         let store = HTTPCookieStorage.shared
         for cookie in store.cookies ?? [] {
-            if cookie.domain.contains("yandex") {
+            if cookie.domain.contains("yandex.ru") {
                 store.deleteCookie(cookie)
             }
         }
         await SharedCookieStore.shared.clearYandexCookies()
-    }
-}
-
-final class ProfileFetchRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-    let cookieHeader: String
-    private(set) var redirectCount: Int = 0
-
-    init(cookieHeader: String) { self.cookieHeader = cookieHeader }
-
-    func urlSession(
-        _ session: URLSession,
-        task: URLSessionTask,
-        willPerformHTTPRedirection response: HTTPURLResponse,
-        newRequest request: URLRequest,
-        completionHandler: @escaping (URLRequest?) -> Void
-    ) {
-        redirectCount += 1
-        var modified = request
-        modified.httpShouldHandleCookies = false
-        if !cookieHeader.isEmpty {
-            modified.setValue(cookieHeader, forHTTPHeaderField: "Cookie")
-        }
-        completionHandler(modified)
     }
 }

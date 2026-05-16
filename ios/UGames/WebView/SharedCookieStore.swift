@@ -39,13 +39,13 @@ final class SharedCookieStore: NSObject, @unchecked Sendable {
     }
 
     func clearYandexCookies() async {
-        for cookie in sharedStorage.cookies ?? [] where cookie.domain.contains("yandex") {
+        for cookie in sharedStorage.cookies ?? [] where cookie.domain.contains("yandex.ru") {
             sharedStorage.deleteCookie(cookie)
         }
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
             webStore.getAllCookies { [weak self] cookies in
                 guard let self = self else { c.resume(); return }
-                let yandexCookies = cookies.filter { $0.domain.contains("yandex") }
+                let yandexCookies = cookies.filter { $0.domain.contains("yandex.ru") }
                 if yandexCookies.isEmpty { c.resume(); return }
                 var remaining = yandexCookies.count
                 for cookie in yandexCookies {

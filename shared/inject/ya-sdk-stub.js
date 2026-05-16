@@ -10,17 +10,15 @@
 //   - app-XXX.gamecdn.yandex.net      (alt CDN)
 //   - publisher-owned domains, e.g. game-static.ru (Vizor Apps / Klondike)
 // Hard-coding every publisher CDN doesn't scale; the universal marker is
-// the `#origin=https://yandex.com|ru` hash that Yandex appends when it
-// loads a game iframe, regardless of host. We accept either signal.
+// the `#origin=https://yandex.ru` hash that Yandex appends when it loads a
+// game iframe, regardless of host. We accept either signal.
 (function () {
   // Origin guard: only run inside Yandex-hosted game iframes, no-op on
-  // yandex.com itself or any unrelated frame.
+  // yandex.ru itself or any unrelated frame.
   try {
     var host = location.host;
     var hash = location.hash || '';
     var hashHasYandexOrigin =
-      hash.indexOf('origin=https%3A%2F%2Fyandex.com') !== -1 ||
-      hash.indexOf('origin=https://yandex.com') !== -1 ||
       hash.indexOf('origin=https%3A%2F%2Fyandex.ru') !== -1 ||
       hash.indexOf('origin=https://yandex.ru') !== -1;
     var hostMatchesGameCdn =
@@ -29,11 +27,9 @@
       host.indexOf('gamecdn.yandex.net') !== -1 ||
       host.indexOf('game-static.ru') !== -1;
     var inGameFrame = hashHasYandexOrigin || hostMatchesGameCdn;
-    // Avoid running on yandex.com / yandex.ru / passport.* — we have a
+    // Avoid running on yandex.ru / passport.* — we have a
     // separate honest-path / pwa-mode pair for those.
-    if (host.indexOf('yandex.com') !== -1 || host.indexOf('yandex.ru') !== -1 ||
-        host.indexOf('yandex.by') !== -1 || host.indexOf('yandex.kz') !== -1 ||
-        host.indexOf('yandex.uz') !== -1 || host.indexOf('passport.') !== -1) {
+    if (host.indexOf('yandex.ru') !== -1 || host.indexOf('passport.') !== -1) {
       inGameFrame = false;
     }
     if (!inGameFrame) return;
@@ -49,12 +45,12 @@
   // Yandex's MOBILE iframe HTML (e.g. game 388978's index.html) does NOT
   // include any script that loads the YaGames SDK — desktop iframe HTML
   // has an inline script that reads `?sdk=/sdk/_/v2.<hash>.js` and adds
-  // a <script src="https://yandex.com${sdk}"> tag, but the mobile build
+  // a <script src="https://yandex.ru${sdk}"> tag, but the mobile build
   // simply ships 5 Construct 3 scripts and expects the host PWA app to
   // inject the SDK natively. Our wrapper isn't that PWA, so we do it here
   // ourselves: read `?sdk=` from location.search (honest-path.js patches
   // gameSrc to include it on the parent side), build the absolute SDK URL
-  // against the parent origin (yandex.com / yandex.ru), and append a
+  // against the parent origin (yandex.ru), and append a
   // synchronous-style <script> tag so the SDK loads BEFORE the game's
   // bundle reads window.YaGames.
   try {
@@ -63,7 +59,7 @@
     if (sdkPath && sdkPath.indexOf('http') !== 0) {
       // For mobile UAs, Yandex serves /sdk/_/v2.<hash>.js ONLY from the
       // per-game CDN origin (app-XXX.games.s3.yandex.net), NOT from
-      // yandex.com (yandex.com responds 404 for the same path under an
+      // yandex.ru (the host responds 404 for the same path under an
       // iPhone/Android UA). Build the SDK URL against the iframe's own
       // origin instead of the parent origin from `#origin=`.
       sdkPath = location.origin + sdkPath;

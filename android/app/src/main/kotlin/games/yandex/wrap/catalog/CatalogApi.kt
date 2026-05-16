@@ -1,12 +1,18 @@
 package games.yandex.wrap.catalog
 
+import games.yandex.wrap.catalog.models.AppDetail
+import games.yandex.wrap.catalog.models.FeedPage
+import games.yandex.wrap.catalog.models.FeedWithBlocks
+import games.yandex.wrap.catalog.models.Game
+import games.yandex.wrap.catalog.models.GameCategory
+import games.yandex.wrap.catalog.models.UserProfile
 import games.yandex.wrap.config.AppConfig
-import games.yandex.wrap.config.YandexHost
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 
 class CatalogApi(
     private val http: YandexHttpClient,
-    private val jsonParser: CatalogJsonParser,
-    private val htmlParser: CatalogHtmlParser,
+    private val parser: CatalogParser,
     private val sessionStore: YandexSessionStore,
     private val config: AppConfig,
 ) {
@@ -47,7 +53,7 @@ class CatalogApi(
                 "tab" to tab?.takeIf { it.isNotEmpty() },
             ),
         )
-        return jsonParser.feedWithBlocks(response)
+        return parser.feedWithBlocks(response)
     }
 
     suspend fun searchPaginated(
@@ -67,21 +73,18 @@ class CatalogApi(
                 "page_id" to pageId,
             ),
         )
-        return jsonParser.feedPage(response)
+        return parser.feedPage(response)
     }
 
     suspend fun fetchCategories(lang: String = "en"): List<GameCategory> {
-        val host = sessionStore.preferredYandexHost()
-        val effectiveLang = effectiveLang(host, lang)
-        val html = runCatching {
-            http.getHtml(
-                endpoints.gamesHome(host),
-                query = mapOf("lang" to effectiveLang),
-                acceptLanguage = "$effectiveLang,en;q=0.9",
+        val response = runCatching {
+            http.getJson(
+                endpoints.tagsApi(),
+                query = mapOf("lang" to "ru"),
+                acceptLanguage = "ru,en;q=0.9",
             )
         }.getOrElse { return emptyList() }
-        val appData = htmlParser.extractAppData(html) ?: return emptyList()
-        return htmlParser.categoriesFromAppData(appData)
+        return parser.categoriesFromTags(response)
     }
 
     suspend fun nextFeedPage(
@@ -119,21 +122,22 @@ class CatalogApi(
                 "page_id" to pageId,
             ),
         )
-        return jsonParser.feedPage(response)
+        return parser.feedPage(response)
     }
 
     suspend fun appDetail(appId: Long, lang: String = "en"): AppDetail? {
-        val host = sessionStore.preferredYandexHost()
-        val effectiveLang = effectiveLang(host, lang)
-        val html = runCatching {
-            http.getHtml(
-                endpoints.gameUrl(appId, host),
-                query = mapOf("lang" to effectiveLang),
-                acceptLanguage = "$effectiveLang,en;q=0.9",
+        val response = runCatching {
+            http.postJson(
+                endpoints.gameDetailApi(),
+                body = buildJsonObject {
+                    put("appID", JsonPrimitive(appId))
+                    put("format", JsonPrimitive("app"))
+                },
+                query = mapOf("lang" to "ru"),
+                acceptLanguage = "ru,en;q=0.9",
             )
         }.getOrElse { return null }
-        val ldJson = htmlParser.extractJsonLd(html) ?: return null
-        return htmlParser.appDetailFromJsonLd(ldJson)
+        return parser.appDetail(response)
     }
 
     suspend fun similar(appId: Long, lang: String = "en"): List<Game> {
@@ -149,35 +153,34 @@ class CatalogApi(
                 "standalone" to "false",
             ),
         )
-        return jsonParser.similarGames(response)
+        return parser.similarGames(response)
     }
 
     suspend fun search(query: String, lang: String = "en"): List<Game> {
         if (query.isBlank()) return emptyList()
-        val html = http.getHtml(
-            endpoints.searchPage(),
-            query = mapOf("query" to query, "lang" to lang),
-            accept = "text/html,application/xhtml+xml",
+        val response = http.getJson(
+            endpoints.searchApi(),
+            query = mapOf(
+                "query" to query,
+                "lang" to "ru",
+                "platform" to endpoints.platform,
+                "games_count" to "24",
+            ),
         )
-        val appData = htmlParser.extractAppData(html) ?: return emptyList()
-        return htmlParser.searchGamesFromAppData(appData)
+        return parser.feedPage(response).games
     }
 
     suspend fun userProfile(lang: String = "en"): UserProfile? {
-        val host = sessionStore.preferredYandexHost()
-        val effectiveLang = effectiveLang(host, lang)
-        val html = runCatching {
-            http.getHtml(
-                endpoints.gamesHome(host),
-                query = mapOf("lang" to effectiveLang),
-                acceptLanguage = "$effectiveLang,en;q=0.9",
-                cookieHeader = sessionStore.buildMergedYandexCookieHeader(),
+        val cookieHeader = sessionStore.sessionCookieHeader()
+        if (cookieHeader.isBlank()) return null
+        val response = runCatching {
+            http.getJson(
+                endpoints.userInfoApi(),
+                query = mapOf("lang" to "ru"),
+                acceptLanguage = "ru,en;q=0.9",
+                cookieHeader = cookieHeader,
             )
         }.getOrElse { return null }
-        val appData = htmlParser.extractAppData(html) ?: return null
-        return htmlParser.profileFromAppData(appData)
+        return parser.profile(response)
     }
-
-    private fun effectiveLang(host: YandexHost, requested: String): String =
-        if (host == YandexHost.Ru) "ru" else requested
 }

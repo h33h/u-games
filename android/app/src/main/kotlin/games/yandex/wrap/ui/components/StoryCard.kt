@@ -26,7 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
-import games.yandex.wrap.catalog.Game
+import games.yandex.wrap.catalog.models.Game
 import games.yandex.wrap.ui.theme.UGColors
 import games.yandex.wrap.ui.theme.UGType
 import games.yandex.wrap.ui.theme.UGamesTheme

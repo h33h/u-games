@@ -2,29 +2,26 @@ package games.yandex.wrap.catalog
 
 import android.webkit.CookieManager
 import games.yandex.wrap.config.AppConfig
-import games.yandex.wrap.config.YandexHost
 import kotlinx.coroutines.delay
 
 class YandexSessionStore(
     private val config: AppConfig,
     private val cookieManager: CookieManager = CookieManager.getInstance(),
 ) {
-    fun preferredYandexHost(): YandexHost = config.yandex.preferredHost
-
-    suspend fun waitForSessionCookie(timeoutMs: Long = 3000) {
-        val preferredHost = preferredYandexHost()
+    suspend fun sessionCookieHeader(timeoutMs: Long = 3000): String {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            val raw = cookieManager.getCookie(config.yandex.origin(preferredHost).toString()).orEmpty()
-            if (raw.contains("Session_id=")) break
+            val header = buildCookieHeader()
+            if (header.contains("Session_id=")) return header
             delay(150)
         }
+        return buildCookieHeader()
     }
 
-    fun buildMergedYandexCookieHeader(): String {
+    private fun buildCookieHeader(): String {
         val merged = LinkedHashMap<String, String>()
-        for (host in config.yandex.cookieDonorOrigins()) {
-            val raw = cookieManager.getCookie(host).orEmpty()
+        for (origin in config.yandex.cookieOrigins()) {
+            val raw = cookieManager.getCookie(origin).orEmpty()
             if (raw.isEmpty()) continue
             for (pair in raw.split(';')) {
                 val trimmed = pair.trim()
@@ -39,12 +36,12 @@ class YandexSessionStore(
     }
 
     suspend fun clearSession() {
-        for (host in config.yandex.cookieClearOrigins()) {
-            val raw = cookieManager.getCookie(host) ?: continue
+        for (origin in config.yandex.cookieOrigins()) {
+            val raw = cookieManager.getCookie(origin) ?: continue
             for (pair in raw.split(';')) {
                 val name = pair.substringBefore('=').trim()
                 if (name.isEmpty()) continue
-                cookieManager.setCookie(host, "$name=; Max-Age=0; Path=/")
+                cookieManager.setCookie(origin, "$name=; Max-Age=0; Path=/")
             }
         }
         cookieManager.flush()

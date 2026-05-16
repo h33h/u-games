@@ -15,15 +15,10 @@ analytics.google.com/g/collect
 www.google-analytics.com
 
 # --- Yandex own ads / metrika ---
-yandex.com/ads
 yandex.ru/ads
-yandex.com/clck/click
 yandex.ru/clck/click
-mc.yandex.com/watch
-mc.yandex.com/ytm-config
 mc.yandex.ru/watch
 mc.yandex.ru/ytm-config
-mc.yandex.com/metrika
 mc.yandex.ru/metrika
 an.yandex.ru
 adfox.ru

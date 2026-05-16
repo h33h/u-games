@@ -51,17 +51,17 @@ struct ProfileView: View {
                 .accessibilityHint("Long press for diagnostic logs")
 
             VStack(alignment: .leading, spacing: UGSpace.xs) {
-                let displayName = !p.displayName.isEmpty ? p.displayName
-                    : (!p.login.isEmpty ? p.login : "Guest")
+                let displayName = p.map { !$0.displayName.isEmpty ? $0.displayName
+                    : (!$0.login.isEmpty ? $0.login : "Guest") } ?? "Guest"
                 Text(displayName)
                     .font(UGFont.titleL)
                     .foregroundColor(UGColor.Text.primary)
-                if !p.login.isEmpty && p.login != displayName {
+                if let p, !p.login.isEmpty && p.login != displayName {
                     Text(p.login)
                         .font(UGFont.bodyS)
                         .foregroundColor(UGColor.Text.muted)
                 }
-                if p.hasYaPlus {
+                if p?.hasYaPlus == true {
                     UGChip(text: "YANDEX PLUS", style: .accentSoft)
                 }
             }
@@ -72,7 +72,7 @@ struct ProfileView: View {
     @ViewBuilder
     private var settingsCard: some View {
         VStack(spacing: 0) {
-            if service.profile.isAuthorized {
+            if service.profile?.isAuthorized == true {
                 SettingsRow(
                     systemIcon: "rectangle.portrait.and.arrow.right",
                     label: "Sign out",

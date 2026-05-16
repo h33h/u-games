@@ -143,7 +143,7 @@ fun HomeScreen(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun HomeHeader(
-    profile: UserProfile,
+    profile: UserProfile?,
     onProfileClick: () -> Unit,
     onProfileLongPress: () -> Unit,
 ) {
@@ -174,18 +174,19 @@ private fun HomeHeader(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ProfileAvatar(
-    profile: UserProfile,
+    profile: UserProfile?,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
 ) {
     val size = 38.dp
-    if (profile.isAuthorized && profile.avatarUrl.isNotEmpty()) {
+    val p = profile
+    if (p?.isAuthorized == true && p.avatarUrl.isNotEmpty()) {
         Box(
             modifier = Modifier
                 .size(size)
                 .clip(CircleShape)
                 .border(
-                    width = if (profile.hasYaPlus) 2.dp else 0.dp,
+                    width = if (p.hasYaPlus) 2.dp else 0.dp,
                     brush = UGColors.AccentGradient,
                     shape = CircleShape,
                 )
@@ -193,8 +194,8 @@ private fun ProfileAvatar(
             contentAlignment = Alignment.Center,
         ) {
             AsyncImage(
-                model = profile.avatarUrl,
-                contentDescription = profile.displayName.ifEmpty { profile.login },
+                model = p.avatarUrl,
+                contentDescription = p.displayName.ifEmpty { p.login },
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize().clip(CircleShape),
             )

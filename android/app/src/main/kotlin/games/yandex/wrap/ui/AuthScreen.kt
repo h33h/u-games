@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -33,24 +33,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import games.yandex.wrap.config.AppConfig
+import games.yandex.wrap.config.YandexHost
 import games.yandex.wrap.diagnostics.LogStore
 import games.yandex.wrap.diagnostics.UgamesLogJsBridge
 import games.yandex.wrap.webview.installLogBridgeShim
 import kotlinx.coroutines.delay
-import java.util.Locale
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-fun AuthScreen(onClose: () -> Unit) {
+fun AuthScreen(config: AppConfig, onClose: () -> Unit) {
     BackHandler(onBack = onClose)
     val webViewRef = remember { mutableStateOf<WebView?>(null) }
     val dismissed = remember { mutableStateOf(false) }
 
-    val preferredHost = remember { preferredYandexHost() }
-    val passportHost = remember { passportHostFor(preferredHost) }
-    val retpathEncoded = remember { "https%3A%2F%2F$preferredHost%2Fgames%2F" }
-    val authUrl = remember { "https://$passportHost/auth?retpath=$retpathEncoded" }
-    val gamesRootUrl = remember { "https://$preferredHost/games/" }
+    val preferredHost = remember { config.yandex.preferredHost }
+    val passportHost = remember { config.yandex.passportOrigin().host }
+    val authUrl = remember { config.yandex.authUrl().toString() }
+    val gamesRootUrl = remember { config.yandex.gamesHome().toString() }
 
     // Cookie-driven auth completion. Yandex's passport flow keeps changing
     // (/pwl-yandex/auth/add, /webauthn-reg, /finish?, /profile/setup,
@@ -65,19 +65,19 @@ fun AuthScreen(onClose: () -> Unit) {
     LaunchedEffect(Unit) {
         LogStore.log(
             "auth",
-            "AuthView opened: passportHost=$passportHost retpath=$retpathEncoded gamesHost=$preferredHost",
+            "AuthView opened: passportHost=$passportHost retpath=${config.yandex.gamesHome()} gamesHost=${preferredHost.host}",
         )
         val cm = CookieManager.getInstance()
         var ticks = 0
         while (!dismissed.value) {
             delay(400)
             ticks++
-            val raw = cm.getCookie("https://$preferredHost").orEmpty()
+            val raw = cm.getCookie(config.yandex.origin(preferredHost).toString()).orEmpty()
             val sessionPresent = raw.split(';').any { it.trim().startsWith("Session_id=") }
             if (ticks % 5 == 0) {
                 LogStore.log(
                     "cookie",
-                    "tick=$ticks waiting for Session_id@$preferredHost; cookieLen=${raw.length}",
+                    "tick=$ticks waiting for Session_id@${preferredHost.host}; cookieLen=${raw.length}",
                 )
             }
             if (!sessionPresent) continue
@@ -85,9 +85,7 @@ fun AuthScreen(onClose: () -> Unit) {
             val wv = webViewRef.value ?: continue
             val current = wv.url.orEmpty()
             LogStore.log("auth", "Session_id detected after ${ticks * 400}ms; current=$current")
-            if (!current.startsWith("https://yandex.com/games/") &&
-                !current.startsWith("https://yandex.ru/games/")
-            ) {
+            if (!config.yandex.isGamesUrl(current)) {
                 LogStore.log("auth", "force-loading $gamesRootUrl")
                 wv.post { wv.loadUrl(gamesRootUrl) }
             }
@@ -99,8 +97,8 @@ fun AuthScreen(onClose: () -> Unit) {
             if (dismissed.value) return@LaunchedEffect
             dismissed.value = true
             val finalUrl = wv.url.orEmpty()
-            val comRaw = cm.getCookie("https://yandex.com").orEmpty()
-            val ruRaw = cm.getCookie("https://yandex.ru").orEmpty()
+            val comRaw = cm.getCookie(config.yandex.origin(YandexHost.Com).toString()).orEmpty()
+            val ruRaw = cm.getCookie(config.yandex.origin(YandexHost.Ru).toString()).orEmpty()
             val comSessions = if (comRaw.contains("Session_id=")) 1 else 0
             val ruSessions = if (ruRaw.contains("Session_id=")) 1 else 0
             LogStore.log(
@@ -132,7 +130,7 @@ fun AuthScreen(onClose: () -> Unit) {
                         domStorageEnabled = true
                         databaseEnabled = true
                         cacheMode = WebSettings.LOAD_DEFAULT
-                        userAgentString = userAgentString.replace("; wv)", ")")
+                        userAgentString = config.http.userAgent
                     }
                     CookieManager.getInstance().setAcceptCookie(true)
                     CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
@@ -142,7 +140,7 @@ fun AuthScreen(onClose: () -> Unit) {
                     // confirm we land on the page we expect (PWL flow,
                     // /finish?, etc.).
                     addJavascriptInterface(UgamesLogJsBridge(), "ugamesLog")
-                    installLogBridgeShim(this)
+                    installLogBridgeShim(this, config)
 
                     webViewClient = object : WebViewClient() {
                         private fun checkUrl(view: WebView?, url: String?) {
@@ -195,7 +193,7 @@ fun AuthScreen(onClose: () -> Unit) {
         ) {
             IconButton(onClick = onClose) {
                 Icon(
-                    Icons.Default.ArrowBack,
+                    Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = Color.White,
                     modifier = Modifier.size(28.dp),
@@ -210,16 +208,3 @@ fun AuthScreen(onClose: () -> Unit) {
         }
     }
 }
-
-/**
- * Use yandex.ru/passport.yandex.ru for Russian-locale devices. Yandex runs
- * separate session realms per TLD: passport.yandex.com only ever issues
- * Session_id for `.yandex.com`, and yandex.ru's SSR rejects that session when
- * serving userData. For Russian users the auth must go through
- * passport.yandex.ru directly so Session_id lands on `.yandex.ru`.
- */
-internal fun preferredYandexHost(): String =
-    if (Locale.getDefault().language.lowercase().startsWith("ru")) "yandex.ru" else "yandex.com"
-
-internal fun passportHostFor(yandexHost: String): String =
-    if (yandexHost == "yandex.ru") "passport.yandex.ru" else "passport.yandex.com"

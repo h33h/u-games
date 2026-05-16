@@ -4,6 +4,7 @@ import UIKit
 struct GameView: View {
     let appId: Int64
     let title: String
+    let config: AppConfig
     let scripts: InjectedScripts
     let blockList: BlockList
     let onBack: () -> Void
@@ -31,9 +32,10 @@ struct GameView: View {
         let allowMount = webViewSpawned || (orientationProbed && !mismatch)
         ZStack(alignment: .topLeading) {
             Color.black.ignoresSafeArea()
-            if allowMount, let url = URL(string: "https://yandex.com/games/app/\(appId)") {
+            if allowMount {
                 GameWebView(
-                    url: url,
+                    url: config.yandex.gameUrl(appId),
+                    config: config,
                     scripts: scripts,
                     blockList: blockList,
                     paused: mismatch,
@@ -134,12 +136,9 @@ struct GameView: View {
     // __playPageData__, mirroring Yandex's own gameOrientation getter.
     private func probeOrientation() {
         guard !orientationProbed else { return }
-        guard let url = URL(string: "https://yandex.com/games/app/\(appId)") else {
-            orientationProbed = true
-            return
-        }
+        let url = config.yandex.gameUrl(appId)
         Task {
-            await Self.fetchOrientationHint(url: url)
+            await Self.fetchOrientationHint(url: url, config: config)
             await MainActor.run { orientationProbed = true }
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
@@ -150,12 +149,9 @@ struct GameView: View {
         }
     }
 
-    private static func fetchOrientationHint(url: URL) async {
+    private static func fetchOrientationHint(url: URL, config: AppConfig) async {
         var request = URLRequest(url: url, timeoutInterval: 6)
-        request.setValue(
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-            forHTTPHeaderField: "User-Agent"
-        )
+        request.setValue(config.http.userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
         do {
             let (data, response) = try await URLSession.shared.data(for: request)

@@ -1,125 +1,55 @@
 package games.yandex.wrap.catalog
 
-import android.webkit.CookieManager
-import games.yandex.wrap.diagnostics.LogStore
-import io.ktor.client.HttpClient
-import io.ktor.client.call.body
-import io.ktor.client.request.get
-import io.ktor.client.request.header
-import io.ktor.client.request.parameter
-import io.ktor.client.statement.HttpResponse
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.HttpHeaders
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.floatOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import java.util.Locale
-import java.util.concurrent.TimeUnit
+import games.yandex.wrap.config.AppConfig
+import games.yandex.wrap.config.YandexHost
 
-data class FeedPage(
-    val games: List<Game>,
-    val nextPageId: String?,
-    val hasNext: Boolean,
-)
-
-data class UserProfile(
-    val isAuthorized: Boolean,
-    val displayName: String,
-    val login: String,
-    val avatarUrl: String,
-    val hasYaPlus: Boolean,
-)
-
-class CatalogApi(private val httpClient: HttpClient) {
-
-    private val lenientJson = Json { ignoreUnknownKeys = true; isLenient = true; coerceInputValues = true }
+class CatalogApi(
+    private val http: YandexHttpClient,
+    private val jsonParser: CatalogJsonParser,
+    private val htmlParser: CatalogHtmlParser,
+    private val sessionStore: YandexSessionStore,
+    private val config: AppConfig,
+) {
+    private val endpoints = config.yandex
 
     suspend fun firstFeedPage(
         gamesPerPage: Int = 24,
         lang: String = "en",
-        clientWidth: Int = 412,
-        clientHeight: Int = 915,
-    ): FeedPage = fetchFeed(pageId = null, gamesPerPage = gamesPerPage, lang = lang, clientWidth = clientWidth, clientHeight = clientHeight)
+        clientWidth: Int = endpoints.clientWidth,
+        clientHeight: Int = endpoints.clientHeight,
+    ): FeedPage = fetchFeed(
+        pageId = null,
+        gamesPerPage = gamesPerPage,
+        lang = lang,
+        clientWidth = clientWidth,
+        clientHeight = clientHeight,
+    )
 
-    /**
-     * Same `/feed/` endpoint as [firstFeedPage] but preserves the editorial
-     * block structure (`type` / `size` / `title` / `items`) instead of
-     * flattening. Used by Home to drive Hero (first item of the first
-     * `categorized` `size=l` block), Spotlight (first `categorized` `size=s`
-     * block with ≥5 items) and per-genre rows. Also extracts the genre list
-     * from `siteNavigationLinks.categories` so Browse chips don't need a
-     * separate request.
-     */
     suspend fun firstFeedPageWithBlocks(
         gamesPerPage: Int = 24,
         lang: String = "en",
-        clientWidth: Int = 412,
-        clientHeight: Int = 915,
+        clientWidth: Int = endpoints.clientWidth,
+        clientHeight: Int = endpoints.clientHeight,
         tab: String? = null,
     ): FeedWithBlocks {
-        val response: JsonObject = httpClient.get(FEED_URL) {
-            parameter("with_promos", "true")
-            parameter("lang", lang)
-            parameter("games_count", gamesPerPage.toString())
-            parameter("suggested_width", "3")
-            parameter("suggested_rows", "8")
-            parameter("with_recent_games", "true")
-            parameter("platform", "android_other")
-            parameter("client_width", clientWidth.toString())
-            parameter("client_height", clientHeight.toString())
-            if (!tab.isNullOrEmpty()) parameter("tab", tab)
-            mobileHeaders()
-        }.body()
-
-        val feedArr = response["feed"] as? JsonArray ?: JsonArray(emptyList())
-        val blocks = feedArr.mapNotNull { el ->
-            val obj = el as? JsonObject ?: return@mapNotNull null
-            val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-            val size = obj["size"]?.jsonPrimitive?.contentOrNull
-            val title = obj["title"]?.jsonPrimitive?.contentOrNull.orEmpty()
-            val itemsArr = obj["items"] as? JsonArray ?: JsonArray(emptyList())
-            val items = itemsArr.mapNotNull { (it as? JsonObject)?.let(::itemToGame) }
-            if (items.isEmpty()) null else FeedBlock(type, size, title, items)
-        }
-        val flat = run {
-            val seen = mutableSetOf<Long>()
-            buildList { for (b in blocks) for (g in b.items) if (seen.add(g.appId)) add(g) }
-        }
-        val pageInfo = response["pageInfo"] as? JsonObject
-        val nextPageId = pageInfo?.get("nextPageId")?.jsonPrimitive?.contentOrNull
-        val hasNext = pageInfo?.get("hasNextPage")?.jsonPrimitive?.booleanOrNull ?: (nextPageId != null)
-        // Server-side recents live at the response root, not inside feed[].
-        val recentArr = response["recentGames"] as? JsonArray ?: JsonArray(emptyList())
-        val recentGames = recentArr.mapNotNull { (it as? JsonObject)?.let(::itemToGame) }
-
-        return FeedWithBlocks(
-            blocks = blocks,
-            flatGames = flat,
-            recentGames = recentGames,
-            genres = emptyList(),
-            nextPageId = nextPageId,
-            hasNext = hasNext,
+        val response = http.getJson(
+            endpoints.feedApi(),
+            query = mapOf(
+                "with_promos" to "true",
+                "lang" to lang,
+                "games_count" to gamesPerPage.toString(),
+                "suggested_width" to "3",
+                "suggested_rows" to "8",
+                "with_recent_games" to "true",
+                "platform" to endpoints.platform,
+                "client_width" to clientWidth.toString(),
+                "client_height" to clientHeight.toString(),
+                "tab" to tab?.takeIf { it.isNotEmpty() },
+            ),
         )
+        return jsonParser.feedWithBlocks(response)
     }
 
-    /**
-     * REST search. Returns the same paginated `FeedPage` shape as `/feed/`
-     * so the caller can drive paging through `nextPageId`. The previous
-     * HTML-scrape path silently capped at one page of ~24 results.
-     */
     suspend fun searchPaginated(
         query: String,
         pageId: String? = null,
@@ -127,62 +57,46 @@ class CatalogApi(private val httpClient: HttpClient) {
         lang: String = "en",
     ): FeedPage {
         if (query.isBlank()) return FeedPage(emptyList(), null, false)
-        val response: JsonObject = httpClient.get(SEARCH_REST_URL) {
-            parameter("query", query)
-            parameter("lang", lang)
-            parameter("platform", "android_other")
-            parameter("games_count", gamesPerPage.toString())
-            if (pageId != null) parameter("page_id", pageId)
-            mobileHeaders()
-        }.body()
-        val games = parseFeedItems(response["feed"] as? JsonArray ?: JsonArray(emptyList()))
-        val pageInfo = response["pageInfo"] as? JsonObject
-        val nextPageId = pageInfo?.get("nextPageId")?.jsonPrimitive?.contentOrNull
-        val hasNext = pageInfo?.get("hasNextPage")?.jsonPrimitive?.booleanOrNull ?: (nextPageId != null)
-        return FeedPage(games = games, nextPageId = nextPageId, hasNext = hasNext)
+        val response = http.getJson(
+            endpoints.searchApi(),
+            query = mapOf(
+                "query" to query,
+                "lang" to lang,
+                "platform" to endpoints.platform,
+                "games_count" to gamesPerPage.toString(),
+                "page_id" to pageId,
+            ),
+        )
+        return jsonParser.feedPage(response)
     }
 
-    /**
-     * Loads the localized list of category tabs by scraping the SSR
-     * `__appData__.categoriesForTabs` from the catalog landing page. The
-     * JSON `/feed/` response does not carry this list on mobile platforms;
-     * the only stable source is the HTML root document.
-     */
-    suspend fun fetchCategories(lang: String = "en"): List<GameCategory> = withContext(Dispatchers.IO) {
-        val host = preferredYandexHost()
-        val effectiveLang = if (host == "yandex.ru") "ru" else lang
-        val url = "https://$host/games/?lang=$effectiveLang"
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", MOBILE_UA)
-            .header("Accept", "text/html")
-            .header("Accept-Language", "$effectiveLang,en;q=0.9")
-            .get()
-            .build()
-        val html = try {
-            profileHttp.newCall(request).execute().use { it.body?.string().orEmpty() }
-        } catch (_: Throwable) {
-            return@withContext emptyList<GameCategory>()
-        }
-        val appData = extractAppData(html) ?: return@withContext emptyList()
-        val parsed = lenientJson.parseToJsonElement(appData) as? JsonObject ?: return@withContext emptyList()
-        val arr = parsed["categoriesForTabs"] as? JsonArray ?: return@withContext emptyList()
-        arr.mapNotNull {
-            val o = it as? JsonObject ?: return@mapNotNull null
-            val name = o["name"]?.jsonPrimitive?.contentOrNull?.takeIf { s -> s.isNotEmpty() } ?: return@mapNotNull null
-            val title = o["title"]?.jsonPrimitive?.contentOrNull?.takeIf { s -> s.isNotEmpty() } ?: return@mapNotNull null
-            val count = o["gamesCount"]?.jsonPrimitive?.intOrNull ?: 0
-            GameCategory(name = name, title = title, gamesCount = count)
-        }
+    suspend fun fetchCategories(lang: String = "en"): List<GameCategory> {
+        val host = sessionStore.preferredYandexHost()
+        val effectiveLang = effectiveLang(host, lang)
+        val html = runCatching {
+            http.getHtml(
+                endpoints.gamesHome(host),
+                query = mapOf("lang" to effectiveLang),
+                acceptLanguage = "$effectiveLang,en;q=0.9",
+            )
+        }.getOrElse { return emptyList() }
+        val appData = htmlParser.extractAppData(html) ?: return emptyList()
+        return htmlParser.categoriesFromAppData(appData)
     }
 
     suspend fun nextFeedPage(
         pageId: String,
         gamesPerPage: Int = 24,
         lang: String = "en",
-        clientWidth: Int = 412,
-        clientHeight: Int = 915,
-    ): FeedPage = fetchFeed(pageId = pageId, gamesPerPage = gamesPerPage, lang = lang, clientWidth = clientWidth, clientHeight = clientHeight)
+        clientWidth: Int = endpoints.clientWidth,
+        clientHeight: Int = endpoints.clientHeight,
+    ): FeedPage = fetchFeed(
+        pageId = pageId,
+        gamesPerPage = gamesPerPage,
+        lang = lang,
+        clientWidth = clientWidth,
+        clientHeight = clientHeight,
+    )
 
     private suspend fun fetchFeed(
         pageId: String?,
@@ -191,406 +105,79 @@ class CatalogApi(private val httpClient: HttpClient) {
         clientWidth: Int,
         clientHeight: Int,
     ): FeedPage {
-        val response: JsonObject = httpClient.get(FEED_URL) {
-            parameter("with_promos", "true")
-            parameter("lang", lang)
-            parameter("games_count", gamesPerPage.toString())
-            parameter("categorized_size", "5")
-            parameter("with_recent_games", "true")
-            parameter("platform", "android_other")
-            parameter("client_width", clientWidth.toString())
-            parameter("client_height", clientHeight.toString())
-            if (pageId != null) parameter("page_id", pageId)
-            mobileHeaders()
-        }.body()
-
-        val games = parseFeedItems(response["feed"] as? JsonArray ?: JsonArray(emptyList()))
-        val pageInfo = response["pageInfo"] as? JsonObject
-        val nextPageId = pageInfo?.get("nextPageId")?.jsonPrimitive?.contentOrNull
-        val hasNext = pageInfo?.get("hasNextPage")?.jsonPrimitive?.booleanOrNull ?: (nextPageId != null)
-        return FeedPage(games = games, nextPageId = nextPageId, hasNext = hasNext)
-    }
-
-    /**
-     * Fetch rich game-detail metadata that the JSON `/feed/` endpoint
-     * does not expose: long description, screenshots, published date.
-     *
-     * Yandex serves these only via JSON-LD inside the SSR HTML at
-     * `/games/app/<id>` (`<script type="application/ld+json">`).
-     * `apiData.appInfo` in `__appData__` is just a base64 version
-     * stamp; there is no JSON endpoint behind it that returns the full
-     * detail blob.
-     *
-     * Screenshot URLs come back with `/orig` suffix — multi-MB PNGs.
-     * We rewrite to `pjpg500x280` (~60 KB), the next-most-common
-     * pre-rendered size on Yandex's avatars storage. If the URL doesn't
-     * fit the expected `prefix-url + suffix` pattern we leave it alone.
-     */
-    suspend fun appDetail(appId: Long, lang: String = "en"): AppDetail = withContext(Dispatchers.IO) {
-        val empty = AppDetail(
-            description = null, screenshots = emptyList(), datePublished = null,
-            genres = emptyList(), languages = emptyList(), author = null,
+        val response = http.getJson(
+            endpoints.feedApi(),
+            query = mapOf(
+                "with_promos" to "true",
+                "lang" to lang,
+                "games_count" to gamesPerPage.toString(),
+                "categorized_size" to "5",
+                "with_recent_games" to "true",
+                "platform" to endpoints.platform,
+                "client_width" to clientWidth.toString(),
+                "client_height" to clientHeight.toString(),
+                "page_id" to pageId,
+            ),
         )
-        val host = preferredYandexHost()
-        val effectiveLang = if (host == "yandex.ru") "ru" else lang
-        val url = "https://$host/games/app/$appId?lang=$effectiveLang"
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", MOBILE_UA)
-            .header("Accept", "text/html")
-            .header("Accept-Language", "$effectiveLang,en;q=0.9")
-            .get()
-            .build()
-        val html = try {
-            profileHttp.newCall(request).execute().use { it.body?.string().orEmpty() }
-        } catch (_: Throwable) {
-            return@withContext empty
-        }
-        val ldJson = extractJsonLd(html) ?: return@withContext empty
-        val parsed = runCatching { lenientJson.parseToJsonElement(ldJson) as? JsonObject }.getOrNull()
-            ?: return@withContext empty
-        val graph = parsed["@graph"] as? JsonArray ?: JsonArray(emptyList())
-        val gameNode = graph.firstOrNull { node ->
-            val obj = node as? JsonObject ?: return@firstOrNull false
-            val type = obj["@type"]?.jsonPrimitive?.contentOrNull
-            type == "SoftwareApplication" || type == "VideoGame" || type == "MobileApplication"
-        } as? JsonObject ?: return@withContext empty
-
-        // Prefer the rich multi-paragraph description on `mainEntityOfPage`;
-        // the top-level `description` is the short OG tagline.
-        val mainEntity = gameNode["mainEntityOfPage"] as? JsonObject
-        val description = (mainEntity?.get("description") ?: gameNode["description"])
-            ?.jsonPrimitive?.contentOrNull
-            ?.let(::decodeHtmlEntities)
-            ?.takeIf { it.isNotBlank() }
-
-        val screenshots = (gameNode["screenshot"] as? JsonArray ?: JsonArray(emptyList()))
-            .mapNotNull { item ->
-                val s = item as? JsonObject ?: return@mapNotNull null
-                s["url"]?.jsonPrimitive?.contentOrNull
-            }
-            .map { rewriteAvatarSize(it, "pjpg500x280") }
-
-        val datePublished = gameNode["datePublished"]?.jsonPrimitive?.contentOrNull
-
-        // `genre` may be a single string or an array — JSON-LD allows either.
-        val genres: List<String> = when (val g = gameNode["genre"]) {
-            is JsonArray -> g.mapNotNull { it.jsonPrimitive.contentOrNull?.let(::decodeHtmlEntities) }
-            is JsonObject -> emptyList()
-            null -> emptyList()
-            else -> g.jsonPrimitive.contentOrNull?.let(::decodeHtmlEntities)?.let(::listOf) ?: emptyList()
-        }
-
-        // `inLanguage` may also be either shape.
-        val languages: List<String> = when (val l = gameNode["inLanguage"]) {
-            is JsonArray -> l.mapNotNull { it.jsonPrimitive.contentOrNull }
-            null -> emptyList()
-            else -> l.jsonPrimitive.contentOrNull?.let(::listOf) ?: emptyList()
-        }
-
-        val author = (gameNode["author"] as? JsonObject)?.get("name")?.jsonPrimitive?.contentOrNull
-            ?.let(::decodeHtmlEntities)
-            ?.takeIf { it.isNotBlank() }
-
-        AppDetail(
-            description = description,
-            screenshots = screenshots,
-            datePublished = datePublished,
-            genres = genres,
-            languages = languages,
-            author = author,
-        )
+        return jsonParser.feedPage(response)
     }
 
-    /** Pull the contents of `<script type="application/ld+json">…</script>`. */
-    private fun extractJsonLd(html: String): String? {
-        val markers = listOf("type=\"application/ld+json\"", "type='application/ld+json'")
-        for (marker in markers) {
-            val markerIdx = html.indexOf(marker)
-            if (markerIdx < 0) continue
-            val openTag = html.indexOf('>', markerIdx)
-            if (openTag < 0) continue
-            val closeTag = html.indexOf("</script>", openTag)
-            if (closeTag < 0) continue
-            return html.substring(openTag + 1, closeTag).trim()
-        }
-        return null
+    suspend fun appDetail(appId: Long, lang: String = "en"): AppDetail? {
+        val host = sessionStore.preferredYandexHost()
+        val effectiveLang = effectiveLang(host, lang)
+        val html = runCatching {
+            http.getHtml(
+                endpoints.gameUrl(appId, host),
+                query = mapOf("lang" to effectiveLang),
+                acceptLanguage = "$effectiveLang,en;q=0.9",
+            )
+        }.getOrElse { return null }
+        val ldJson = htmlParser.extractJsonLd(html) ?: return null
+        return htmlParser.appDetailFromJsonLd(ldJson)
     }
-
-    /** Replace the trailing size suffix on a Yandex avatars URL. The
-     *  storage only serves pre-rendered sizes, so the caller picks a
-     *  known-good value. Leaves the URL alone if it doesn't fit the
-     *  `…/{size}` shape. */
-    private fun rewriteAvatarSize(url: String, newSize: String): String {
-        val lastSlash = url.lastIndexOf('/')
-        if (lastSlash <= 0) return url
-        return url.substring(0, lastSlash + 1) + newSize
-    }
-
-    /** Minimal HTML-entity decoder for the common cases that appear in
-     *  JSON-LD-embedded titles and descriptions. */
-    private fun decodeHtmlEntities(s: String): String =
-        s.replace("&amp;", "&")
-            .replace("&quot;", "\"")
-            .replace("&#39;", "'")
-            .replace("&lt;", "<")
-            .replace("&gt;", ">")
 
     suspend fun similar(appId: Long, lang: String = "en"): List<Game> {
-        val response: JsonObject = httpClient.get(SIMILAR_URL) {
-            parameter("app_id", appId.toString())
-            parameter("games_count", "16")
-            parameter("int", "true")
-            parameter("lang", lang)
-            parameter("page_type", "game")
-            parameter("platform", "android_other")
-            parameter("standalone", "false")
-            mobileHeaders()
-        }.body()
-        return parseFeedItems(response["feed"] as? JsonArray ?: JsonArray(emptyList()))
+        val response = http.getJson(
+            endpoints.similarApi(),
+            query = mapOf(
+                "app_id" to appId.toString(),
+                "games_count" to "16",
+                "int" to "true",
+                "lang" to lang,
+                "page_type" to "game",
+                "platform" to endpoints.platform,
+                "standalone" to "false",
+            ),
+        )
+        return jsonParser.similarGames(response)
     }
 
-    /**
-     * Yandex doesn't expose a JSON search endpoint — search is server-rendered.
-     * Pull the HTML, extract the `<script id="__appData__">` JSON, and read
-     * `search.data[].items[]`.
-     */
     suspend fun search(query: String, lang: String = "en"): List<Game> {
         if (query.isBlank()) return emptyList()
-        val response: HttpResponse = httpClient.get(SEARCH_URL) {
-            parameter("query", query)
-            parameter("lang", lang)
-            mobileHeaders()
-        }
-        val html = response.bodyAsText()
-        val appData = extractAppData(html) ?: return emptyList()
-        val parsed = lenientJson.parseToJsonElement(appData) as? JsonObject ?: return emptyList()
-        val searchObj = parsed["search"] as? JsonObject ?: return emptyList()
-        val data = searchObj["data"] as? JsonArray ?: return emptyList()
-        return parseFeedItems(data)
+        val html = http.getHtml(
+            endpoints.searchPage(),
+            query = mapOf("query" to query, "lang" to lang),
+            accept = "text/html,application/xhtml+xml",
+        )
+        val appData = htmlParser.extractAppData(html) ?: return emptyList()
+        return htmlParser.searchGamesFromAppData(appData)
     }
 
-    /**
-     * Pull `__appData__.userData` from the catalog page HTML to detect login
-     * state and obtain avatar / display name.
-     *
-     * Locale-aware: Russian-locale devices fetch yandex.ru/games/ (the same
-     * realm AuthScreen authenticated against) so the SSR sees the matching
-     * Session_id. PWL passport sets Session_id only on `.yandex.com`; Russian
-     * users get geo-redirected to `yandex.ru`, and CookieManager only attaches
-     * cookies for the request's scheme+host pair — `.yandex.com` cookies would
-     * NOT travel onto a `.yandex.ru` redirect, leaving the SSR anonymous. So
-     * we bypass Ktor's HttpCookies plugin and ship a manually-merged Cookie
-     * header containing every yandex.* cookie. Mirrors iOS
-     * CatalogService.fetchProfile + ProfileFetchRedirectDelegate.
-     */
-    suspend fun userProfile(lang: String = "en"): UserProfile = withContext(Dispatchers.IO) {
-        val host = preferredYandexHost()
-        val effectiveLang = if (host == "yandex.ru") "ru" else lang
-        val url = "https://$host/games/?lang=$effectiveLang"
-        val cookieHeader = buildMergedYandexCookieHeader()
-        LogStore.log(
-            "profile",
-            "fetch begin url=$url cookieHeaderLen=${cookieHeader.length}",
-        )
-        val request = Request.Builder()
-            .url(url)
-            .header("User-Agent", MOBILE_UA)
-            .header("Accept", "text/html")
-            .header("Accept-Language", "$effectiveLang,en;q=0.9")
-            .apply { if (cookieHeader.isNotEmpty()) header("Cookie", cookieHeader) }
-            .get()
-            .build()
-        val response = try {
-            profileHttp.newCall(request).execute()
-        } catch (t: Throwable) {
-            LogStore.log("profile", "fetch FAILED: ${t.message}")
-            return@withContext ANON
-        }
-        val html = response.use { resp ->
-            LogStore.log(
-                "profile",
-                "fetch http status=${resp.code} finalUrl=${resp.request.url}",
+    suspend fun userProfile(lang: String = "en"): UserProfile? {
+        val host = sessionStore.preferredYandexHost()
+        val effectiveLang = effectiveLang(host, lang)
+        val html = runCatching {
+            http.getHtml(
+                endpoints.gamesHome(host),
+                query = mapOf("lang" to effectiveLang),
+                acceptLanguage = "$effectiveLang,en;q=0.9",
+                cookieHeader = sessionStore.buildMergedYandexCookieHeader(),
             )
-            resp.body?.string().orEmpty()
-        }
-        val appData = extractAppData(html)
-        if (appData == null) {
-            LogStore.log("profile", "NO __appData__ found (htmlLen=${html.length})")
-            return@withContext ANON
-        }
-        val parsed = lenientJson.parseToJsonElement(appData) as? JsonObject
-        if (parsed == null) {
-            LogStore.log("profile", "appData not a JSON object")
-            return@withContext ANON
-        }
-        val userData = parsed["userData"] as? JsonObject
-        if (userData == null) {
-            LogStore.log("profile", "no userData key")
-            return@withContext ANON
-        }
-        val uid = userData["uid"]?.jsonPrimitive?.contentOrNull.orEmpty()
-        val login = userData["login"]?.jsonPrimitive?.contentOrNull.orEmpty()
-        LogStore.log(
-            "profile",
-            "userData uid=${uid.ifEmpty { "<empty>" }} login=$login",
-        )
-        if (uid.isBlank()) return@withContext ANON
-        val avatarsOrigin = userData["avatarsOrigin"]?.jsonPrimitive?.contentOrNull ?: "https://avatars.mds.yandex.net"
-        val avatarId = userData["avatarId"]?.jsonPrimitive?.contentOrNull ?: "0/0-0"
-        val avatarUrl = if (avatarId == "0/0-0") "" else "$avatarsOrigin/get-yapic/$avatarId/islands-300"
-        UserProfile(
-            isAuthorized = true,
-            displayName = userData["displayName"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-            login = login,
-            avatarUrl = avatarUrl,
-            hasYaPlus = userData["yaplusEnabled"]?.jsonPrimitive?.booleanOrNull == true,
-        )
+        }.getOrElse { return null }
+        val appData = htmlParser.extractAppData(html) ?: return null
+        return htmlParser.profileFromAppData(appData)
     }
 
-    /**
-     * Reads cookies for both yandex.com and yandex.ru from the system
-     * CookieManager and merges them into a single Cookie header with last-write
-     * dedupe by name (cookies for both TLDs often share names like Session_id;
-     * the freshest value is what passport just set). Returns "" when no
-     * yandex.* cookies are available — the caller skips the Cookie header.
-     */
-    private fun buildMergedYandexCookieHeader(): String {
-        val cm = CookieManager.getInstance()
-        val merged = LinkedHashMap<String, String>()
-        for (host in COOKIE_DONOR_HOSTS) {
-            val raw = cm.getCookie(host).orEmpty()
-            if (raw.isEmpty()) continue
-            for (pair in raw.split(';')) {
-                val trimmed = pair.trim()
-                val idx = trimmed.indexOf('=')
-                if (idx <= 0) continue
-                val name = trimmed.substring(0, idx)
-                val value = trimmed.substring(idx + 1)
-                merged[name] = value
-            }
-        }
-        return merged.entries.joinToString("; ") { "${it.key}=${it.value}" }
-    }
-
-    /**
-     * Locale-aware host pick: Russian users hit yandex.ru so the SSR runs the
-     * same realm passport authenticated against (passport.yandex.ru issues
-     * Session_id only on `.yandex.ru`). Mirrors AuthScreen's preferredHost.
-     */
-    private fun preferredYandexHost(): String =
-        if (Locale.getDefault().language.lowercase().startsWith("ru")) "yandex.ru" else "yandex.com"
-
-    /**
-     * Bare OkHttp client used only for profile fetch. Has NO CookieJar so the
-     * manually-merged Cookie header is preserved across the .com→.ru
-     * geo-redirect (OkHttp's default redirect handling re-sends the original
-     * request headers, including our Cookie). Mirrors iOS
-     * `httpShouldHandleCookies = false`.
-     */
-    private val profileHttp: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .followRedirects(true)
-            .followSslRedirects(true)
-            .build()
-    }
-
-    private fun extractAppData(html: String): String? {
-        val marker = "id=\"__appData__\""
-        val markerIdx = html.indexOf(marker)
-        if (markerIdx < 0) return null
-        val openTag = html.indexOf('>', markerIdx)
-        if (openTag < 0) return null
-        val closeTag = html.indexOf("</script>", openTag)
-        if (closeTag < 0) return null
-        return html.substring(openTag + 1, closeTag)
-    }
-
-    private fun parseFeedItems(blocks: JsonArray): List<Game> {
-        val seen = mutableSetOf<Long>()
-        val out = mutableListOf<Game>()
-        for (block in blocks) {
-            val obj = block as? JsonObject ?: continue
-            val items = obj["items"]?.jsonArray ?: continue
-            for (item in items) {
-                val itemObj = item as? JsonObject ?: continue
-                val game = itemToGame(itemObj) ?: continue
-                if (seen.add(game.appId)) out.add(game)
-            }
-        }
-        return out
-    }
-
-    private fun itemToGame(item: JsonObject): Game? {
-        val appId = item["appID"]?.jsonPrimitive?.longOrNull ?: return null
-        val title = item["title"]?.jsonPrimitive?.contentOrNull ?: return null
-        val rating = item["rating"]?.jsonPrimitive?.floatOrNull ?: 0f
-        val ratingCount = item["ratingCount"]?.jsonPrimitive?.intOrNull ?: 0
-        val media = item["media"] as? JsonObject
-        val coverObj = media?.get("cover") as? JsonObject
-        val iconObj = media?.get("icon") as? JsonObject
-        val coverPrefix = coverObj?.get("prefix-url")?.jsonPrimitive?.contentOrNull
-        val iconPrefix = iconObj?.get("prefix-url")?.jsonPrimitive?.contentOrNull
-        val mainColor = coverObj?.get("mainColor")?.jsonPrimitive?.contentOrNull
-        val iconMainColor = iconObj?.get("mainColor")?.jsonPrimitive?.contentOrNull
-        val videoUrl = (media?.get("videos") as? JsonArray)
-            ?.firstOrNull()
-            ?.let { it as? JsonObject }
-            ?.get("mp4StreamUrl")?.jsonPrimitive?.contentOrNull
-        val categories = (item["categoriesNames"] as? JsonElement)
-            ?.let { it as? JsonArray }
-            ?.mapNotNull { it.jsonPrimitive.contentOrNull }
-            ?: emptyList()
-        val developer = (item["developer"] as? JsonObject)
-            ?.get("name")?.jsonPrimitive?.contentOrNull
-            ?: ""
-        val ageRating = (item["features"] as? JsonObject)
-            ?.get("age_rating")?.jsonPrimitive?.contentOrNull
-            ?.takeIf { it.isNotBlank() }
-        return Game(
-            appId = appId,
-            title = title,
-            rating = rating,
-            ratingCount = ratingCount,
-            coverUrl = coverPrefix?.let { it + COVER_SIZE } ?: "",
-            iconUrl = iconPrefix?.let { it + ICON_SIZE } ?: coverPrefix?.let { it + ICON_SIZE } ?: "",
-            categories = categories,
-            developer = developer,
-            mainColor = mainColor,
-            iconMainColor = iconMainColor,
-            videoUrl = videoUrl,
-            coverPrefixUrl = coverPrefix,
-            ageRating = ageRating,
-        )
-    }
-
-    private fun io.ktor.client.request.HttpRequestBuilder.mobileHeaders() {
-        header(HttpHeaders.UserAgent, MOBILE_UA)
-        header(HttpHeaders.Accept, "application/json,text/html;q=0.9")
-        header(HttpHeaders.AcceptLanguage, "en-US,en;q=0.9")
-    }
-
-    private companion object {
-        const val FEED_URL = "https://yandex.com/games/api/catalogue/v2/feed/"
-        const val SIMILAR_URL = "https://yandex.com/games/api/catalogue/v2/similar_games/"
-        const val SEARCH_URL = "https://yandex.com/games/search"
-        const val SEARCH_REST_URL = "https://yandex.com/games/api/catalogue/v2/search/"
-        const val CATALOG_URL = "https://yandex.com/games/"
-        const val MOBILE_UA = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Mobile Safari/537.36"
-        const val COVER_SIZE = "pjpg250x140"
-        const val ICON_SIZE = "pjpg256x256"
-        val ANON = UserProfile(false, "", "", "", false)
-        // Hosts whose cookie jars contribute to the profile-fetch Cookie
-        // header. Order matters: later entries override earlier ones (last-
-        // write wins) so the freshest Session_id from the user's authenticated
-        // realm is what the SSR sees.
-        val COOKIE_DONOR_HOSTS = listOf(
-            "https://yandex.com",
-            "https://yandex.ru",
-            "https://passport.yandex.com",
-            "https://passport.yandex.ru",
-        )
-    }
+    private fun effectiveLang(host: YandexHost, requested: String): String =
+        if (host == YandexHost.Ru) "ru" else requested
 }

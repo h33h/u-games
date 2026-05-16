@@ -1,17 +1,6 @@
 import Foundation
 import Combine
 
-struct SpotlightBlock: Equatable {
-    let title: String
-    let games: [Game]
-}
-
-struct GenreRow: Equatable {
-    let title: String
-    let categoryName: String?
-    let games: [Game]
-}
-
 @MainActor
 final class HomeViewModel: ObservableObject {
     @Published private(set) var isLoading: Bool = false
@@ -22,7 +11,7 @@ final class HomeViewModel: ObservableObject {
     @Published private(set) var favoritesRow: [Game] = []
     @Published private(set) var spotlight: SpotlightBlock?
     @Published private(set) var genreRows: [GenreRow] = []
-    @Published private(set) var profile: UserProfile = .anonymous
+    @Published private(set) var profile: UserProfile?
 
     private let service: CatalogService
     private let favorites: FavoritesStore
@@ -42,10 +31,10 @@ final class HomeViewModel: ObservableObject {
             .receive(on: RunLoop.main)
             .sink { [weak self] p in
                 guard let self = self else { return }
-                let wasAnon = !self.profile.isAuthorized
+                let wasAnon = self.profile?.isAuthorized != true
                 self.profile = p
 
-                if wasAnon && p.isAuthorized && self.loaded {
+                if wasAnon && p?.isAuthorized == true && self.loaded {
                     Task { await self.refreshFeedOnly() }
                 }
             }

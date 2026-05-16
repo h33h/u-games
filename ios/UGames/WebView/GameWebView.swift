@@ -3,16 +3,16 @@ import SwiftUI
 
 struct GameWebView: UIViewRepresentable {
     let url: URL
+    let config: AppConfig
     let scripts: InjectedScripts
     let blockList: BlockList
     var paused: Bool = false
 
-    func makeCoordinator() -> Coordinator { Coordinator(scripts: scripts) }
+    func makeCoordinator() -> Coordinator { Coordinator(config: config, scripts: scripts) }
 
-    private static func shouldPrefetch(_ url: URL) -> Bool {
+    private static func shouldPrefetch(_ url: URL, config: AppConfig) -> Bool {
         let s = url.absoluteString
-        let isYandexGames = s.hasPrefix("https://yandex.com/games/") || s.hasPrefix("https://yandex.ru/games/")
-        return isYandexGames && (s.contains("/games/app/") || s.contains("/games/play/"))
+        return config.yandex.isGamesUrl(s) && (s.contains("/games/app/") || s.contains("/games/play/"))
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -79,11 +79,8 @@ struct GameWebView: UIViewRepresentable {
         webView.isOpaque = false
 
         var request = URLRequest(url: url)
-        request.setValue(
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-            forHTTPHeaderField: "User-Agent"
-        )
-        if Self.shouldPrefetch(url) {
+        request.setValue(config.http.userAgent, forHTTPHeaderField: "User-Agent")
+        if Self.shouldPrefetch(url, config: config) {
             context.coordinator.loadWithInjection(into: webView, request: request, scripts: scripts)
         } else {
             webView.load(request)
@@ -159,9 +156,11 @@ struct GameWebView: UIViewRepresentable {
 
         private weak var hostView: WKWebView?
         private var popup: WKWebView?
+        private let config: AppConfig
         private let scripts: InjectedScripts
 
-        init(scripts: InjectedScripts) {
+        init(config: AppConfig, scripts: InjectedScripts) {
+            self.config = config
             self.scripts = scripts
         }
 
@@ -251,7 +250,7 @@ struct GameWebView: UIViewRepresentable {
 
         private func reinject(in webView: WKWebView) {
             guard let url = webView.url?.absoluteString else { return }
-            if url.hasPrefix("https://yandex.com/games") || url.hasPrefix("https://yandex.ru/games") {
+            if config.yandex.isGamesUrl(url) {
                 webView.evaluateJavaScript(scripts.mainFrameScript, completionHandler: nil)
             }
         }

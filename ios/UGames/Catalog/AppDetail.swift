@@ -12,9 +12,4 @@ struct AppDetail: Equatable {
     let languages: [String]
 
     let author: String?
-
-    static let empty = AppDetail(
-        description: nil, screenshots: [], datePublished: nil,
-        genres: [], languages: [], author: nil
-    )
 }

@@ -8,6 +8,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import games.yandex.wrap.config.AppConfig
 import okhttp3.Headers.Companion.toHeaders
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -28,6 +29,7 @@ import java.util.concurrent.TimeUnit
 class AdBlockingClient(
     private val blockList: BlockList,
     private val scripts: InjectedScripts,
+    private val config: AppConfig = AppConfig.defaultForLocale(),
 ) : WebViewClient() {
 
     private val http: OkHttpClient by lazy {
@@ -51,7 +53,7 @@ class AdBlockingClient(
     }
 
     private fun shouldRewriteHtml(url: String): Boolean {
-        if (!url.startsWith("https://yandex.com/games/") && !url.startsWith("https://yandex.ru/games/")) return false
+        if (!config.yandex.isGamesUrl(url)) return false
         if (!url.contains("/games/app/") && !url.contains("/games/play/")) return false
         return true
     }
@@ -140,7 +142,7 @@ class AdBlockingClient(
     private fun injectIfYandex(view: WebView?, url: String?) {
         if (view == null || url == null) return
         when {
-            url.startsWith("https://yandex.com/games") || url.startsWith("https://yandex.ru/games") -> {
+            config.yandex.isGamesUrl(url) -> {
                 view.evaluateJavascript(scripts.mainFrameScript, null)
             }
             url.contains(".games.s3.yandex.net/")
@@ -167,22 +169,12 @@ class AdBlockingClient(
  * Falls back silently if DOCUMENT_START_SCRIPT is unavailable — inject scripts
  * that try to call `__yga_log` will just no-op.
  */
-fun installLogBridgeShim(webView: WebView) {
+fun installLogBridgeShim(webView: WebView, config: AppConfig = AppConfig.defaultForLocale()) {
     if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
     WebViewCompat.addDocumentStartJavaScript(
         webView,
         LOG_BRIDGE_SHIM,
-        setOf(
-            "https://yandex.com",
-            "https://yandex.ru",
-            "https://passport.yandex.com",
-            "https://passport.yandex.ru",
-            "https://*.games.s3.yandex.net",
-            "https://*.cdn.games.yandex.net",
-            "https://*.gamecdn.yandex.net",
-            "https://*.game-static.ru",
-            "https://game-static.ru",
-        ),
+        config.yandex.logBridgeOrigins(),
     )
 }
 
@@ -203,12 +195,16 @@ private const val LOG_BRIDGE_SHIM = """
 """
 
 @Suppress("unused")
-fun installDocumentStartScripts(webView: WebView, scripts: InjectedScripts) {
+fun installDocumentStartScripts(
+    webView: WebView,
+    scripts: InjectedScripts,
+    config: AppConfig = AppConfig.defaultForLocale(),
+) {
     if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return
     WebViewCompat.addDocumentStartJavaScript(
         webView,
         scripts.mainFrameScript,
-        setOf("https://yandex.com", "https://yandex.ru"),
+        config.yandex.documentStartOrigins(),
     )
     WebViewCompat.addDocumentStartJavaScript(
         webView,

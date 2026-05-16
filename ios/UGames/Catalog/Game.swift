@@ -53,7 +53,7 @@ struct Game: Identifiable, Equatable, Hashable, Codable {
     var id: Int64 { appId }
 
     var playUrl: URL? {
-        URL(string: "https://yandex.com/games/app/\(appId)")
+        AppConfig.live().yandex.gameUrl(appId)
     }
 
     func coverUrl(size: String) -> String {

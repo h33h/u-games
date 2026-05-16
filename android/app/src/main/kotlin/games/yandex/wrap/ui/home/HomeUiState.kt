@@ -19,8 +19,5 @@ data class HomeUiState(
     val favoritesRow: List<Game> = emptyList(),
     val spotlight: SpotlightBlock? = null,
     val genreRows: List<GenreRow> = emptyList(),
-    val profile: UserProfile = UserProfile(false, "", "", "", false),
+    val profile: UserProfile? = null,
 )
-
-data class SpotlightBlock(val title: String, val games: List<Game>)
-data class GenreRow(val title: String, val categoryName: String?, val games: List<Game>)

@@ -93,7 +93,7 @@ fun ProfileScreen(
                 .clip(RoundedCornerShape(16.dp))
                 .background(UGColors.Elevated),
         ) {
-            if (profile.isAuthorized) {
+            if (profile?.isAuthorized == true) {
                 SettingsRow(
                     icon = Icons.AutoMirrored.Filled.ExitToApp,
                     label = "Sign out",
@@ -126,15 +126,16 @@ fun ProfileScreen(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ProfileHero(profile: UserProfile, onAvatarLongPress: () -> Unit) {
+private fun ProfileHero(profile: UserProfile?, onAvatarLongPress: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
-        if (profile.isAuthorized && profile.avatarUrl.isNotEmpty()) {
+        val p = profile
+        if (p?.isAuthorized == true && p.avatarUrl.isNotEmpty()) {
             Box(
                 modifier = Modifier
                     .size(96.dp)
                     .clip(CircleShape)
                     .border(
-                        width = if (profile.hasYaPlus) 3.dp else 0.dp,
+                        width = if (p.hasYaPlus) 3.dp else 0.dp,
                         brush = UGColors.AccentGradient,
                         shape = CircleShape,
                     )
@@ -142,8 +143,8 @@ private fun ProfileHero(profile: UserProfile, onAvatarLongPress: () -> Unit) {
                 contentAlignment = Alignment.Center,
             ) {
                 AsyncImage(
-                    model = profile.avatarUrl,
-                    contentDescription = profile.displayName.ifEmpty { profile.login },
+                    model = p.avatarUrl,
+                    contentDescription = p.displayName.ifEmpty { p.login },
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize().clip(CircleShape),
                 )
@@ -167,14 +168,15 @@ private fun ProfileHero(profile: UserProfile, onAvatarLongPress: () -> Unit) {
         }
         Spacer(Modifier.size(16.dp))
         Column {
-            val displayName = profile.displayName.ifEmpty { profile.login }
-                .ifEmpty { "Guest" }
+            val displayName = profile
+                ?.let { it.displayName.ifEmpty { it.login }.ifEmpty { "Guest" } }
+                ?: "Guest"
             Text(text = displayName, color = UGColors.TextPrimary, style = UGType.TitleL)
-            if (profile.login.isNotEmpty() && profile.login != displayName) {
+            if (p?.login?.isNotEmpty() == true && p.login != displayName) {
                 Spacer(Modifier.height(2.dp))
-                Text(text = profile.login, color = UGColors.TextMuted, style = UGType.BodyS)
+                Text(text = p.login, color = UGColors.TextMuted, style = UGType.BodyS)
             }
-            if (profile.hasYaPlus) {
+            if (p?.hasYaPlus == true) {
                 Spacer(Modifier.height(8.dp))
                 Box(
                     modifier = Modifier

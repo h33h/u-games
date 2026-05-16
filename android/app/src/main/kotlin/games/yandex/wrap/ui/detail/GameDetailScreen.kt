@@ -39,7 +39,7 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Share
@@ -349,7 +349,7 @@ private fun DetailTopBar(
             .padding(top = topInset + 12.dp, start = 14.dp, end = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        HeroIcon(icon = Icons.Filled.ArrowBack, contentDescription = "Back", onClick = onBack)
+        HeroIcon(icon = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", onClick = onBack)
         Spacer(Modifier.weight(1f))
         HeroIcon(
             icon = if (isFavorite) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,

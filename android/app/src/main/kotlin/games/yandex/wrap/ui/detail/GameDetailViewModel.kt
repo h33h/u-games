@@ -3,6 +3,7 @@ package games.yandex.wrap.ui.detail
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import games.yandex.wrap.catalog.CatalogRepository
+import games.yandex.wrap.catalog.FavoritesRepository
 import games.yandex.wrap.catalog.Game
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,7 +17,8 @@ import kotlinx.coroutines.launch
  * repository so the heart icon stays in sync with Home/Browse.
  */
 class GameDetailViewModel(
-    private val repository: CatalogRepository,
+    private val catalogRepository: CatalogRepository,
+    private val favoritesRepository: FavoritesRepository,
     initialGame: Game,
 ) : ViewModel() {
 
@@ -27,7 +29,7 @@ class GameDetailViewModel(
         // Seed favorite flag + the full set so similar-row tiles show the
         // correct heart icon for any game the user already saved.
         viewModelScope.launch {
-            repository.favoriteIds().collect { ids ->
+            favoritesRepository.favoriteIds().collect { ids ->
                 _state.update {
                     it.copy(
                         isFavorite = ids.contains(it.game.appId),
@@ -44,7 +46,7 @@ class GameDetailViewModel(
         if (_state.value.isLoadingDetail) return
         _state.update { it.copy(isLoadingDetail = true) }
         viewModelScope.launch {
-            val res = repository.appDetail(_state.value.game.appId)
+            val res = catalogRepository.appDetail(_state.value.game.appId)
             _state.update {
                 it.copy(
                     isLoadingDetail = false,
@@ -59,7 +61,7 @@ class GameDetailViewModel(
         if (current.isLoadingSimilar) return
         _state.update { it.copy(isLoadingSimilar = true, similarError = null) }
         viewModelScope.launch {
-            val result = repository.similar(current.game.appId)
+            val result = catalogRepository.similar(current.game.appId)
             result.fold(
                 onSuccess = { games ->
                     _state.update {
@@ -87,7 +89,7 @@ class GameDetailViewModel(
     fun toggleFavorite() {
         val game = _state.value.game
         viewModelScope.launch {
-            runCatching { repository.toggleFavorite(game) }
+            runCatching { favoritesRepository.toggleFavorite(game) }
         }
     }
 }

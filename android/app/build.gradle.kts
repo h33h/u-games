@@ -86,5 +86,7 @@ dependencies {
 
     implementation(libs.datastore.preferences)
 
+    testImplementation(kotlin("test-junit"))
+
     debugImplementation(libs.androidx.compose.ui.tooling)
 }

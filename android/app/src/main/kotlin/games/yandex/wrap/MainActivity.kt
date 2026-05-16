@@ -42,9 +42,15 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val factory = viewModelFactory {
-            initializer { HomeViewModel(app.catalogRepository) }
-            initializer { BrowseViewModel(app.catalogRepository) }
-            initializer { ProfileViewModel(app.catalogRepository) }
+            initializer {
+                HomeViewModel(
+                    app.catalogRepository,
+                    app.favoritesRepository,
+                    app.profileRepository,
+                )
+            }
+            initializer { BrowseViewModel(app.catalogRepository, app.favoritesRepository) }
+            initializer { ProfileViewModel(app.profileRepository) }
         }
         val provider = ViewModelProvider(this, factory)
         val homeVm = provider[HomeViewModel::class.java]
@@ -120,7 +126,8 @@ class MainActivity : ComponentActivity() {
                                 // a clean state and a new similar fetch.
                                 val detailVm = remember(pushed.game.appId) {
                                     GameDetailViewModel(
-                                        repository = app.catalogRepository,
+                                        catalogRepository = app.catalogRepository,
+                                        favoritesRepository = app.favoritesRepository,
                                         initialGame = pushed.game,
                                     )
                                 }
@@ -142,7 +149,7 @@ class MainActivity : ComponentActivity() {
                                         // row) updates immediately.
                                         lifecycleScope.launch {
                                             runCatching {
-                                                app.catalogRepository.toggleFavorite(game)
+                                                app.favoritesRepository.toggleFavorite(game)
                                             }
                                         }
                                     },
@@ -153,6 +160,7 @@ class MainActivity : ComponentActivity() {
                                 title = pushed.title,
                                 scripts = app.injectedScripts,
                                 blockList = app.blockList,
+                                config = app.appConfig,
                                 onBack = {
                                     // Yandex updates server-side
                                     // recentGames on the play session —
@@ -162,7 +170,7 @@ class MainActivity : ComponentActivity() {
                                     onPop()
                                 },
                             )
-                            TabPushed.Auth -> AuthScreen(onClose = {
+                            TabPushed.Auth -> AuthScreen(config = app.appConfig, onClose = {
                                 profileVm.refresh()
                                 homeVm.refresh()
                                 onPop()
@@ -198,7 +206,7 @@ private fun parseDeepLink(intent: Intent?): Long? {
             if (uri.host == "app") pathSegments.firstOrNull()?.toLongOrNull() else null
         }
         "https", "http" -> {
-            if (uri.host?.endsWith("yandex.com") == true || uri.host?.endsWith("yandex.ru") == true) {
+            if (uri.host in setOf("yandex.com", "yandex.ru")) {
                 val idx = pathSegments.indexOf("app")
                 if (idx >= 0 && idx + 1 < pathSegments.size) pathSegments[idx + 1].toLongOrNull() else null
             } else null

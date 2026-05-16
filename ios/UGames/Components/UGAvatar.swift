@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct UGAvatar: View {
-    let profile: UserProfile
+    let profile: UserProfile?
     var diameter: CGFloat = UGSize.avatarS
 
     var plusBorderWidth: CGFloat = 2
@@ -10,9 +10,10 @@ struct UGAvatar: View {
 
     var body: some View {
         Group {
-            if profile.isAuthorized,
-               let url = URL(string: profile.avatarUrl),
-               !profile.avatarUrl.isEmpty {
+            if profile?.isAuthorized == true,
+               let avatarUrl = profile?.avatarUrl,
+               let url = URL(string: avatarUrl),
+               !avatarUrl.isEmpty {
                 CachedAsyncImage(url: url) { phase in
                     switch phase {
                     case .success(let img):
@@ -26,7 +27,7 @@ struct UGAvatar: View {
                 .overlay(
                     Circle().stroke(
                         LinearGradient.ugAccent,
-                        lineWidth: profile.hasYaPlus ? plusBorderWidth : 0
+                        lineWidth: profile?.hasYaPlus == true ? plusBorderWidth : 0
                     )
                 )
             } else {

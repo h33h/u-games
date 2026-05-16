@@ -7,10 +7,11 @@ final class FavoritesStore: ObservableObject {
 
     @Published private(set) var games: [Game] = []
 
-    private let key = "favorite_games"
+    private let persistence: FavoritesPersistence
 
-    init() {
-        load()
+    init(persistence: FavoritesPersistence = FavoritesPersistence()) {
+        self.persistence = persistence
+        games = persistence.load()
     }
 
     func contains(_ appId: Int64) -> Bool {
@@ -23,19 +24,6 @@ final class FavoritesStore: ObservableObject {
         } else {
             games.insert(game, at: 0)
         }
-        persist()
-    }
-
-    private func load() {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return }
-        if let decoded = try? JSONDecoder().decode([Game].self, from: data) {
-            games = decoded
-        }
-    }
-
-    private func persist() {
-        if let data = try? JSONEncoder().encode(games) {
-            UserDefaults.standard.set(data, forKey: key)
-        }
+        persistence.save(games)
     }
 }

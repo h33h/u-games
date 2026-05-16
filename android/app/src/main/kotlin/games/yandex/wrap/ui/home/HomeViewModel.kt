@@ -3,10 +3,12 @@ package games.yandex.wrap.ui.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import games.yandex.wrap.catalog.CatalogRepository
+import games.yandex.wrap.catalog.FavoritesRepository
 import games.yandex.wrap.catalog.FeedBlock
 import games.yandex.wrap.catalog.FeedWithBlocks
 import games.yandex.wrap.catalog.GameCategory
 import games.yandex.wrap.catalog.Game
+import games.yandex.wrap.catalog.ProfileRepository
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -29,12 +31,16 @@ import kotlinx.coroutines.launch
  * is to fan out one feed call per top category. Done in parallel once and
  * cached for the session.
  */
-class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
+class HomeViewModel(
+    private val catalogRepository: CatalogRepository,
+    private val favoritesRepository: FavoritesRepository,
+    private val profileRepository: ProfileRepository,
+) : ViewModel() {
 
     private val _state = MutableStateFlow(HomeUiState())
     val state: StateFlow<HomeUiState> = _state.asStateFlow()
 
-    val favorites: StateFlow<List<Game>> = repository.favoritesAsGames()
+    val favorites: StateFlow<List<Game>> = favoritesRepository.favoritesAsGames()
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val categoryRowLimit = 6
@@ -49,7 +55,7 @@ class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
     fun refresh() {
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
-            val mainResult = runCatching { repository.firstFeedWithBlocks() }
+            val mainResult = runCatching { catalogRepository.firstFeedWithBlocks() }
             mainResult.fold(
                 onSuccess = { feed ->
                     val (hero, spotlight, freshRow) = digestMain(feed)
@@ -76,7 +82,7 @@ class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
     }
 
     fun toggleFavorite(game: Game) {
-        viewModelScope.launch { runCatching { repository.toggleFavorite(game) } }
+        viewModelScope.launch { runCatching { favoritesRepository.toggleFavorite(game) } }
     }
 
     /// Re-fetches feed (and recents) without touching the profile. Called
@@ -85,7 +91,7 @@ class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
     /// in feedRecent.
     fun onGameSessionEnded() {
         viewModelScope.launch {
-            val feed = runCatching { repository.firstFeedWithBlocks() }.getOrNull() ?: return@launch
+            val feed = runCatching { catalogRepository.firstFeedWithBlocks() }.getOrNull() ?: return@launch
             val (hero, spotlight, freshRow) = digestMain(feed)
             _state.update {
                 it.copy(
@@ -100,8 +106,8 @@ class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
 
     private fun refreshProfile() {
         viewModelScope.launch {
-            val p = runCatching { repository.userProfileWithRetry() }.getOrNull() ?: return@launch
-            val wasAnon = !_state.value.profile.isAuthorized
+            val p = runCatching { profileRepository.userProfileWithRetry() }.getOrNull() ?: return@launch
+            val wasAnon = _state.value.profile?.isAuthorized != true
             _state.update { it.copy(profile = p) }
             // First feed call may have run before auth cookies were ready
             // — Yandex SSR returned recentGames=0 for an anonymous
@@ -138,13 +144,13 @@ class HomeViewModel(private val repository: CatalogRepository) : ViewModel() {
     /// `genreRows`. Done in parallel; results are reordered to match the
     /// original category list before being published.
     private suspend fun fanOutGenreRows(excludeAppId: Long?, prefix: List<GenreRow>) {
-        val categories = runCatching { repository.categories() }.getOrNull().orEmpty()
+        val categories = runCatching { catalogRepository.categories() }.getOrNull().orEmpty()
         if (categories.isEmpty()) return
         val pick = categories.take(categoryRowLimit)
         val rows: List<Pair<GameCategory, List<Game>>> = coroutineScope {
             pick.map { cat ->
                 async {
-                    val feed = runCatching { repository.firstFeedWithBlocks(tab = cat.name) }.getOrNull()
+                    val feed = runCatching { catalogRepository.firstFeedWithBlocks(tab = cat.name) }.getOrNull()
                     val items = (feed?.flatGames.orEmpty()).filter { it.appId != excludeAppId }
                     cat to items.take(15)
                 }

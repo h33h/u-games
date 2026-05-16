@@ -5,9 +5,6 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
-import games.yandex.wrap.catalog.CatalogApi
-import games.yandex.wrap.catalog.CatalogRepository
-import games.yandex.wrap.data.AppDatabase
 import games.yandex.wrap.webview.AndroidWebViewCookieStorage
 import games.yandex.wrap.webview.BlockList
 import games.yandex.wrap.webview.InjectedScripts
@@ -39,13 +36,12 @@ class UGamesApplication : Application(), ImageLoaderFactory {
         }
     }
 
-    val database: AppDatabase by lazy { AppDatabase.create(this) }
+    val container: AppContainer by lazy { AppContainer(this, httpClient) }
 
-    val catalogApi: CatalogApi by lazy { CatalogApi(httpClient) }
-
-    val catalogRepository: CatalogRepository by lazy {
-        CatalogRepository(catalogApi, database.gameCacheDao(), database.favoritesDao())
-    }
+    val catalogRepository get() = container.catalogRepository
+    val favoritesRepository get() = container.favoritesRepository
+    val profileRepository get() = container.profileRepository
+    val appConfig get() = container.config
 
     val injectedScripts: InjectedScripts by lazy { InjectedScripts.load(this) }
 

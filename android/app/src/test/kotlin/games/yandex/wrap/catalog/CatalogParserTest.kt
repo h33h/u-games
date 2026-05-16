@@ -1,0 +1,141 @@
+package games.yandex.wrap.catalog
+
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+class CatalogParserTest {
+    private val json = Json { ignoreUnknownKeys = true; isLenient = true; coerceInputValues = true }
+
+    @Test
+    fun feedWithBlocksKeepsBlocksAndDedupesFlatGames() {
+        val root = json.parseToJsonElement(
+            """
+            {
+              "feed": [
+                {
+                  "type": "suggested",
+                  "size": "l",
+                  "title": "Top",
+                  "items": [
+                    {
+                      "appID": 1,
+                      "title": "Alpha",
+                      "rating": 4.5,
+                      "ratingCount": 10,
+                      "categoriesNames": ["arcade"],
+                      "developer": {"name": "Studio A"},
+                      "media": {
+                        "cover": {"prefix-url": "https://img/alpha/", "mainColor": "#111111"},
+                        "icon": {"prefix-url": "https://img/alpha-icon/", "mainColor": "#222222"},
+                        "videos": [{"mp4StreamUrl": "https://video/alpha.mp4"}]
+                      },
+                      "features": {"age_rating": "12+"}
+                    }
+                  ]
+                },
+                {
+                  "type": "categorized",
+                  "size": "s",
+                  "title": "More",
+                  "items": [
+                    {
+                      "appID": 1,
+                      "title": "Alpha duplicate",
+                      "rating": 4.1,
+                      "ratingCount": 1,
+                      "media": {"cover": {"prefix-url": "https://img/dup/"}}
+                    },
+                    {
+                      "appID": 2,
+                      "title": "Beta",
+                      "rating": 4.8,
+                      "ratingCount": 20,
+                      "media": {"cover": {"prefix-url": "https://img/beta/"}}
+                    }
+                  ]
+                }
+              ],
+              "recentGames": [
+                {
+                  "appID": 3,
+                  "title": "Recent",
+                  "media": {"cover": {"prefix-url": "https://img/recent/"}}
+                }
+              ],
+              "pageInfo": {"nextPageId": "next-1", "hasNextPage": true}
+            }
+            """.trimIndent(),
+        ).jsonObject
+
+        val parsed = CatalogJsonParser().feedWithBlocks(root)
+
+        assertEquals(listOf("Top", "More"), parsed.blocks.map { it.title })
+        assertEquals(listOf(1L, 2L), parsed.flatGames.map { it.appId })
+        assertEquals(listOf(3L), parsed.recentGames.map { it.appId })
+        assertEquals("next-1", parsed.nextPageId)
+        assertTrue(parsed.hasNext)
+        assertEquals("https://img/alpha/pjpg250x140", parsed.blocks.first().items.first().coverUrl)
+        assertEquals("https://img/alpha-icon/pjpg256x256", parsed.blocks.first().items.first().iconUrl)
+        assertEquals("#111111", parsed.blocks.first().items.first().mainColor)
+        assertEquals("https://video/alpha.mp4", parsed.blocks.first().items.first().videoUrl)
+        assertEquals("12+", parsed.blocks.first().items.first().ageRating)
+    }
+
+    @Test
+    fun htmlParserReadsCategoriesProfileAndJsonLdDetail() {
+        val htmlParser = CatalogHtmlParser(json)
+        val appData = """
+            {
+              "categoriesForTabs": [{"name": "puzzles", "title": "Puzzles", "gamesCount": 42}],
+              "userData": {
+                "uid": "u1",
+                "login": "player",
+                "displayName": "Player One",
+                "avatarsOrigin": "https://avatars.example",
+                "avatarId": "42/avatar",
+                "yaplusEnabled": true
+              }
+            }
+        """.trimIndent()
+        val ldJson = """
+            {
+              "@graph": [
+                {
+                  "@type": "VideoGame",
+                  "mainEntityOfPage": {"description": "A &amp; B"},
+                  "screenshot": [{"url": "https://img/screen/orig"}],
+                  "datePublished": "2026-01-02",
+                  "genre": ["Arcade", "Puzzle"],
+                  "inLanguage": "en",
+                  "author": {"name": "Dev &amp; Co"}
+                }
+              ]
+            }
+        """.trimIndent()
+
+        val categories = htmlParser.categoriesFromAppData(appData)
+        val profile = assertNotNull(htmlParser.profileFromAppData(appData))
+        val detail = assertNotNull(htmlParser.appDetailFromJsonLd(ldJson))
+
+        assertEquals(GameCategory("puzzles", "Puzzles", 42), categories.single())
+        assertTrue(profile.isAuthorized)
+        assertEquals("Player One", profile.displayName)
+        assertEquals("player", profile.login)
+        assertEquals("https://avatars.example/get-yapic/42/avatar/islands-300", profile.avatarUrl)
+        assertTrue(profile.hasYaPlus)
+        assertEquals("A & B", detail.description)
+        assertEquals(listOf("https://img/screen/pjpg500x280"), detail.screenshots)
+        assertEquals("2026-01-02", detail.datePublished)
+        assertEquals(listOf("Arcade", "Puzzle"), detail.genres)
+        assertEquals(listOf("en"), detail.languages)
+        assertEquals("Dev & Co", detail.author)
+
+        assertNull(htmlParser.profileFromAppData("""{"userData":{"uid":""}}"""))
+    }
+}

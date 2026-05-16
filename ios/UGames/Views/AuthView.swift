@@ -15,6 +15,7 @@ final class AuthState: ObservableObject {
 }
 
 struct AuthView: View {
+    let config: AppConfig
     let onClose: () -> Void
 
     @StateObject private var state = AuthState()
@@ -25,7 +26,7 @@ struct AuthView: View {
             VStack(spacing: 0) {
                 UGTopBar(title: "Sign in to Yandex", onBack: onClose)
                 ZStack {
-                    AuthWebView(state: state, onSignedIn: onClose)
+                    AuthWebView(config: config, state: state, onSignedIn: onClose)
                         .ignoresSafeArea(edges: .bottom)
                     if let err = state.loadError {
                         AuthErrorOverlay(message: err, onRetry: { state.retry() })
@@ -77,33 +78,12 @@ private struct AuthErrorOverlay: View {
 }
 
 private struct AuthWebView: UIViewRepresentable {
+    let config: AppConfig
     @ObservedObject var state: AuthState
     let onSignedIn: () -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(state: state, onSignedIn: onSignedIn)
-    }
-
-    static var preferredYandexHost: String {
-        let lang = Locale.preferredLanguages.first ?? Locale.current.identifier
-        return lang.hasPrefix("ru") ? "yandex.ru" : "yandex.com"
-    }
-
-    static var passportHost: String {
-        preferredYandexHost == "yandex.ru" ? "passport.yandex.ru" : "passport.yandex.com"
-    }
-
-    static var passportRetpathEncoded: String {
-        let host = preferredYandexHost
-        return "https%3A%2F%2F\(host)%2Fgames%2F"
-    }
-
-    static var passportAuthURL: URL {
-        URL(string: "https://\(passportHost)/auth?retpath=\(passportRetpathEncoded)")!
-    }
-
-    static var gamesRootURL: URL {
-        URL(string: "https://\(preferredYandexHost)/games/")!
+        Coordinator(config: config, state: state, onSignedIn: onSignedIn)
     }
 
     func makeUIView(context: Context) -> WKWebView {
@@ -137,13 +117,9 @@ private struct AuthWebView: UIViewRepresentable {
         web.allowsBackForwardNavigationGestures = true
         web.backgroundColor = .black
         web.isOpaque = false
-        let retpath = AuthWebView.passportRetpathEncoded
-        var request = URLRequest(url: AuthWebView.passportAuthURL)
-        request.setValue(
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-            forHTTPHeaderField: "User-Agent"
-        )
-        Log.write("auth", "AuthView opened: passportHost=\(AuthWebView.passportHost) retpath=\(retpath) gamesHost=\(AuthWebView.preferredYandexHost)")
+        var request = URLRequest(url: config.yandex.passportAuthURL())
+        request.setValue(config.http.userAgent, forHTTPHeaderField: "User-Agent")
+        Log.write("auth", "AuthView opened: passportHost=\(config.yandex.passportOrigin().host ?? "?") retpath=\(config.yandex.gamesHome().absoluteString) gamesHost=\(config.yandex.preferredHost.rawValue)")
         web.load(request)
         context.coordinator.startSessionWatcher(webView: web)
         return web
@@ -153,12 +129,13 @@ private struct AuthWebView: UIViewRepresentable {
         if state.reloadToken != context.coordinator.lastReloadToken {
             context.coordinator.lastReloadToken = state.reloadToken
             context.coordinator.firstLoadDone = false
-            uiView.load(URLRequest(url: AuthWebView.passportAuthURL))
+            uiView.load(URLRequest(url: config.yandex.passportAuthURL()))
             Log.write("auth", "manual retry reload token=\(state.reloadToken)")
         }
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKScriptMessageHandler {
+        let config: AppConfig
         let state: AuthState
         let onSignedIn: () -> Void
         private var dismissed = false
@@ -166,7 +143,8 @@ private struct AuthWebView: UIViewRepresentable {
         var firstLoadDone = false
         var lastReloadToken: Int = 0
 
-        init(state: AuthState, onSignedIn: @escaping () -> Void) {
+        init(config: AppConfig, state: AuthState, onSignedIn: @escaping () -> Void) {
+            self.config = config
             self.state = state
             self.onSignedIn = onSignedIn
         }
@@ -205,7 +183,7 @@ private struct AuthWebView: UIViewRepresentable {
                         $0.domain.contains("yandex.com") || $0.domain.contains("yandex.ru")
                     }
 
-                    let preferredDomain = AuthWebView.preferredYandexHost
+                    let preferredDomain = config.yandex.preferredHost.rawValue
                     let sessionPresent = yandexCookies.contains { c in
                         c.name == "Session_id" && c.domain.contains(preferredDomain)
                     }
@@ -216,9 +194,8 @@ private struct AuthWebView: UIViewRepresentable {
                     guard sessionPresent else { continue }
                     let current = webView.url?.absoluteString ?? ""
                     Log.write("auth", "Session_id detected after \(ticks*400)ms; current=\(current)")
-                    let target = AuthWebView.gamesRootURL
-                    if !current.hasPrefix("https://yandex.com/games/") &&
-                       !current.hasPrefix("https://yandex.ru/games/") {
+                    let target = config.yandex.gamesHome()
+                    if !config.yandex.isGamesUrl(current) {
                         Log.write("auth", "force-loading \(target.absoluteString)")
                         webView.load(URLRequest(url: target))
                     }
@@ -242,7 +219,7 @@ private struct AuthWebView: UIViewRepresentable {
             guard !dismissed, let url = webView.url?.absoluteString else { return }
             if url.contains("/webauthn-reg") || url.contains("/finish?") {
                 Log.write("auth", "skip dead-end \(url)")
-                webView.load(URLRequest(url: AuthWebView.gamesRootURL))
+                webView.load(URLRequest(url: config.yandex.gamesHome()))
                 return
             }
         }

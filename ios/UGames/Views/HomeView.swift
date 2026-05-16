@@ -129,7 +129,7 @@ struct HomeView: View {
 }
 
 private struct HomeHeader: View {
-    let profile: UserProfile
+    let profile: UserProfile?
     let onProfileClick: () -> Void
     let onProfileLongPress: () -> Void
 

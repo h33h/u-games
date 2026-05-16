@@ -34,7 +34,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 }
 
-func parseDeepLink(_ url: URL) -> Int64? {
+func parseDeepLink(_ url: URL, config: AppConfig = .live()) -> Int64? {
     let scheme = url.scheme?.lowercased() ?? ""
     let segments = url.pathComponents.filter { $0 != "/" }
     switch scheme {
@@ -44,8 +44,12 @@ func parseDeepLink(_ url: URL) -> Int64? {
         }
         return nil
     case "https", "http":
+        let yandexHosts = [
+            config.yandex.origin(.com).host,
+            config.yandex.origin(.ru).host,
+        ]
         if let host = url.host,
-           host.hasSuffix("yandex.com") || host.hasSuffix("yandex.ru"),
+           yandexHosts.contains(where: { $0.map { host.hasSuffix($0) } ?? false }),
            let idx = segments.firstIndex(of: "app"), idx + 1 < segments.count {
             return Int64(segments[idx + 1])
         }
@@ -56,14 +60,20 @@ func parseDeepLink(_ url: URL) -> Int64? {
 }
 
 struct RootView: View {
+    private let environment: AppEnvironment
     @State private var gameSession: GameSession?
     @State private var authPresented: Bool = false
     @State private var logsPresented: Bool = false
     @State private var sharePayload: SharePayload?
-    @StateObject private var catalogService = CatalogService()
+    @StateObject private var catalogService: CatalogService
     @StateObject private var favoritesStore = FavoritesStore.shared
     private let injectedScripts = InjectedScripts.load()
     private let blockList = BlockList.load()
+
+    init(environment: AppEnvironment = .live) {
+        self.environment = environment
+        _catalogService = StateObject(wrappedValue: CatalogService(environment: environment))
+    }
 
     var body: some View {
         ZStack {
@@ -88,6 +98,7 @@ struct RootView: View {
             GameView(
                 appId: session.appId,
                 title: session.title,
+                config: environment.config,
                 scripts: injectedScripts,
                 blockList: blockList,
                 onBack: {
@@ -97,7 +108,7 @@ struct RootView: View {
             )
         }
         .fullScreenCover(isPresented: $authPresented) {
-            AuthView(onClose: {
+            AuthView(config: environment.config, onClose: {
                 authPresented = false
                 Task { await catalogService.refreshProfile() }
             })
@@ -109,7 +120,7 @@ struct RootView: View {
             ShareSheet(payload: payload)
         }
         .onOpenURL { url in
-            if let appId = parseDeepLink(url) {
+            if let appId = parseDeepLink(url, config: environment.config) {
                 gameSession = GameSession(appId: appId, title: "")
             }
         }

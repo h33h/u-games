@@ -1,5 +1,7 @@
 package games.yandex.wrap.catalog
 
+import games.yandex.wrap.config.AppConfig
+
 data class Game(
     val appId: Long,
     val title: String,
@@ -24,7 +26,7 @@ data class Game(
      *  us — no need to re-derive from JSON-LD `audience.requiredMinAge`. */
     val ageRating: String? = null,
 ) {
-    val playUrl: String get() = "https://yandex.com/games/app/$appId"
+    val playUrl: String get() = AppConfig.defaultForLocale().yandex.gameUrl(appId).toString()
 
     /** Compose a sized URL from [coverPrefixUrl]; falls back to the
      *  pre-baked thumbnail when the prefix isn't available (e.g. when a

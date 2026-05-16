@@ -45,16 +45,14 @@ final class CategoryGamesViewModel: ObservableObject {
 
     func loadMore() {
         guard hasMore, !isLoading, !isLoadingMore, let pageId = nextPageId else { return }
-        let knownSnapshot = Set(games.map { $0.appId })
         isLoadingMore = true
         loadTask = Task { [weak self] in
             guard let self = self else { return }
             defer { Task { @MainActor in self.isLoadingMore = false } }
             do {
                 let page = try await self.service.fetchFeed(pageId: pageId)
-                let dedup = page.games.filter { !knownSnapshot.contains($0.appId) }
                 await MainActor.run {
-                    self.games.append(contentsOf: dedup)
+                    self.games.appendUnique(contentsOf: page.games) { $0.appId }
                     self.hasMore = page.hasNext && page.nextPageId != nil
                     self.nextPageId = page.nextPageId
                 }

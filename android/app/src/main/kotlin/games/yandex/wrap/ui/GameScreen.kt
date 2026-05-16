@@ -20,7 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import games.yandex.wrap.diagnostics.OrientationStore
+import games.yandex.wrap.config.AppConfig
 import games.yandex.wrap.webview.BlockList
 import games.yandex.wrap.webview.GameWebView
 import games.yandex.wrap.webview.InjectedScripts
@@ -56,6 +57,7 @@ fun GameScreen(
     title: String,
     scripts: InjectedScripts,
     blockList: BlockList,
+    config: AppConfig,
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
@@ -89,9 +91,10 @@ fun GameScreen(
             .windowInsetsPadding(WindowInsets.statusBars),
     ) {
         GameWebView(
-            url = "https://yandex.com/games/app/$appId",
+            url = config.yandex.gameUrl(appId).toString(),
             scripts = scripts,
             blockList = blockList,
+            config = config,
             paused = rotateOverlayVisible,
             modifier = Modifier.fillMaxSize(),
         )
@@ -122,7 +125,7 @@ fun GameScreen(
                     .background(Color(0xCC000000)),
             ) {
                 Icon(
-                    imageVector = Icons.Default.ArrowBack,
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = "Back",
                     tint = Color.White,
                 )

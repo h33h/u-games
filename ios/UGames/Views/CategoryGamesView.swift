@@ -104,7 +104,7 @@ private struct GameRow: View {
     let onFavoriteToggle: () -> Void
 
     private var iconUrl: URL? {
-        URL(string: game.iconUrl.isEmpty ? game.coverUrl : game.iconUrl)
+        URL(string: game.iconUrl(size: "pjpg256x256"))
     }
 
     private var halo: Color {

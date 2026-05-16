@@ -10,9 +10,8 @@ package games.yandex.wrap.catalog.models
 data class AppDetail(
     /** Long-form description (multi-paragraph, may include `\n`). */
     val description: String?,
-    /** High-res screenshot URLs, already transformed to a UI-friendly
-     *  size suffix (`pjpg500x280`) so the Detail row doesn't fetch
-     *  multi-MB `/orig` variants. */
+    /** Raw screenshot URL or `prefix-url` from the wire response. UI
+     *  callers choose the concrete Yandex image size they need. */
     val screenshots: List<String>,
     /** ISO-8601 timestamp when the JSON endpoint carries one. The UI renders
      *  just the year (the only honest "release year" Yandex exposes). */

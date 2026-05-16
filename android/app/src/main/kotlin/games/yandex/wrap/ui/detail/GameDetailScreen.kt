@@ -535,7 +535,7 @@ private fun ScreenshotsRow(
                             .clickable { onScreenshotClick(idx) },
                     ) {
                         AsyncImage(
-                            model = url,
+                            model = screenshotUrl(url, "pjpg500x280"),
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize(),
@@ -769,9 +769,11 @@ private fun ScreenshotsFullscreen(
     }
 }
 
-/** Replace the `pjpg500x280` (or whatever) suffix with `orig` so the
- *  fullscreen viewer renders the full-quality screenshot. Mirrors the
- *  rewrite logic in CatalogApi.rewriteAvatarSize. */
+private fun screenshotUrl(url: String, size: String): String =
+    if (url.endsWith("/")) url + size else url
+
+/** Replace a concrete size suffix with `orig`; raw prefix URLs also work
+ *  because they already end at the avatars directory slash. */
 private fun upgradeToOrig(url: String): String {
     val lastSlash = url.lastIndexOf('/')
     if (lastSlash <= 0) return url

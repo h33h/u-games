@@ -80,7 +80,7 @@ fun TileGameCard(
                 ),
         ) {
             AsyncImage(
-                model = game.coverUrl,
+                model = game.coverUrl("pjpg250x140"),
                 contentDescription = game.title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxWidth().aspectRatio(16f / 10f),
@@ -197,7 +197,7 @@ fun WideGameCard(
             .clickable(onClick = onClick),
     ) {
         AsyncImage(
-            model = game.coverUrl,
+            model = game.coverUrl("pjpg250x140"),
             contentDescription = game.title,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxWidth().height(96.dp),
@@ -270,7 +270,7 @@ fun SquareGameCard(
                 ),
         ) {
             AsyncImage(
-                model = game.iconUrl.ifEmpty { game.coverUrl },
+                model = game.iconUrl("pjpg256x256"),
                 contentDescription = game.title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.size(130.dp),

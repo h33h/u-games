@@ -1,0 +1,2112 @@
+openapi: 3.1.0
+info:
+  title: Yandex Games Unofficial API
+  version: 0.1.0
+  description: >
+    Unofficial, observation-based API specification for Yandex Games catalogue,
+    game wrapper, SDK bridge, purchases, player, bonuses, achievements, and
+    leaderboard endpoints. This is not an official contract and may change with
+    frontend releases. Do not persist CSRF, sdkAuth, session cookies, recovery
+    codes, signed payloads, or user identifiers from live traffic.
+  x-observed-date: "2026-05-17"
+  x-observed-from:
+    - https://yandex.ru/games/
+    - https://yandex.ru/games/category/puzzles
+    - https://yandex.ru/games/search
+    - https://yandex.ru/games/app/fireboy-and-watergirl-1-in-the-forest-temple-96860
+    - https://yandex.ru/games/app/kiker-96247
+servers:
+  - url: https://yandex.ru
+    description: Main catalogue/page origin.
+  - url: https://games.yandex.ru
+    description: Games backend origin.
+  - url: https://games-sdk.yandex.ru
+    description: SDK backend origin.
+tags:
+  - name: Catalogue
+  - name: Game Details
+  - name: Reviews
+  - name: User
+  - name: External
+  - name: SDK Player
+  - name: SDK Purchases
+  - name: SDK Bonuses
+  - name: SDK Leaderboards
+  - name: SDK Achievements
+  - name: SDK Helpers
+  - name: Mutating
+
+paths:
+  /games/api/catalogue/v2/feed/:
+    get:
+      tags: [Catalogue]
+      operationId: getCatalogueFeedV2
+      summary: Read catalogue feed blocks.
+      parameters:
+        - $ref: "#/components/parameters/Lang"
+        - $ref: "#/components/parameters/Platform"
+        - $ref: "#/components/parameters/WithPromos"
+        - $ref: "#/components/parameters/WithRecentGames"
+        - $ref: "#/components/parameters/GamesCount"
+        - $ref: "#/components/parameters/PageId"
+        - $ref: "#/components/parameters/ClientWidth"
+        - $ref: "#/components/parameters/ClientHeight"
+        - $ref: "#/components/parameters/Pfid"
+        - name: categorized_size
+          in: query
+          schema: { type: integer }
+        - name: tagID
+          in: query
+          schema: { type: integer }
+        - name: rtx-reqid
+          in: query
+          schema: { type: string }
+        - name: suggested_width
+          in: query
+          schema: { type: integer }
+        - name: suggested_rows
+          in: query
+          schema: { type: integer }
+        - name: tab
+          in: query
+          schema: { type: string }
+          examples:
+            puzzles: { value: puzzles }
+        - name: with_faq
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Feed payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedResponse"
+      x-observed:
+        status: [200]
+        notes:
+          - Home and category pages use this endpoint.
+          - Page cursors can be base64 strings such as gamesSkip=24.
+
+  /games/api/catalogue/v2/feed_home/:
+    get:
+      tags: [Catalogue]
+      operationId: getCatalogueFeedHomeV2
+      summary: Feature-flagged or stale feed home endpoint.
+      parameters:
+        - $ref: "#/components/parameters/Lang"
+        - $ref: "#/components/parameters/Platform"
+      responses:
+        "200":
+          description: Feed payload when enabled.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedResponse"
+        "404":
+          description: Observed from direct anonymous production request.
+      x-observed:
+        status: [404]
+        notes:
+          - The endpoint exists in frontend bundle as getFeedHomeData(params).
+
+  /games/api/catalogue/v3/search/:
+    get:
+      tags: [Catalogue]
+      operationId: searchCatalogueV3
+      summary: Search games.
+      parameters:
+        - $ref: "#/components/parameters/Query"
+        - $ref: "#/components/parameters/Lang"
+        - $ref: "#/components/parameters/Platform"
+        - $ref: "#/components/parameters/WithPromos"
+        - $ref: "#/components/parameters/GamesCount"
+        - $ref: "#/components/parameters/PageId"
+        - $ref: "#/components/parameters/ClientWidth"
+        - $ref: "#/components/parameters/ClientHeight"
+        - name: found_width
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Search result feed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedResponse"
+      x-observed:
+        status: [200]
+        notes:
+          - Current web catalogue used v3 search in observed release.
+
+  /games/api/catalogue/v3/search/suggest:
+    get:
+      tags: [Catalogue]
+      operationId: suggestCatalogueSearchV3
+      summary: Search suggestions.
+      parameters:
+        - $ref: "#/components/parameters/Query"
+        - name: numdoc
+          in: query
+          required: true
+          schema: { type: integer, minimum: 1 }
+          examples:
+            five: { value: 5 }
+      responses:
+        "200":
+          description: Suggestion list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query: { type: string }
+                  suggests:
+                    type: array
+                    items: { type: string }
+                additionalProperties: true
+        "400":
+          description: Missing or invalid required params.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      x-observed:
+        status: [200, 400]
+        notes:
+          - numdoc was required in the observed release.
+
+  /games/api/catalogue/v2/all_games/:
+    get:
+      tags: [Catalogue]
+      operationId: listAllGamesV2
+      summary: Read paged all-games catalogue.
+      parameters:
+        - $ref: "#/components/parameters/Lang"
+        - $ref: "#/components/parameters/Platform"
+        - $ref: "#/components/parameters/GamesCount"
+        - $ref: "#/components/parameters/PageId"
+      responses:
+        "200":
+          description: Paged games list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/GameCard"
+                  pageID: { type: string }
+                  totalPages: { type: integer }
+                additionalProperties: true
+
+  /games/api/catalogue/v2/best_games/:
+    get:
+      tags: [Catalogue]
+      operationId: listBestGamesV2
+      summary: Read best-games list.
+      parameters:
+        - $ref: "#/components/parameters/Lang"
+      responses:
+        "200":
+          description: Best games payload.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  dateModified: { type: string }
+                  faqLinks:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                  games:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/GameCard"
+                  month: { type: integer }
+                  stat:
+                    type: object
+                    properties:
+                      rating: { type: number }
+                      ratingCount: { type: integer }
+                    additionalProperties: true
+                  year: { type: integer }
+                additionalProperties: true
+
+  /games/api/catalogue/v2/all_promos/:
+    get:
+      tags: [Catalogue]
+      operationId: listAllPromosV2
+      summary: Read catalogue-wide promos.
+      parameters:
+        - $ref: "#/components/parameters/Lang"
+        - $ref: "#/components/parameters/Platform"
+        - $ref: "#/components/parameters/PageId"
+      responses:
+        "200":
+          description: Promo page.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  promos:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Promo"
+                  pageID: { type: string }
+                  totalPages: { type: integer }
+                additionalProperties: true
+
+  /games/api/app-promos/v1:
+    get:
+      tags: [Catalogue]
+      operationId: listAppPromosV1
+      summary: Read promos for one app.
+      parameters:
+        - name: app_id
+          in: query
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/Lang"
+        - $ref: "#/components/parameters/Platform"
+        - name: limit
+          in: query
+          schema: { type: integer }
+        - name: min_play_time
+          in: query
+          schema: { type: integer }
+        - name: promo_filter
+          in: query
+          schema: { type: string }
+        - name: sort_type
+          in: query
+          schema: { type: string }
+        - name: with_future
+          in: query
+          schema: { type: boolean }
+        - name: future_promos_placement
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: App promos.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  promos:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Promo"
+                additionalProperties: true
+      x-observed:
+        status: [200]
+        notes:
+          - Apps 96860 and 211144 returned an empty promos array.
+
+  /games/api/catalogue/v2/get_game:
+    post:
+      tags: [Game Details]
+      operationId: getGameV2
+      summary: Read rich game details.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - $ref: "#/components/schemas/GetGameRequestCamel"
+                - $ref: "#/components/schemas/GetGameRequestSnake"
+      responses:
+        "200":
+          description: Game detail payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameCard"
+      x-observed:
+        notes:
+          - Frontend bundle contains both appID and app_id call styles.
+
+  /games/api/catalogue/v2/get_games:
+    post:
+      tags: [Game Details]
+      operationId: getGamesV2
+      summary: Read rich details for multiple games.
+      parameters:
+        - $ref: "#/components/parameters/Lang"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [appIDs, format]
+              properties:
+                appIDs:
+                  type: array
+                  items: { type: integer }
+                format:
+                  type: string
+                  examples: [app]
+                draft: { type: boolean }
+                pfid: { type: string }
+              additionalProperties: true
+      responses:
+        "200":
+          description: Batch game details.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  games:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/GameCard"
+                additionalProperties: true
+
+  /games/api/catalogue/v2/developer_games:
+    get:
+      tags: [Game Details]
+      operationId: getDeveloperGamesV2
+      summary: Read games by developer.
+      parameters:
+        - name: developer_id
+          in: query
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/Lang"
+        - $ref: "#/components/parameters/Platform"
+        - $ref: "#/components/parameters/GamesCount"
+        - $ref: "#/components/parameters/PageId"
+      responses:
+        "200":
+          description: Developer games feed.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  developer:
+                    type: object
+                    properties:
+                      id: { type: integer }
+                      name: { type: string }
+                      shareImage: { type: string }
+                    additionalProperties: true
+                  feed:
+                    $ref: "#/components/schemas/FeedBlock"
+                  gamesRequestId: { type: string }
+                  gamesWithPromos:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/GameCard"
+                  pageInfo: { type: object, additionalProperties: true }
+                  totalGamesCount: { type: integer }
+                additionalProperties: true
+        "400":
+          description: Missing or invalid developer_id.
+      x-observed:
+        notes:
+          - developer_id is required; developerId, id, and developer name failed.
+
+  /games/api/catalogue/v2/is_game_rated:
+    get:
+      tags: [Reviews]
+      operationId: isGameRatedV2
+      summary: Read current user's rating state.
+      parameters:
+        - $ref: "#/components/parameters/AppIDCamel"
+      responses:
+        "200":
+          description: Rating state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hasAuth: { type: boolean }
+                  rated: { type: boolean }
+                additionalProperties: true
+
+  /games/api/catalogue/v2/get_game_reviews:
+    get:
+      tags: [Reviews]
+      operationId: getGameReviewsV2
+      summary: Read game reviews.
+      parameters:
+        - $ref: "#/components/parameters/AppIDCamel"
+      responses:
+        "200":
+          description: Review list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hasAuth: { type: boolean }
+                  reviews:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Review"
+                additionalProperties: true
+
+  /games/api/catalogue/v2/ratings:
+    post:
+      tags: [Reviews, Mutating]
+      operationId: postGameRatingV2
+      summary: Post a rating or review.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [appID, rating]
+              properties:
+                appID: { type: integer }
+                rating: { type: integer, minimum: 1, maximum: 5 }
+                comment: { type: string }
+              additionalProperties: true
+      responses:
+        "200":
+          description: Rating accepted.
+        "401":
+          description: Authentication required.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/catalogue/v2/similar_games/:
+    get:
+      tags: [Catalogue]
+      operationId: getSimilarGamesV2
+      summary: Read games similar to an app.
+      parameters:
+        - name: app_id
+          in: query
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/GamesCount"
+        - name: int
+          in: query
+          schema: { type: boolean }
+        - $ref: "#/components/parameters/Lang"
+        - name: page_type
+          in: query
+          schema: { type: string }
+          examples:
+            game: { value: game }
+        - $ref: "#/components/parameters/Platform"
+        - name: standalone
+          in: query
+          schema: { type: boolean }
+        - $ref: "#/components/parameters/Pfid"
+      responses:
+        "200":
+          description: Similar games feed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedResponse"
+
+  /games/api/catalogue/v2/tags/:
+    get:
+      tags: [Catalogue]
+      operationId: getTagsV2
+      summary: Read game tags.
+      parameters:
+        - $ref: "#/components/parameters/Lang"
+        - $ref: "#/components/parameters/Pfid"
+      responses:
+        "200":
+          description: Tags payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LooseObject"
+
+  /games/api/catalogue/v2/user_info:
+    get:
+      tags: [User]
+      operationId: getCatalogueUserInfoV2
+      summary: Read compact user/account state.
+      parameters:
+        - name: settings
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: User info.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  subscriptions:
+                    type: object
+                    additionalProperties: true
+                additionalProperties: true
+
+  /games/api/user/passport:
+    get:
+      tags: [User]
+      operationId: getUserPassport
+      summary: Read richer signed-in passport profile.
+      responses:
+        "200":
+          description: Passport profile. Contains personal fields; redact logs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accountIdUrl: { type: string }
+                  authProvider: { type: string }
+                  avatarId: { type: string }
+                  avatarsOrigin: { type: string }
+                  displayName: { type: string }
+                  email: { type: string }
+                  fio: { type: string }
+                  helpUrl: { type: string }
+                  isAccountCompletionAvailable: { type: boolean }
+                  isChild: { type: boolean }
+                  login: { type: string }
+                  origin: { type: string }
+                  passportHost: { type: string }
+                  tld: { type: string }
+                  uid: { type: string }
+                  yandexoid: { type: string }
+                  yaplusEnabled: { type: boolean }
+                  yaplusIsAvailable: { type: boolean }
+                additionalProperties: true
+      x-sensitive-fields: [email, fio, login, uid, yandexoid, displayName]
+
+  /games/api/user-notifications/v1:
+    get:
+      tags: [User]
+      operationId: getUserNotificationsV1
+      summary: Read notification list.
+      parameters:
+        - $ref: "#/components/parameters/Lang"
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: Notifications page.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  notifications:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                  total_count: { type: integer }
+                  unread_count: { type: integer }
+                additionalProperties: true
+
+  /games/api/catalogue/v2/userflags:
+    get:
+      tags: [User]
+      operationId: getUserFlagsV2
+      summary: Read user flags.
+      responses:
+        "200":
+          description: User flags.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  flags:
+                    type: object
+                    properties:
+                      forbidPermissionsForAllApps: { type: boolean }
+                      forbidSharePurchasesInfo: { type: boolean }
+                    additionalProperties: true
+                additionalProperties: true
+
+  /games/api/catalogue/v2/user_settings:
+    patch:
+      tags: [User, Mutating]
+      operationId: patchUserSettingsV2
+      summary: Update catalogue user settings.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                UIThemeType: { type: string }
+              additionalProperties: true
+      responses:
+        "200":
+          description: Settings updated.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/catalogue/v2/unsubscribes:
+    get:
+      tags: [User]
+      operationId: getUnsubscribesV2
+      summary: Read unsubscribe list.
+      responses:
+        "200":
+          description: Unsubscribe list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object, additionalProperties: true }
+
+  /games/api/catalogue/v2/subscribe:
+    post:
+      tags: [User, Mutating]
+      operationId: subscribeV2
+      summary: Subscribe to a notification type.
+      requestBody:
+        $ref: "#/components/requestBodies/SubscriptionType"
+      responses:
+        "200":
+          description: Subscription changed.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/catalogue/v2/unsubscribe:
+    post:
+      tags: [User, Mutating]
+      operationId: unsubscribeV2
+      summary: Unsubscribe from a notification type.
+      requestBody:
+        $ref: "#/components/requestBodies/SubscriptionType"
+      responses:
+        "200":
+          description: Subscription changed.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/external/catalogue/v3/recent-games/:
+    post:
+      tags: [External, Mutating]
+      operationId: addRecentGameV3
+      summary: Add current app to recent games.
+      requestBody:
+        $ref: "#/components/requestBodies/AppIDBody"
+      responses:
+        "204":
+          description: Added.
+      x-mutating: true
+      x-observed:
+        status: [204]
+        notes:
+          - Normal game page launch made this call.
+    delete:
+      tags: [External, Mutating]
+      operationId: deleteRecentGameV3
+      summary: Remove current app from recent games.
+      requestBody:
+        $ref: "#/components/requestBodies/AppIDBody"
+      responses:
+        "204":
+          description: Removed.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/external/catalogue/v3/play-time/:
+    get:
+      tags: [External]
+      operationId: getExternalPlayTimeV3
+      summary: Read aggregate play time.
+      responses:
+        "200":
+          description: Play time payload.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  play_time: { type: integer }
+                additionalProperties: true
+
+  /games/api/catalogue/v2/partner_event/:
+    get:
+      tags: [Catalogue]
+      operationId: getPartnerEventFeedV2
+      summary: Read partner-event feed.
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/Lang"
+        - $ref: "#/components/parameters/Platform"
+      responses:
+        "200":
+          description: Partner-event feed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeedResponse"
+        "400":
+          description: Missing name.
+      x-observed:
+        status: [400]
+        notes:
+          - Direct request without name returned 400.
+
+  /games/api/partner-events/v1/user_partner_event:
+    get:
+      tags: [User]
+      operationId: getUserPartnerEventV1
+      summary: Read current user partner-event state.
+      parameters:
+        - $ref: "#/components/parameters/Lang"
+      responses:
+        "200":
+          description: User event state.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LooseObject"
+        "204":
+          description: No active state.
+      x-observed:
+        status: [204]
+
+  /games/api/catalogue/v2/conflict_info:
+    get:
+      tags: [User]
+      operationId: getConflictInfoV2
+      summary: Read account/app conflict information.
+      parameters:
+        - name: app_id
+          in: query
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Conflict state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hasConflict: { type: boolean }
+                  conflictInfo:
+                    type: object
+                    properties:
+                      iGamesUsers:
+                        type: array
+                        items: { type: object, additionalProperties: true }
+                    additionalProperties: true
+                additionalProperties: true
+        "400":
+          description: Missing or invalid app_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /games/api/csrf/v1/token:
+    get:
+      tags: [SDK Helpers]
+      operationId: getCsrfTokenV1
+      summary: Initialize or refresh CSRF token.
+      responses:
+        "204":
+          description: Empty body observed.
+      x-sensitive: true
+      x-observed:
+        status: [204]
+
+  /games/api/purchases/v1/currency/balance:
+    get:
+      tags: [SDK Purchases]
+      operationId: getPublicCurrencyBalanceV1
+      summary: Read currency balance through games backend.
+      responses:
+        "200":
+          $ref: "#/components/responses/CurrencyBalance"
+
+  /games/api/sdk/v1/currency/balance:
+    get:
+      tags: [SDK Purchases]
+      operationId: getSdkCurrencyBalanceV1
+      summary: Read currency balance through SDK backend.
+      responses:
+        "200":
+          $ref: "#/components/responses/CurrencyBalance"
+
+  /games/api/purchases/v1/platform/products:
+    get:
+      tags: [SDK Purchases]
+      operationId: getPlatformProductsV1
+      summary: Read platform purchase products.
+      parameters:
+        - name: appId
+          in: query
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/Lang"
+      responses:
+        "200":
+          description: Product list.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        info: { type: object, additionalProperties: true }
+                        subscription: { type: object, additionalProperties: true }
+                      additionalProperties: true
+                additionalProperties: true
+
+  /games/api/purchases/v1/currency/products:
+    get:
+      tags: [SDK Purchases]
+      operationId: getPublicCurrencyProductsV1
+      summary: Read currency purchase products.
+      parameters:
+        - name: appId
+          in: query
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/Lang"
+        - name: amount
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/CurrencyProducts"
+
+  /games/api/sdk/v1/purchases/currency/products:
+    get:
+      tags: [SDK Purchases]
+      operationId: getSdkCurrencyProductsV1
+      summary: Read currency purchase products through SDK backend.
+      parameters:
+        - name: appId
+          in: query
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/Lang"
+        - name: amount
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/CurrencyProducts"
+
+  /games/api/sdk/v1/purchases/app/products:
+    get:
+      tags: [SDK Purchases]
+      operationId: getSdkAppProductsV1
+      summary: Read app purchase products.
+      parameters:
+        - $ref: "#/components/parameters/AppIdAny"
+        - $ref: "#/components/parameters/Lang"
+      responses:
+        "200":
+          description: App product catalog.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  products:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                additionalProperties: true
+        "401":
+          description: Unauthorized or wrong app context.
+      x-observed:
+        notes:
+          - appId and app-id both worked for app 96860; app_id returned 401 in a direct page-context check.
+
+  /games/api/sdk/v1/purchases/app/purchased:
+    get:
+      tags: [SDK Purchases]
+      operationId: getSdkPurchasedProductsV1
+      summary: Read current user's purchased products for an app.
+      parameters:
+        - $ref: "#/components/parameters/AppIdAny"
+        - $ref: "#/components/parameters/Lang"
+      responses:
+        "200":
+          description: Purchased products list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object, additionalProperties: true }
+
+  /games/api/sdk/v1/purchases/app/buy:
+    post:
+      tags: [SDK Purchases, Mutating]
+      operationId: buySdkAppProductV1
+      summary: Start app-product purchase.
+      responses:
+        "200":
+          description: Purchase flow started.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/purchases/app/consume:
+    post:
+      tags: [SDK Purchases, Mutating]
+      operationId: consumeSdkAppPurchaseV1
+      summary: Consume app purchase.
+      responses:
+        "200":
+          description: Purchase consumed.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/player:
+    get:
+      tags: [SDK Player]
+      operationId: getSdkPlayerV1
+      summary: Read SDK player profile for current app.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+      responses:
+        "200":
+          description: SDK player.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SdkPlayer"
+
+  /games/api/sdk/v1/player/data:
+    get:
+      tags: [SDK Player]
+      operationId: getSdkPlayerDataV1
+      summary: Read player save data.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+      responses:
+        "200":
+          description: Player data object.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "401":
+          description: Unauthorized.
+    post:
+      tags: [SDK Player, Mutating]
+      operationId: setSdkPlayerDataV1
+      summary: Set player save data.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Data saved.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/player/data-signed:
+    get:
+      tags: [SDK Player]
+      operationId: getSdkPlayerDataSignedV1
+      summary: Read signed player save data.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+      responses:
+        "200":
+          description: Signed player data payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignedPayload"
+
+  /games/api/sdk/v1/player/stats:
+    get:
+      tags: [SDK Player]
+      operationId: getSdkPlayerStatsV1
+      summary: Read player stats.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+      responses:
+        "200":
+          description: Player stats object.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    post:
+      tags: [SDK Player, Mutating]
+      operationId: setSdkPlayerStatsV1
+      summary: Set player stats.
+      responses:
+        "200":
+          description: Stats saved.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/player/stats-signed:
+    get:
+      tags: [SDK Player]
+      operationId: getSdkPlayerStatsSignedV1
+      summary: Read signed player stats.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+      responses:
+        "200":
+          description: Signed player stats payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignedPayload"
+
+  /games/api/sdk/v1/player/stats/increment:
+    post:
+      tags: [SDK Player, Mutating]
+      operationId: incrementSdkPlayerStatsV1
+      summary: Increment player stats.
+      responses:
+        "200":
+          description: Stats incremented.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/player/stats/increment-signed:
+    post:
+      tags: [SDK Player, Mutating]
+      operationId: incrementSdkPlayerStatsSignedV1
+      summary: Increment player stats with signed response.
+      responses:
+        "200":
+          description: Stats incremented.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/player-ids-per-game:
+    get:
+      tags: [SDK Player]
+      operationId: getPlayerIdsPerGameV1
+      summary: Read per-game player ids for current account.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+      responses:
+        "200":
+          description: Per-game player id list. Contains identifiers; redact logs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    appID: { type: integer }
+                    userID: { type: string }
+                  additionalProperties: true
+      x-sensitive-fields: [userID]
+
+  /games/api/sdk/v1/player/private-info/:
+    post:
+      tags: [SDK Player, Mutating]
+      operationId: postSdkPlayerPrivateInfoV1
+      summary: Request or update player private info permissions.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+      responses:
+        "200":
+          description: Permission flow result.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/player/scope-permissions/:
+    post:
+      tags: [SDK Player, Mutating]
+      operationId: postSdkPlayerScopePermissionsV1
+      summary: Request player scope permissions.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+      responses:
+        "200":
+          description: Permission flow result.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/player/recovery-code:
+    get:
+      tags: [SDK Player]
+      operationId: getSdkPlayerRecoveryCodeV1
+      summary: Read player recovery code.
+      responses:
+        "200":
+          description: Recovery code payload.
+      x-sensitive: true
+      x-executed: false
+      x-notes:
+        - Deliberately not queried because it is recovery material.
+
+  /games/api/sdk/v1/bonuses/app/items:
+    get:
+      tags: [SDK Bonuses]
+      operationId: getSdkBonusItemsV1
+      summary: Read app bonus catalog.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+        - $ref: "#/components/parameters/Draft"
+        - $ref: "#/components/parameters/ReferrerClid"
+      responses:
+        "200":
+          description: Bonus catalog.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bonuses:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                additionalProperties: true
+
+  /games/api/sdk/v1/bonuses/app/provided:
+    get:
+      tags: [SDK Bonuses]
+      operationId: getSdkProvidedBonusesV1
+      summary: Read provided bonuses for current player.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+      responses:
+        "200":
+          description: Provided bonus list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object, additionalProperties: true }
+
+  /games/api/sdk/v1/bonuses/app/provided-signed:
+    get:
+      tags: [SDK Bonuses]
+      operationId: getSdkProvidedBonusesSignedV1
+      summary: Read signed provided bonuses.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+      responses:
+        "200":
+          description: Signed provided-bonuses payload.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignedPayload"
+
+  /games/api/sdk/v1/bonuses/app/consume:
+    post:
+      tags: [SDK Bonuses, Mutating]
+      operationId: consumeSdkBonusV1
+      summary: Consume a bonus.
+      responses:
+        "200":
+          description: Bonus consumed.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/bonuses/app/consume-signed:
+    post:
+      tags: [SDK Bonuses, Mutating]
+      operationId: consumeSdkBonusSignedV1
+      summary: Consume a bonus and return signed payload.
+      responses:
+        "200":
+          description: Bonus consumed.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/developer/games/available:
+    get:
+      tags: [SDK Helpers]
+      operationId: getAvailableDeveloperGamesV1
+      summary: Read SDK-available games by developer.
+      parameters:
+        - $ref: "#/components/parameters/Platform"
+        - name: standalone
+          in: query
+          schema: { type: boolean }
+        - name: developer_id
+          in: query
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/Lang"
+      responses:
+        "200":
+          description: Available developer games.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  developerURL: { type: string }
+                  games:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AvailableGame"
+                additionalProperties: true
+
+  /games/api/sdk/v1/game/available:
+    get:
+      tags: [SDK Helpers]
+      operationId: getAvailableGameV1
+      summary: Read SDK availability for one game.
+      parameters:
+        - $ref: "#/components/parameters/Platform"
+        - name: standalone
+          in: query
+          schema: { type: boolean }
+        - name: app_id
+          in: query
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/Lang"
+      responses:
+        "200":
+          description: Availability payload.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  game:
+                    $ref: "#/components/schemas/AvailableGame"
+                  isAvailable: { type: boolean }
+                additionalProperties: true
+
+  /games/api/sdk/v1/leaderboard/entries:
+    get:
+      tags: [SDK Leaderboards]
+      operationId: getSdkLeaderboardEntriesV1
+      summary: Read SDK leaderboard entries for current app.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+        - $ref: "#/components/parameters/Draft"
+        - $ref: "#/components/parameters/ReferrerClid"
+        - $ref: "#/components/parameters/LeaderboardName"
+        - name: include_user
+          in: query
+          schema: { type: boolean }
+        - name: quantity_around
+          in: query
+          schema: { type: integer }
+        - name: quantity_top
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: SDK leaderboard entries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardEntries"
+        "404":
+          description: Leaderboard or current app context not found.
+        "410":
+          description: Leaderboard unavailable for current app context.
+      x-rate-limit-observed:
+        requests: 20
+        per: PT5M
+        progressiveMultiplier: 2
+
+  /games/api/sdk/v1/leaderboard/player-entry:
+    get:
+      tags: [SDK Leaderboards]
+      operationId: getSdkLeaderboardPlayerEntryV1
+      summary: Read current player's SDK leaderboard entry.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+        - $ref: "#/components/parameters/Draft"
+        - $ref: "#/components/parameters/ReferrerClid"
+        - $ref: "#/components/parameters/LeaderboardName"
+      responses:
+        "200":
+          description: Player entry.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardEntry"
+        "204":
+          description: Current player is not present in the leaderboard.
+        "404":
+          description: Leaderboard or current app context not found.
+        "410":
+          description: Leaderboard unavailable for current app context.
+      x-observed:
+        status: [204, 404, 410]
+        notes:
+          - App 96247 returned 204 for name=leaderboardfoosball when the current player was not present.
+          - Cross-app direct calls returned 404 or 410.
+      x-rate-limit-observed:
+        requests: 60
+        per: PT5M
+        progressiveMultiplier: 2
+
+  /games/api/sdk/v1/leaderboard/descr:
+    get:
+      tags: [SDK Leaderboards]
+      operationId: getSdkLeaderboardDescriptionV1
+      summary: Read SDK leaderboard description.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+        - $ref: "#/components/parameters/LeaderboardName"
+      responses:
+        "200":
+          description: Leaderboard descriptor.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardDescriptor"
+
+  /games/api/sdk/v1/leaderboard/stat:
+    get:
+      tags: [SDK Leaderboards]
+      operationId: getSdkLeaderboardStatV1
+      summary: Read SDK leaderboard stats.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+        - $ref: "#/components/parameters/LeaderboardName"
+      responses:
+        "200":
+          description: Leaderboard stats.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LooseObject"
+
+  /games/api/sdk/v1/leaderboard/score:
+    post:
+      tags: [SDK Leaderboards, Mutating]
+      operationId: setSdkLeaderboardScoreV1
+      summary: Write current player's leaderboard score.
+      responses:
+        "200":
+          description: Score saved.
+      x-mutating: true
+      x-executed: false
+      x-rate-limit-observed:
+        requests: 60
+        per: PT1M
+        progressiveMultiplier: 2
+
+  /games/api/catalogue/v2/leaderboards_list:
+    get:
+      tags: [SDK Leaderboards]
+      operationId: getCatalogueLeaderboardsListV2
+      summary: Read public leaderboard descriptors.
+      parameters:
+        - name: appId
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: includeUser
+          in: query
+          schema: { type: boolean }
+        - name: onlyDefault
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: Public leaderboard descriptors.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  leaderboards:
+                    oneOf:
+                      - type: "null"
+                      - type: array
+                        items:
+                          $ref: "#/components/schemas/LeaderboardDescriptor"
+                additionalProperties: true
+
+  /games/api/catalogue/v2/leaderboard:
+    get:
+      tags: [SDK Leaderboards]
+      operationId: getCatalogueLeaderboardV2
+      summary: Read public leaderboard entries.
+      parameters:
+        - name: appId
+          in: query
+          required: true
+          schema: { type: integer }
+        - name: includeUser
+          in: query
+          schema: { type: boolean }
+        - $ref: "#/components/parameters/LeaderboardName"
+        - name: quantityAround
+          in: query
+          schema: { type: integer }
+        - name: quantityTop
+          in: query
+          schema: { type: integer }
+        - name: groupId
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Public leaderboard entries.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardEntries"
+
+  /games/api/sdk/v1/achievements:
+    get:
+      tags: [SDK Achievements]
+      operationId: getSdkAchievementsV1
+      summary: Read achievements by status or slug.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [all_local, in_progress, completed]
+        - name: slug
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: Achievement list or one achievement.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                additionalProperties: true
+        "400":
+          description: Invalid status, missing status/slug, or unknown slug.
+      x-observed:
+        notes:
+          - Exactly one of status or slug is expected.
+          - Valid statuses observed: all_local, in_progress, completed.
+
+  /games/api/sdk/v1/user/activity-info/:
+    get:
+      tags: [SDK Helpers]
+      operationId: getSdkUserActivityInfoV1
+      summary: Read user's app activity info.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+      responses:
+        "200":
+          description: Activity info.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lastPlayedTS: { type: integer }
+                additionalProperties: true
+
+  /games/api/offerwall/v1/playerid:
+    get:
+      tags: [SDK Helpers]
+      operationId: getOfferwallPlayerIdV1
+      summary: Read offerwall player id.
+      responses:
+        "200":
+          description: Offerwall player id. Redact in logs.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  playerId: { type: string }
+                additionalProperties: true
+      x-sensitive-fields: [playerId]
+
+  /games/api/sdk/v1/special-offers/v1/status:
+    get:
+      tags: [SDK Helpers]
+      operationId: getSdkSpecialOfferStatusV1
+      summary: Read special-offer status.
+      parameters:
+        - name: offer_id
+          in: query
+          required: true
+          schema: { type: integer }
+        - $ref: "#/components/parameters/Lang"
+      responses:
+        "200":
+          description: Offer status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LooseObject"
+        "404":
+          description: Offer not found.
+      x-observed:
+        status: [404]
+        notes:
+          - A sampled catalogue promo id was not a valid special-offer id.
+
+  /games/api/sdk/v1/special-offers/v1/give:
+    post:
+      tags: [SDK Helpers, Mutating]
+      operationId: giveSdkSpecialOfferV1
+      summary: Grant special offer.
+      responses:
+        "200":
+          description: Offer granted.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/multiplayer:
+    get:
+      tags: [SDK Helpers]
+      operationId: getSdkMultiplayerSessionsV1
+      summary: Pull multiplayer sessions.
+      parameters:
+        - $ref: "#/components/parameters/AppIdDash"
+      responses:
+        "200":
+          description: Multiplayer sessions.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LooseObject"
+        "400":
+          description: Missing session-specific params.
+      x-observed:
+        status: [400]
+        notes:
+          - Request with only app-id=96860 returned 400.
+    post:
+      tags: [SDK Helpers, Mutating]
+      operationId: postSdkMultiplayerV1
+      summary: Create or update multiplayer session.
+      parameters:
+        - name: X-Games-Session-Hash
+          in: header
+          schema: { type: string }
+      responses:
+        "200":
+          description: Multiplayer state updated.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/varioqub/get_flags:
+    post:
+      tags: [SDK Helpers]
+      operationId: postSdkVarioqubFlagsV1
+      summary: Read experiment flags.
+      responses:
+        "200":
+          description: Flags response.
+      x-executed: false
+
+  /games/api/sdk/v1/notifications/set_allow/:
+    post:
+      tags: [SDK Helpers, Mutating]
+      operationId: postSdkNotificationsSetAllowV1
+      summary: Set notification permission and token data.
+      responses:
+        "200":
+          description: Permission state updated.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/internal/game_opened:
+    post:
+      tags: [SDK Helpers, Mutating]
+      operationId: postSdkInternalGameOpenedV1
+      summary: Mark game opened.
+      responses:
+        "200":
+          description: Activity marked.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/game-called-game-ready-api:
+    post:
+      tags: [SDK Helpers, Mutating]
+      operationId: postSdkGameReadyApiCalledV1
+      summary: Mark SDK game-ready API call.
+      responses:
+        "200":
+          description: Activity marked.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/game-launched:
+    post:
+      tags: [SDK Helpers, Mutating]
+      operationId: postSdkGameLaunchedV1
+      summary: Mark game launched.
+      responses:
+        "200":
+          description: Activity marked.
+      x-mutating: true
+      x-executed: false
+
+  /games/api/sdk/v1/currency/activity/daily:
+    post:
+      tags: [SDK Purchases, Mutating]
+      operationId: postSdkCurrencyDailyActivityV1
+      summary: Mark daily currency activity.
+      responses:
+        "204":
+          description: Activity marked.
+      x-mutating: true
+      x-observed:
+        status: [204]
+        notes:
+          - Normal app launch made this call; do not use for documentation probes.
+
+  /games/api/aichat/v1/process:
+    post:
+      tags: [SDK Helpers, Mutating]
+      operationId: postAiChatProcessV1
+      summary: Process AI chat request.
+      responses:
+        "200":
+          description: Chat response.
+      x-executed: false
+
+  /games/api/main-page-selector/v1:
+    post:
+      tags: [Catalogue]
+      operationId: postMainPageSelectorV1
+      summary: Select main-page variant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pageType: { type: string }
+              additionalProperties: true
+      responses:
+        "200":
+          description: Main-page selector response.
+      x-executed: false
+
+  /games/api/check-clid:
+    post:
+      tags: [SDK Helpers]
+      operationId: postCheckClid
+      summary: Validate clid.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clid]
+              properties:
+                clid: { type: string }
+              additionalProperties: true
+      responses:
+        "200":
+          description: Clid check response.
+      x-executed: false
+
+  /games/api/coupons/v1/validate:
+    post:
+      tags: [SDK Helpers]
+      operationId: postCouponValidateV1
+      summary: Validate coupon.
+      responses:
+        "200":
+          description: Coupon validation response.
+      x-executed: false
+
+  /games/api/coupons/v1/reserve:
+    post:
+      tags: [SDK Helpers, Mutating]
+      operationId: postCouponReserveV1
+      summary: Reserve coupon.
+      responses:
+        "200":
+          description: Coupon reserved.
+      x-mutating: true
+      x-executed: false
+
+components:
+  parameters:
+    Lang:
+      name: lang
+      in: query
+      schema:
+        type: string
+        examples: [ru]
+    Platform:
+      name: platform
+      in: query
+      schema:
+        type: string
+        examples: [desktop_other, android_other]
+    WithPromos:
+      name: with_promos
+      in: query
+      schema: { type: boolean }
+    WithRecentGames:
+      name: with_recent_games
+      in: query
+      schema: { type: boolean }
+    GamesCount:
+      name: games_count
+      in: query
+      schema: { type: integer, minimum: 1 }
+      examples:
+        default: { value: 24 }
+    PageId:
+      name: page_id
+      in: query
+      schema: { type: string }
+    ClientWidth:
+      name: client_width
+      in: query
+      schema: { type: integer }
+    ClientHeight:
+      name: client_height
+      in: query
+      schema: { type: integer }
+    Pfid:
+      name: pfid
+      in: query
+      schema: { type: string }
+    Query:
+      name: query
+      in: query
+      required: true
+      schema: { type: string }
+    AppIDCamel:
+      name: appID
+      in: query
+      required: true
+      schema: { type: integer }
+    AppIdDash:
+      name: app-id
+      in: query
+      required: true
+      schema: { type: integer }
+    AppIdAny:
+      name: appId
+      in: query
+      required: true
+      description: appId observed; app-id was also accepted for some SDK app-purchase endpoints.
+      schema: { type: integer }
+    Draft:
+      name: draft
+      in: query
+      schema: { type: boolean }
+    ReferrerClid:
+      name: referrerClid
+      in: query
+      schema: { type: string }
+    LeaderboardName:
+      name: name
+      in: query
+      required: true
+      schema: { type: string }
+
+  requestBodies:
+    SubscriptionType:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [type]
+            properties:
+              type: { type: string }
+            additionalProperties: true
+    AppIDBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [appID]
+            properties:
+              appID: { type: integer }
+            additionalProperties: true
+
+  responses:
+    CurrencyBalance:
+      description: Currency balance.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              value: { type: integer }
+              pure_bonus: { type: integer }
+            additionalProperties: true
+    CurrencyProducts:
+      description: Currency products.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    active: { type: boolean }
+                    extraInfo: { type: object, additionalProperties: true }
+                    generated: { type: boolean }
+                    id: { type: string }
+                    productId: { type: string }
+                    single: { type: boolean }
+                  additionalProperties: true
+            additionalProperties: true
+
+  schemas:
+    LooseObject:
+      type: object
+      additionalProperties: true
+
+    ErrorResponse:
+      type: object
+      properties:
+        code: { type: string }
+        description: { type: string }
+        message: { type: string }
+        paramName: { type: string }
+      additionalProperties: true
+
+    SignedPayload:
+      type: object
+      properties:
+        signature: { type: string }
+        data: { type: object, additionalProperties: true }
+      additionalProperties: true
+      x-sensitive-fields: [signature]
+
+    FeedResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GameCard"
+        feed:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedBlock"
+        gamesRequestId: { type: string }
+        pageID: { type: string }
+        pageInfo: { type: object, additionalProperties: true }
+        totalPages: { type: integer }
+      additionalProperties: true
+
+    FeedBlock:
+      type: object
+      properties:
+        isFromFirstPage: { type: boolean }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GameCard"
+        requestId: { type: string }
+        size: { type: integer }
+        type: { type: string }
+      additionalProperties: true
+
+    GameCard:
+      type: object
+      properties:
+        advBlocks: { type: object, additionalProperties: true }
+        advBlocksByPlatforms: { type: object, additionalProperties: true }
+        advBlocksMap: { type: object, additionalProperties: true }
+        advUsedBlocks: { type: object, additionalProperties: true }
+        appID: { type: integer }
+        appSlug: { type: string }
+        appVersion: { type: string }
+        askedPurchasesInfoPermission: { type: boolean }
+        badge: { type: object, additionalProperties: true }
+        categoriesNames:
+          type: array
+          items: { type: string }
+        categoryIDs:
+          type: array
+          items: { type: integer }
+        counters: { type: object, additionalProperties: true }
+        description: { type: string }
+        developer: { type: object, additionalProperties: true }
+        extraFeatures: { type: object, additionalProperties: true }
+        features: { type: object, additionalProperties: true }
+        firstPublished: { type: integer }
+        generatedTitle: { type: string }
+        gqRating: { type: number }
+        guard: { type: object, additionalProperties: true }
+        instruction: { type: string }
+        media: { type: object, additionalProperties: true }
+        minLoadTime: { type: number }
+        publishedTime: { type: integer }
+        rating: { type: number }
+        ratingCount: { type: integer }
+        seoDescription: { type: string }
+        seoTitle: { type: string }
+        settings: { type: object, additionalProperties: true }
+        shareImage: { type: string }
+        tagIDs:
+          type: array
+          items: { type: integer }
+        title: { type: string }
+        url: { type: string }
+      additionalProperties: true
+
+    Promo:
+      type: object
+      properties:
+        appID: { type: integer }
+        description: { type: string }
+        endTime: { type: integer }
+        id: { type: integer }
+        images: { type: object, additionalProperties: true }
+        startTime: { type: integer }
+        title: { type: string }
+      additionalProperties: true
+
+    GetGameRequestCamel:
+      type: object
+      required: [appID, format]
+      properties:
+        appID: { type: integer }
+        draft: { type: boolean }
+        experimental: { type: boolean }
+        format:
+          type: string
+          examples: [app]
+        lang: { type: string }
+        pfid: { type: string }
+      additionalProperties: true
+
+    GetGameRequestSnake:
+      type: object
+      required: [app_id, format]
+      properties:
+        app_id: { type: integer }
+        format:
+          type: string
+          examples: [app]
+        platform: { type: string }
+        lang: { type: string }
+      additionalProperties: true
+
+    Review:
+      type: object
+      properties:
+        author: { type: object, additionalProperties: true }
+        id: { type: string }
+        meta: { type: object, additionalProperties: true }
+        object: { type: object, additionalProperties: true }
+        rating: { type: number }
+        rating10: { type: integer }
+        reactions: { type: object, additionalProperties: true }
+        text: { type: string }
+        textLanguage: { type: string }
+        textLanguageName: { type: string }
+        textTranslations: { type: object, additionalProperties: true }
+        time: { type: integer }
+        title: { type: string }
+        type: { type: string }
+      additionalProperties: true
+
+    SdkPlayer:
+      type: object
+      properties:
+        avatarIdHash: { type: string }
+        hasPremium: { type: boolean }
+        id: { type: string }
+        lang: { type: string }
+        payingStatus: { type: string }
+        publicName: { type: string }
+        scopePermissions:
+          type: object
+          properties:
+            avatar: { type: boolean }
+            public_name: { type: boolean }
+            purchases_info: { type: boolean }
+          additionalProperties: true
+        uniqueID: { type: string }
+      additionalProperties: true
+      x-sensitive-fields: [id, uniqueID, publicName, avatarIdHash]
+
+    AvailableGame:
+      type: object
+      properties:
+        appID: { type: integer }
+        coverURL: { type: string }
+        iconURL: { type: string }
+        title: { type: string }
+        url: { type: string }
+      additionalProperties: true
+
+    LeaderboardDescriptor:
+      type: object
+      properties:
+        name: { type: string }
+        appID: { type: integer }
+        title: { type: string }
+        description: { type: object, additionalProperties: true }
+        default: { type: boolean }
+      additionalProperties: true
+
+    LeaderboardEntries:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+        leaderboard:
+          $ref: "#/components/schemas/LeaderboardDescriptor"
+        ranges:
+          type: array
+          items: { type: object, additionalProperties: true }
+        userRank: { type: integer }
+      additionalProperties: true
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        extraData: { type: string }
+        formattedScore: { type: string }
+        player:
+          type: object
+          properties:
+            avatarID: { type: string }
+            publicName: { type: string }
+          additionalProperties: true
+        rank: { type: integer }
+        score: { type: number }
+      additionalProperties: true

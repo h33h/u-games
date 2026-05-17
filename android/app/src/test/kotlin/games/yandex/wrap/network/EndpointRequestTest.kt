@@ -11,6 +11,7 @@ class EndpointRequestTest {
         val request = FeedRequest(
             gamesPerPage = 12,
             pageId = "page-2",
+            tab = null,
         )
 
         assertEquals(HttpMethod.Get, request.method)
@@ -31,17 +32,32 @@ class EndpointRequestTest {
     }
 
     @Test
-    fun searchRequestKeepsPaginationParams() {
+    fun feedRequestPreservesCategoryTab() {
+        val request = FeedRequest(
+            gamesPerPage = 12,
+            pageId = "page-2",
+            tab = "puzzles",
+        )
+
+        assertEquals("puzzles", request.query["tab"])
+    }
+
+    @Test
+    fun searchRequestUsesCurrentV3EndpointAndLayoutParams() {
         val request = SearchRequest(
             queryValue = "arcade",
             pageId = "next",
             gamesPerPage = 18,
         )
 
-        assertEquals("https://yandex.ru/games/api/catalogue/v2/search/", request.uri.toString())
+        assertEquals("https://yandex.ru/games/api/catalogue/v3/search/", request.uri.toString())
         assertEquals("arcade", request.query["query"])
         assertEquals("next", request.query["page_id"])
         assertEquals("18", request.query["games_count"])
+        assertEquals("true", request.query["with_promos"])
+        assertNotNull(request.query["client_width"])
+        assertNotNull(request.query["client_height"])
+        assertNotNull(request.query["found_width"])
         assertFalse(request.query.containsKey("lang"))
         assertEquals("android_other", request.query["platform"])
     }
@@ -60,11 +76,11 @@ class EndpointRequestTest {
     }
 
     @Test
-    fun userInfoRequestDoesNotOwnCookieHeader() {
+    fun userInfoRequestUsesPassportProfileEndpointAndDoesNotOwnCookieHeader() {
         val request = UserInfoRequest()
 
         assertFalse(request.headers.containsKey("Cookie"))
-        assertEquals("https://yandex.ru/games/api/catalogue/v2/user_info", request.uri.toString())
+        assertEquals("https://yandex.ru/games/api/user/passport", request.uri.toString())
         assertFalse(request.query.containsKey("lang"))
     }
 }

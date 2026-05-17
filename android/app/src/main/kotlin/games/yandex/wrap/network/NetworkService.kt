@@ -2,6 +2,8 @@ package games.yandex.wrap.network
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -44,16 +46,27 @@ class NetworkService(
     }
 
     private suspend fun makeRequest(request: Request<*>): JsonElement {
-        return when (request.method) {
+        val response = when (request.method) {
             HttpMethod.Get -> ktor.get(request.uri.toString()) {
                 applyRequest(request)
-            }.body()
+            }
             HttpMethod.Post -> ktor.post(request.uri.toString()) {
                 applyRequest(request)
                 contentType(ContentType.parse(request.contentType))
                 request.jsonBody?.let { setBody(it) }
-            }.body()
+            }
         }
+        response.throwIfNotSuccessful()
+        return response.body()
+    }
+
+    private suspend fun HttpResponse.throwIfNotSuccessful() {
+        val statusCode = status.value
+        if (statusCode in 200..299) return
+        throw NetworkStatusException(
+            statusCode = statusCode,
+            responseBodySnippet = bodyAsText().take(512),
+        )
     }
 
     private suspend fun exponentialBackoff(beforeAttempt: Int) {

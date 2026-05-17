@@ -85,11 +85,12 @@ class BrowseViewModel(
         val pageId = current.nextPageId ?: return
         val mode = current.mode
         val query = current.searchQuery
+        val tab = current.selectedCategory?.name
         _state.update { it.copy(isLoadingMore = true) }
         viewModelScope.launch {
             val result = runCatching {
                 if (mode == BrowseMode.Search) catalogRepository.searchPaginated(query, pageId)
-                else catalogRepository.nextFeedPage(pageId, pageSize)
+                else catalogRepository.nextFeedPage(pageId, pageSize, tab)
             }
             _state.update { state ->
                 result.fold(

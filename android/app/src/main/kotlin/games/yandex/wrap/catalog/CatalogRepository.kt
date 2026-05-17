@@ -21,8 +21,8 @@ class CatalogRepository(
         return page
     }
 
-    suspend fun nextFeedPage(pageId: String, gamesPerPage: Int = 24): FeedPage =
-        api.nextFeedPage(pageId, gamesPerPage)
+    suspend fun nextFeedPage(pageId: String, gamesPerPage: Int = 24, tab: String? = null): FeedPage =
+        api.nextFeedPage(pageId, gamesPerPage, tab)
 
     /**
      * Block-aware first page for Home. Caches the deduped flat list so the

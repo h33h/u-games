@@ -1,6 +1,7 @@
 package games.yandex.wrap.catalog
 
 import games.yandex.wrap.utils.Constants
+import games.yandex.wrap.network.NetworkStatusException
 import games.yandex.wrap.network.isTransientNetworkError
 import games.yandex.wrap.util.dedupeBy
 import java.io.IOException
@@ -32,6 +33,9 @@ class ArchitectureCleanupTest {
     @Test
     fun throwableExtensionClassifiesTransientNetworkErrors() {
         assertTrue(IOException("network").isTransientNetworkError)
+        assertTrue(NetworkStatusException(503, "busy").isTransientNetworkError)
+        assertTrue(NetworkStatusException(429, "rate limit").isTransientNetworkError)
+        assertFalse(NetworkStatusException(404, "missing").isTransientNetworkError)
         assertFalse(IllegalStateException("decode").isTransientNetworkError)
     }
 

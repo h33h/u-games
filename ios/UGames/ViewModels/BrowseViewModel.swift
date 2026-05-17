@@ -59,6 +59,7 @@ final class BrowseViewModel: ObservableObject {
         guard hasMore, !isLoading, !isLoadingMore, let pageId = nextPageId else { return }
         let modeSnapshot = mode
         let querySnapshot = searchQuery
+        let tabSnapshot = selectedCategory?.name
         isLoadingMore = true
         loadTask = Task { [weak self] in
             guard let self = self else { return }
@@ -68,7 +69,7 @@ final class BrowseViewModel: ObservableObject {
                 if modeSnapshot == .search {
                     page = try await self.service.fetchSearchPaginated(query: querySnapshot, pageId: pageId)
                 } else {
-                    page = try await self.service.fetchFeed(pageId: pageId)
+                    page = try await self.service.fetchFeed(pageId: pageId, tab: tabSnapshot)
                 }
                 await MainActor.run {
                     self.games.appendUnique(contentsOf: page.games) { $0.appId }

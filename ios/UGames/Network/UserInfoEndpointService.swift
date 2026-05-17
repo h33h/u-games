@@ -11,5 +11,5 @@ struct UserInfoEndpointService {
 struct UserInfoRequest: Request {
     typealias DTO = ProfileResponseDTO
 
-    var path: String { "/games/api/catalogue/v2/user_info" }
+    var path: String { "/games/api/user/passport" }
 }

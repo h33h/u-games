@@ -19,14 +19,18 @@ struct SearchRequest: Request {
     let pageId: String?
     let gamesPerPage: Int
 
-    var path: String { "/games/api/catalogue/v2/search/" }
+    var path: String { "/games/api/catalogue/v3/search/" }
 
     var queryItems: [URLQueryItem] {
         queryItems([
             ("query", query),
             ("platform", "ios"),
+            ("with_promos", "true"),
             ("games_count", String(gamesPerPage)),
             ("page_id", pageId),
+            ("client_width", String(Int(Constants.UI.screenSize.width.rounded()))),
+            ("client_height", String(Int(Constants.UI.screenSize.height.rounded()))),
+            ("found_width", String(Int(Constants.UI.screenSize.width.rounded()))),
         ])
     }
 }

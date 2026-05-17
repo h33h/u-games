@@ -5,12 +5,14 @@ struct FeedEndpointService {
 
     func feed(
         gamesPerPage: Int = 24,
-        pageId: String? = nil
+        pageId: String? = nil,
+        tab: String? = nil
     ) async throws -> FeedResponseDTO {
         try await networkService.execute(
             FeedRequest(
                 gamesPerPage: gamesPerPage,
-                pageId: pageId
+                pageId: pageId,
+                tab: tab
             )
         )
     }
@@ -22,6 +24,7 @@ struct FeedRequest: Request {
 
     let gamesPerPage: Int
     let pageId: String?
+    let tab: String?
 
     var path: String { "/games/api/catalogue/v2/feed/" }
 
@@ -35,6 +38,7 @@ struct FeedRequest: Request {
             ("client_width", String(Int(Constants.UI.screenSize.width.rounded()))),
             ("client_height", String(Int(Constants.UI.screenSize.height.rounded()))),
             ("page_id", pageId),
+            ("tab", tab),
         ])
     }
 }

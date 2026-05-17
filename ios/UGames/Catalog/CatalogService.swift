@@ -140,8 +140,8 @@ final class CatalogService: ObservableObject {
         try await remote.fetchCategories()
     }
 
-    func fetchFeed(pageId: String?, gamesPerPage: Int = 24) async throws -> FeedPage {
-        try await remote.fetchFeed(pageId: pageId, gamesPerPage: gamesPerPage)
+    func fetchFeed(pageId: String?, gamesPerPage: Int = 24, tab: String? = nil) async throws -> FeedPage {
+        try await remote.fetchFeed(pageId: pageId, gamesPerPage: gamesPerPage, tab: tab)
     }
 
     func fetchAppDetail(appId: Int64) async -> AppDetail? {

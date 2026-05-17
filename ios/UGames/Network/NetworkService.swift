@@ -26,7 +26,8 @@ struct NetworkService {
         for attempt in 0..<totalAttempts {
             try await exponentialBackoff(beforeAttempt: attempt)
             do {
-                let (data, _) = try await session.data(for: urlRequest)
+                let (data, response) = try await session.data(for: urlRequest)
+                try validate(response: response, data: data)
                 return try decoder.decode(T.DTO.self, from: data)
             } catch is CancellationError {
                 throw CancellationError()
@@ -60,6 +61,14 @@ struct NetworkService {
         }
         urlRequest.httpBody = request.body
         return urlRequest
+    }
+
+    private func validate(response: URLResponse, data: Data) throws {
+        guard let http = response as? HTTPURLResponse else { return }
+        guard (200...299).contains(http.statusCode) else {
+            let snippet = String(decoding: data.prefix(512), as: UTF8.self)
+            throw NetworkError.httpStatus(statusCode: http.statusCode, bodySnippet: snippet)
+        }
     }
 
     private func exponentialBackoff(beforeAttempt attempt: Int) async throws {

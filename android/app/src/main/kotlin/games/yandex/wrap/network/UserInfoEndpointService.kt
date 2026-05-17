@@ -13,6 +13,6 @@ class UserInfoEndpointService(
 }
 
 class UserInfoRequest : Request<ProfileResponseDto> {
-    override val path = "/games/api/catalogue/v2/user_info"
+    override val path = "/games/api/user/passport"
     override val serializer = ProfileResponseDto.serializer()
 }

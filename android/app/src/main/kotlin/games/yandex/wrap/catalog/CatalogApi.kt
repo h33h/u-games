@@ -33,6 +33,7 @@ class CatalogApi(
         tab: String? = null,
     ): FeedWithBlocks = feedEndpoint.feed(
         gamesPerPage = gamesPerPage,
+        tab = tab,
     ).toFeedWithBlocks()
 
     suspend fun searchPaginated(
@@ -54,17 +55,21 @@ class CatalogApi(
     suspend fun nextFeedPage(
         pageId: String,
         gamesPerPage: Int = 24,
+        tab: String? = null,
     ): FeedPage = fetchFeed(
         pageId = pageId,
         gamesPerPage = gamesPerPage,
+        tab = tab,
     )
 
     private suspend fun fetchFeed(
         pageId: String?,
         gamesPerPage: Int,
+        tab: String? = null,
     ): FeedPage = feedEndpoint.feed(
         gamesPerPage = gamesPerPage,
         pageId = pageId,
+        tab = tab,
     ).toFeedPage()
 
     suspend fun appDetail(appId: Long): AppDetail? =

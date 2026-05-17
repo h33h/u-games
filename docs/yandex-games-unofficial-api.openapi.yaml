@@ -318,19 +318,22 @@ paths:
         content:
           application/json:
             schema:
-              oneOf:
-                - $ref: "#/components/schemas/GetGameRequestCamel"
-                - $ref: "#/components/schemas/GetGameRequestSnake"
+              $ref: "#/components/schemas/GetGameRequestCamel"
       responses:
         "200":
           description: Game detail payload.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GameCard"
+                $ref: "#/components/schemas/GetGameResponse"
+        "400":
+          description: Missing or invalid required body fields.
       x-observed:
+        status: [200, 400]
         notes:
-          - Frontend bundle contains both appID and app_id call styles.
+          - Live check on 2026-05-17 accepted {"appID":96860,"format":"app"}.
+          - Live check on 2026-05-17 returned 400 for {"app_id":96860,"format":"app","platform":"android_other"}.
+          - Response includes sdkAuth; do not persist it.
 
   /games/api/catalogue/v2/get_games:
     post:
@@ -534,7 +537,7 @@ paths:
     get:
       tags: [User]
       operationId: getCatalogueUserInfoV2
-      summary: Read compact user/account state.
+      summary: Read catalogue subscriptions and optional settings.
       parameters:
         - name: settings
           in: query
@@ -550,7 +553,18 @@ paths:
                   subscriptions:
                     type: object
                     additionalProperties: true
+                  settings:
+                    type: object
+                    additionalProperties: true
                 additionalProperties: true
+        "401":
+          description: Authentication cookie missing or rejected.
+      x-observed:
+        status: [200, 401]
+        notes:
+          - In an authenticated browser session this returned subscriptions only.
+          - With settings=true this returned subscriptions and settings.ui.theme_type.
+          - This endpoint did not return profile fields such as uid, login, or displayName.
 
   /games/api/user/passport:
     get:
@@ -584,6 +598,12 @@ paths:
                   yaplusEnabled: { type: boolean }
                   yaplusIsAvailable: { type: boolean }
                 additionalProperties: true
+      x-observed:
+        status: [200]
+        notes:
+          - Anonymous requests can still return 200 with empty uid/login/displayName.
+          - Treat the user as authorized only when uid is non-empty.
+          - Avatar image URLs can be built as avatarsOrigin + /get-yapic/{avatarId}/islands-200.
       x-sensitive-fields: [email, fio, login, uid, yandexoid, displayName]
 
   /games/api/user-notifications/v1:
@@ -2012,6 +2032,7 @@ components:
 
     GetGameRequestSnake:
       type: object
+      deprecated: true
       required: [app_id, format]
       properties:
         app_id: { type: integer }
@@ -2021,6 +2042,16 @@ components:
         platform: { type: string }
         lang: { type: string }
       additionalProperties: true
+
+    GetGameResponse:
+      type: object
+      properties:
+        game:
+          $ref: "#/components/schemas/GameCard"
+        sdkAuth:
+          type: string
+      additionalProperties: true
+      x-sensitive-fields: [sdkAuth]
 
     Review:
       type: object

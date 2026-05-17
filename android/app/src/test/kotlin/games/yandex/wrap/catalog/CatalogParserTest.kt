@@ -89,6 +89,34 @@ class CatalogParserTest {
     }
 
     @Test
+    fun feedPageFallsBackToTopLevelItemsAndPageId() {
+        val root = json.parseToJsonElement(
+            """
+            {
+              "items": [
+                {
+                  "appID": 10,
+                  "title": "Fallback Game",
+                  "rating": 4.2,
+                  "ratingCount": 7,
+                  "categoriesNames": ["runner"],
+                  "media": {"cover": {"prefix-url": "https://img/fallback/"}}
+                }
+              ],
+              "pageID": "top-level-next",
+              "totalPages": 3
+            }
+            """.trimIndent(),
+        ).jsonObject
+
+        val page = YandexCatalogJsonParser().feedPage(root)
+
+        assertEquals(listOf(10L), page.games.map { it.appId })
+        assertEquals("top-level-next", page.nextPageId)
+        assertTrue(page.hasNext)
+    }
+
+    @Test
     fun jsonParserDecodesTagsProfileAndDetailWithoutFallbacksOrRewrites() {
         val parser = YandexCatalogJsonParser(json)
         val tagsRoot = json.parseToJsonElement(
@@ -104,13 +132,12 @@ class CatalogParserTest {
         val profileRoot = json.parseToJsonElement(
             """
             {
-              "userData": {
-                "uid": "u1",
-                "login": "player",
-                "displayName": "Player One",
-                "avatarUrl": "https://avatars.example/raw.png",
-                "yaplusEnabled": true
-              }
+              "uid": "u1",
+              "login": "player",
+              "displayName": "Player One",
+              "avatarId": "avatar-1",
+              "avatarsOrigin": "https://avatars.example",
+              "yaplusEnabled": true
             }
             """.trimIndent(),
         ).jsonObject
@@ -140,7 +167,7 @@ class CatalogParserTest {
         assertTrue(profile.isAuthorized)
         assertEquals("Player One", profile.displayName)
         assertEquals("player", profile.login)
-        assertEquals("https://avatars.example/raw.png", profile.avatarUrl)
+        assertEquals("https://avatars.example/get-yapic/avatar-1/islands-200", profile.avatarUrl)
         assertTrue(profile.hasYaPlus)
         assertEquals("A &amp; B", detail.description)
         assertEquals(listOf("https://img/mobile/", "https://img/desktop/"), detail.screenshots)
@@ -149,7 +176,7 @@ class CatalogParserTest {
         assertEquals(emptyList(), detail.languages)
         assertEquals("Dev &amp; Co", detail.author)
 
-        val anonymous = json.parseToJsonElement("""{"userData":{"uid":""}}""").jsonObject
+        val anonymous = json.parseToJsonElement("""{"uid":"","avatarId":"0/0-0","avatarsOrigin":"https://avatars.example"}""").jsonObject
         assertNull(parser.profile(anonymous))
     }
 }

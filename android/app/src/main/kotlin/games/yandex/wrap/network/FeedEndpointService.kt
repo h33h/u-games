@@ -9,10 +9,12 @@ class FeedEndpointService(
     suspend fun feed(
         gamesPerPage: Int = 24,
         pageId: String? = null,
+        tab: String? = null,
     ): FeedResponseDto = requireNetworkService().execute(
         FeedRequest(
             gamesPerPage = gamesPerPage,
             pageId = pageId,
+            tab = tab,
         )
     )
 
@@ -23,6 +25,7 @@ class FeedEndpointService(
 data class FeedRequest(
     private val gamesPerPage: Int,
     private val pageId: String?,
+    private val tab: String?,
 ) : Request<FeedResponseDto> {
     override val path = "/games/api/catalogue/v2/feed/"
     override val serializer = FeedResponseDto.serializer()
@@ -38,6 +41,7 @@ data class FeedRequest(
                 "client_width" to screenSize.width.toString(),
                 "client_height" to screenSize.height.toString(),
                 "page_id" to pageId,
+                "tab" to tab,
             )
         }
 }

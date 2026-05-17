@@ -22,7 +22,8 @@ struct YandexCatalogRemoteDataSource {
         tab: String? = nil
     ) async throws -> FeedWithBlocks {
         try await feedEndpoint.feed(
-            gamesPerPage: gamesPerPage
+            gamesPerPage: gamesPerPage,
+            tab: tab
         ).feedWithBlocks
     }
 
@@ -46,6 +47,14 @@ struct YandexCatalogRemoteDataSource {
         try await feedEndpoint.feed(
             gamesPerPage: gamesPerPage,
             pageId: pageId
+        ).feedPage
+    }
+
+    func fetchFeed(pageId: String?, gamesPerPage: Int = 24, tab: String?) async throws -> FeedPage {
+        try await feedEndpoint.feed(
+            gamesPerPage: gamesPerPage,
+            pageId: pageId,
+            tab: tab
         ).feedPage
     }
 

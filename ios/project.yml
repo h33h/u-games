@@ -58,3 +58,14 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: games.yandex.wrap
         INFOPLIST_FILE: UGames/Info.plist
+
+  UGamesTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: UGamesTests
+    dependencies:
+      - target: UGames
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: games.yandex.wrap.tests

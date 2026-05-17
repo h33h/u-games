@@ -17,21 +17,26 @@ import games.yandex.wrap.network.dtos.TagsResponseDto
 
 internal fun FeedResponseDto.toFeedWithBlocks(): FeedWithBlocks {
     val blocks = feed.map { it.toDomain() }
+    val topLevelGames = items.map(GameDto::toDomain)
+    val nextPageId = pageInfo?.nextPageId ?: pageID
     return FeedWithBlocks(
         blocks = blocks,
-        flatGames = blocks.flatMap { it.items },
+        flatGames = blocks.flatMap { it.items }.ifEmpty { topLevelGames },
         recentGames = recentGames.map { it.toDomain() },
         genres = emptyList(),
-        nextPageId = pageInfo?.nextPageId,
-        hasNext = pageInfo?.hasNextPage ?: (pageInfo?.nextPageId != null),
+        nextPageId = nextPageId,
+        hasNext = pageInfo?.hasNextPage ?: (nextPageId != null || (totalPages ?: 0) > 1),
     )
 }
 
-internal fun FeedResponseDto.toFeedPage(): FeedPage = FeedPage(
-    games = feed.flatMap { it.items.map(GameDto::toDomain) },
-    nextPageId = pageInfo?.nextPageId,
-    hasNext = pageInfo?.hasNextPage ?: (pageInfo?.nextPageId != null),
-)
+internal fun FeedResponseDto.toFeedPage(): FeedPage {
+    val nextPageId = pageInfo?.nextPageId ?: pageID
+    return FeedPage(
+        games = feed.flatMap { it.items.map(GameDto::toDomain) }.ifEmpty { items.map(GameDto::toDomain) },
+        nextPageId = nextPageId,
+        hasNext = pageInfo?.hasNextPage ?: (nextPageId != null || (totalPages ?: 0) > 1),
+    )
+}
 
 internal fun SimilarGamesResponseDto.toGames(): List<Game> =
     games?.map { it.toDomain() } ?: feed.flatMap { it.items.map(GameDto::toDomain) }
@@ -62,15 +67,19 @@ internal fun TagsResponseDto.toCategories(): List<GameCategory> = tags.mapNotNul
 }
 
 internal fun ProfileResponseDto.toUserProfile(): UserProfile? {
-    val userData = userData ?: return null
-    if (userData.uid.isBlank()) return null
+    if (uid.isBlank()) return null
     return UserProfile(
         isAuthorized = true,
-        displayName = userData.displayName,
-        login = userData.login,
-        avatarUrl = userData.avatarUrl,
-        hasYaPlus = userData.yaplusEnabled,
+        displayName = displayName.ifBlank { login },
+        login = login,
+        avatarUrl = avatarUrl(),
+        hasYaPlus = yaplusEnabled,
     )
+}
+
+private fun ProfileResponseDto.avatarUrl(): String {
+    if (avatarsOrigin.isBlank() || avatarId.isBlank()) return ""
+    return "${avatarsOrigin.trimEnd('/')}/get-yapic/$avatarId/islands-200"
 }
 
 internal fun FeedBlockDto.toDomain(): FeedBlock = FeedBlock(

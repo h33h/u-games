@@ -6,12 +6,22 @@
   const state = {
     version: 1,
     status: 'waiting',
-    intercepted: { fullscreen: 0, rewarded: 0, banner: 0, portal: 0 },
+    intercepted: { fullscreen: 0, rewarded: 0, banner: 0, portal: 0, purchase: 0 },
     callbackErrors: 0,
+    payments: {
+      mode: 'local-free',
+      signedRequested: false,
+      signatureAvailable: false,
+      storage: 'memory',
+      consumed: 0,
+      lastError: null,
+    },
   };
   Object.defineProperty(win, '__UGamesAdapter', { value: state, configurable: false });
   const initSeen = new WeakSet();
   const providersSeen = new WeakSet();
+  const paymentSdks = new WeakMap();
+  const paymentLedgers = new Map();
   const watched = new WeakMap();
   const objectAPI = win.Object || Object;
   const reflectAPI = win.Reflect || Reflect;
@@ -47,7 +57,7 @@
     state.intercepted.banner++;
     return Promise.resolve({ stickyAdvIsShowing: false });
   }
-  function unsupported() {
+  function unsupported(interfaceName = 'advertisement') {
     if (state.status !== 'unsupported') {
       state.status = 'unsupported';
       try {
@@ -65,32 +75,324 @@
         win.stop();
       }
     }
-    throw new Error('UGames cannot protect this advertisement interface');
+    throw new Error('UGames cannot protect this ' + interfaceName + ' interface');
   }
-  function patchSdk(sdk) {
-    if (!sdk || !sdk.adv) {
+  // Match the SDK's purchaseData/getter/toJSON contract without manufacturing a signature.
+  class LocalPurchase {
+    constructor(receipt) {
+      this.purchaseData = { ...receipt };
+    }
+    get productID() {
+      return this.purchaseData.productID;
+    }
+    get purchaseToken() {
+      return this.purchaseData.purchaseToken;
+    }
+    get developerPayload() {
+      return this.purchaseData.developerPayload;
+    }
+    toJSON() {
+      return { ...this.purchaseData };
+    }
+  }
+  function paymentError(code, message) {
+    state.payments.lastError = code;
+    const error = new Error(message);
+    error.code = code;
+    return error;
+  }
+  function protectPayments(sdk, signed) {
+    state.payments.signedRequested ||= !!signed;
+    let config = paymentSdks.get(sdk);
+    if (!config) {
+      const game = sdk.environment?.app?.id || win.location?.hostname || 'default';
+      const key = 'ugames.free-purchases.v1.' + game;
+      let ledger = paymentLedgers.get(key);
+      if (!ledger) {
+        let purchases = [];
+        try {
+          const saved = JSON.parse(win.localStorage.getItem(key) || '[]');
+          if (Array.isArray(saved)) {
+            purchases = saved.filter(
+              (item) =>
+                item &&
+                typeof item.productID === 'string' &&
+                typeof item.purchaseToken === 'string' &&
+                item.purchaseToken.startsWith('ugames-free-') &&
+                typeof item.developerPayload === 'string',
+            );
+          }
+          state.payments.storage = 'persistent';
+        } catch (_) {}
+        ledger = { purchases, sequence: 0, pending: new Map() };
+        paymentLedgers.set(key, ledger);
+      }
+      config = {
+        facades: new WeakMap(),
+        local: new WeakMap(),
+        getPaymentsSeen: new WeakSet(),
+        availabilitySeen: new WeakSet(),
+      };
+      paymentSdks.set(sdk, config);
+      function save() {
+        try {
+          win.localStorage.setItem(key, JSON.stringify(ledger.purchases));
+          state.payments.storage = 'persistent';
+          ledger.pending.clear();
+        } catch (_) {
+          state.payments.storage = 'memory';
+        }
+      }
+      function withLedger(action) {
+        function run() {
+          try {
+            const saved = JSON.parse(win.localStorage.getItem(key) || '[]');
+            if (Array.isArray(saved)) {
+              const current = new Map();
+              for (const receipt of saved) {
+                if (
+                  receipt &&
+                  typeof receipt.productID === 'string' &&
+                  typeof receipt.purchaseToken === 'string' &&
+                  receipt.purchaseToken.startsWith('ugames-free-') &&
+                  typeof receipt.developerPayload === 'string'
+                ) {
+                  current.set(receipt.purchaseToken, receipt);
+                }
+              }
+              // Retain local changes if a previous storage write failed.
+              for (const [token, receipt] of ledger.pending) {
+                if (receipt) {
+                  current.set(token, receipt);
+                } else {
+                  current.delete(token);
+                }
+              }
+              ledger.purchases = Array.from(current.values());
+            }
+          } catch (_) {}
+          return action();
+        }
+        const locks = win.navigator?.locks;
+        if (typeof locks?.request === 'function') {
+          let entered = false;
+          return locks
+            .request(key, () => {
+              entered = true;
+              return run();
+            })
+            .catch((error) => {
+              if (entered) {
+                throw error;
+              }
+              return run();
+            });
+        }
+        return run();
+      }
+      function createFacade(loadCatalog) {
+        const methods = {
+          async purchase(data) {
+            if (typeof data === 'string') {
+              data = { id: data };
+            }
+            if (!data || typeof data.id !== 'string' || !data.id.trim()) {
+              throw paymentError('INVALID_PRODUCT_ID', 'UGames purchase requires a product ID');
+            }
+            const payload = data.developerPayload || '';
+            if (typeof payload !== 'string') {
+              throw paymentError('INVALID_DEVELOPER_PAYLOAD', 'developerPayload must be a string');
+            }
+            return withLedger(() => {
+              const unique = win.crypto?.randomUUID
+                ? win.crypto.randomUUID()
+                : Date.now() + '-' + ++ledger.sequence + '-' + Math.random().toString(36).slice(2);
+              const receipt = {
+                productID: data.id,
+                purchaseToken: 'ugames-free-' + unique,
+                developerPayload: payload,
+              };
+              ledger.purchases.push(receipt);
+              ledger.pending.set(receipt.purchaseToken, receipt);
+              save();
+              state.intercepted.purchase++;
+              state.payments.lastError = null;
+              return new LocalPurchase(receipt);
+            });
+          },
+          async getPurchases() {
+            return withLedger(() => ledger.purchases.map((receipt) => new LocalPurchase(receipt)));
+          },
+          async consumePurchase(token) {
+            return withLedger(() => {
+              const index = ledger.purchases.findIndex(
+                (receipt) => receipt.purchaseToken === token,
+              );
+              if (index < 0) {
+                throw paymentError('UNKNOWN_LOCAL_PURCHASE', 'Unknown UGames local purchase');
+              }
+              ledger.purchases.splice(index, 1);
+              ledger.pending.set(token, null);
+              save();
+              state.payments.consumed++;
+              state.payments.lastError = null;
+            });
+          },
+          async getCatalog() {
+            try {
+              const products = await loadCatalog();
+              return products.map((product) => ({
+                ...product,
+                id: product.id,
+                title: product.title,
+                description: product.description,
+                imageURI: product.imageURI,
+                priceCurrencyCode: product.priceCurrencyCode,
+                price: 'Бесплатно',
+                priceValue: '0',
+                getPriceCurrencyImage: (...args) =>
+                  typeof product.getPriceCurrencyImage === 'function'
+                    ? product.getPriceCurrencyImage.apply(product, args)
+                    : '',
+              }));
+            } catch (error) {
+              state.payments.lastError = 'CATALOG_UNAVAILABLE';
+              throw error;
+            }
+          },
+        };
+        const facade = { ...methods };
+        config.local.set(facade, methods);
+        return facade;
+      }
+      function patchPayments(payments) {
+        if (!payments || typeof payments !== 'object') {
+          return payments;
+        }
+        const methods = config.local.get(payments);
+        if (methods) {
+          // Restore local entry points if a game republishes or overwrites its payment API.
+          for (const [name, replacement] of Object.entries(methods)) {
+            if (payments[name] !== replacement) {
+              try {
+                payments[name] = replacement;
+                if (payments[name] !== replacement) {
+                  throw new Error('immutable local payment API');
+                }
+              } catch (_) {
+                state.payments.lastError = 'IMMUTABLE_PAYMENT_API';
+                unsupported('payment');
+              }
+            }
+          }
+          return payments;
+        }
+        let facade = config.facades.get(payments);
+        if (!facade) {
+          facade = createFacade(() => {
+            if (typeof payments.getCatalog !== 'function') {
+              throw paymentError('CATALOG_UNAVAILABLE', 'UGames product catalog is unavailable');
+            }
+            return payments.getCatalog();
+          });
+          config.facades.set(payments, facade);
+        }
+        return patchPayments(facade);
+      }
+      function wrapGetPayments(original) {
+        if (typeof original !== 'function' || config.getPaymentsSeen.has(original)) {
+          return original;
+        }
+        let fallback;
+        function getPayments(options) {
+          state.payments.signedRequested ||= !!(options?.signed ?? config.initSigned);
+          const direct = patchPayments(sdk.payments);
+          if (direct) {
+            return Promise.resolve(direct);
+          }
+          if (!fallback) {
+            const receiver = this,
+              args = arguments;
+            let catalogProvider;
+            fallback = createFacade(async () => {
+              // Only metadata needs the provider. Local purchase/consume never initialize payments.
+              if (!catalogProvider) {
+                catalogProvider = Promise.resolve().then(() => original.apply(receiver, args));
+                catalogProvider = catalogProvider.catch((error) => {
+                  catalogProvider = null;
+                  throw error;
+                });
+              }
+              const payments = await catalogProvider;
+              return payments.getCatalog();
+            });
+          }
+          return Promise.resolve(patchPayments(fallback));
+        }
+        config.getPaymentsSeen.add(getPayments);
+        return getPayments;
+      }
+      function wrapAvailability(original) {
+        if (typeof original !== 'function' || config.availabilitySeen.has(original)) {
+          return original;
+        }
+        function isAvailableMethod(method) {
+          if (
+            [
+              'getPayments',
+              'payments.purchase',
+              'payments.getPurchases',
+              'payments.consumePurchase',
+              'payments.getCatalog',
+            ].includes(method)
+          ) {
+            return Promise.resolve(true);
+          }
+          return original.apply(this, arguments);
+        }
+        config.availabilitySeen.add(isAvailableMethod);
+        return isAvailableMethod;
+      }
+      config.initSigned = !!signed;
+      config.patch = patchPayments;
+      observeProperty(sdk, 'payments', patchPayments);
+      observeProperty(sdk, 'getPayments', wrapGetPayments);
+      observeProperty(sdk, 'isAvailableMethod', wrapAvailability);
+    }
+    config.initSigned = !!signed;
+    config.patch(sdk.payments);
+  }
+  function patchSdk(sdk, signed) {
+    if (!sdk) {
       return sdk;
     }
     try {
-      const adv = sdk.adv;
-      for (const [name, replacement] of [
-        ['showFullscreenAdv', completeFullscreen],
-        ['showRewardedVideo', completeRewarded],
-        ['showBannerAdv', bannerHidden],
-        ['hideBannerAdv', bannerHidden],
-        ['getBannerAdvStatus', bannerHidden],
-      ]) {
-        if (typeof adv[name] === 'function' && adv[name] !== replacement) {
-          adv[name] = replacement;
-          if (adv[name] !== replacement) {
-            throw new Error('immutable advertisement API');
+      protectPayments(sdk, signed);
+    } catch (_) {
+      unsupported('payment');
+    }
+    if (sdk.adv) {
+      try {
+        const adv = sdk.adv;
+        for (const [name, replacement] of [
+          ['showFullscreenAdv', completeFullscreen],
+          ['showRewardedVideo', completeRewarded],
+          ['showBannerAdv', bannerHidden],
+          ['hideBannerAdv', bannerHidden],
+          ['getBannerAdvStatus', bannerHidden],
+        ]) {
+          if (typeof adv[name] === 'function' && adv[name] !== replacement) {
+            adv[name] = replacement;
+            if (adv[name] !== replacement) {
+              throw new Error('immutable advertisement API');
+            }
           }
         }
+      } catch (_) {
+        unsupported();
       }
-      state.status = 'active';
-    } catch (_) {
-      unsupported();
     }
+    state.status = 'active';
     return sdk;
   }
   function wrapInit(original) {
@@ -99,13 +401,15 @@
     }
     function init() {
       const result = original.apply(this, arguments);
-      return result && typeof result.then === 'function' ? result.then(patchSdk) : patchSdk(result);
+      const signed = arguments[0]?.signed;
+      const patch = (sdk) => patchSdk(sdk, signed);
+      return result && typeof result.then === 'function' ? result.then(patch) : patch(result);
     }
     initSeen.add(init);
     return init;
   }
   // Preserve descriptor semantics while protecting synchronous SDK publication.
-  // Only the two observed properties are transformed; unrelated definitions pass through.
+  // Only observed SDK properties are transformed; unrelated definitions pass through.
   function protectedDescriptor(object, key, descriptor) {
     const transform = watched.get(object)?.get(key);
     if (!transform) {

@@ -1,0 +1,222 @@
+/* UGames resources apply only to the portal shell, never inside game documents. */
+[data-ugames-theme] {
+  color-scheme: dark;
+  --ugames-accent: #7857ff;
+  --ugames-mint: #57dfc2;
+  --control-font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+[data-ugames-theme] * {
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif !important;
+}
+[data-ugames-theme] body {
+  background-color: #171520 !important;
+}
+[data-ugames-theme] .background__image {
+  background-image: linear-gradient(#171520e8, #171520e8), url('{{background}}') !important;
+  background-position: center !important;
+  background-size: cover !important;
+}
+[data-ugames-theme] header,
+[data-ugames-theme] [role='banner'] {
+  background-color: #1d192bef !important;
+}
+[data-ugames-theme] [class*='button-critical-module__view-primary--'],
+[data-ugames-theme] .Button_view_action {
+  background-color: #7857ff !important;
+  color: #fff !important;
+}
+[data-ugames-theme] [class*='button-critical-module__view-primary--']:hover,
+[data-ugames-theme] .Button_view_action:hover {
+  background-color: #8b6eff !important;
+}
+[data-ugames-theme] :is(button, a, input, textarea, select):focus-visible {
+  outline: 2px solid #57dfc2 !important;
+  outline-offset: 3px;
+}
+[data-ugames-theme] .logo-link img,
+[data-ugames-theme] .logotype img,
+[data-ugames-theme] .domain-logo img {
+  width: auto !important;
+  height: 30px !important;
+  max-width: 160px !important;
+  object-fit: contain !important;
+}
+[data-ugames-theme] :is(.logo-link, .logotype, .domain-logo) {
+  min-width: 0 !important;
+}
+[data-ugames-theme] :is(.Icon_type_logo, .Icon_type_logo-games, .Icon_type_logo-webapps) {
+  background: url('{{icon}}') center / contain no-repeat !important;
+  font-size: 0 !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 0 !important;
+}
+[data-ugames-theme]
+  :is(
+    [class*='Icon_type_category-'],
+    .Icon_type_categories-all,
+    .Icon_type_tags-all,
+    .Icon_type_avatar
+  ) {
+  background-position: center !important;
+  background-size: contain !important;
+  background-repeat: no-repeat !important;
+}
+[data-ugames-theme]
+  :is(
+    [class*='Icon_type_category-'],
+    .Icon_type_categories-all,
+    .Icon_type_tags-all,
+    .Icon_type_avatar
+  )
+  > svg {
+  visibility: hidden !important;
+}
+[data-ugames-theme] .Icon_type_avatar {
+  background-image: url('{{avatar}}') !important;
+}
+[data-ugames-theme] .user-pic-profile__image_default-avatar {
+  background-color: #252239 !important;
+}
+[data-ugames-theme] .footer__image {
+  background: url('{{developer}}') center / contain no-repeat !important;
+}
+[data-ugames-theme] [class*='sticky-promo-banner'][class*='image'],
+[data-ugames-theme] [class*='authorization'][class*='image'],
+[data-ugames-theme] [class*='auth-banner'][class*='image'] {
+  background: url('{{controller}}') center / contain no-repeat !important;
+}
+[data-ugames-theme] .profile-widget__icon {
+  color: #b5a7ff !important;
+}
+[data-ugames-theme] .profile-widget__icon svg [fill]:not([fill='none']) {
+  fill: #b5a7ff !important;
+}
+[data-ugames-theme] .social-links,
+[data-ugames-theme] .left-panel__social-links {
+  display: none !important;
+}
+[data-ugames-theme][data-ugames-page='game'] .background__image {
+  background-image: none !important;
+  background-color: #101019 !important;
+}
+@media (max-width: 600px) {
+  [data-ugames-theme] :is(.logo-link, .logotype, .domain-logo) img {
+    height: 26px !important;
+    max-width: 125px !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-ugames-theme] .background__image {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+[data-ugames-theme] .Icon_type_category-common {
+  background-image: url('{{category-common}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-puzzles {
+  background-image: url('{{category-puzzles}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-casual {
+  background-image: url('{{category-casual}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-cards {
+  background-image: url('{{category-cards}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-tabletop {
+  background-image: url('{{category-tabletop}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-arcade {
+  background-image: url('{{category-arcade}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-role {
+  background-image: url('{{category-role}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-strategy {
+  background-image: url('{{category-strategy}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-race {
+  background-image: url('{{category-race}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-simulator {
+  background-image: url('{{category-simulator}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-action {
+  background-image: url('{{category-action}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-games_io {
+  background-image: url('{{category-games_io}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-horrors {
+  background-image: url('{{category-horrors}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-match3 {
+  background-image: url('{{category-match3}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-balloons {
+  background-image: url('{{category-balloons}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-for_two_persons {
+  background-image: url('{{category-for_two_persons}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-quiz {
+  background-image: url('{{category-quiz}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-kids {
+  background-image: url('{{category-kids}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-sports {
+  background-image: url('{{category-sports}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-educational {
+  background-image: url('{{category-educational}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-novels {
+  background-image: url('{{category-novels}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-economic {
+  background-image: url('{{category-economic}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-adventure {
+  background-image: url('{{category-adventure}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-for_babies {
+  background-image: url('{{category-for_babies}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-new {
+  background-image: url('{{category-new}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-editors_choice {
+  background-image: url('{{category-editors_choice}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-promos {
+  background-image: url('{{category-promos}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-for_boys {
+  background-image: url('{{category-for_boys}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-for_girls {
+  background-image: url('{{category-for_girls}}') !important;
+}
+[data-ugames-theme] .Icon_type_category-midcore {
+  background-image: url('{{category-midcore}}') !important;
+}
+[data-ugames-theme] .Icon_type_categories-all {
+  background-image: url('{{category-tabletop}}') !important;
+}
+[data-ugames-theme] .Icon_type_tags-all {
+  background-image: url('{{category-new}}') !important;
+}
+[data-ugames-theme] .background__gradient {
+  background: linear-gradient(180deg, #17152050, #171520d9) !important;
+}
+[data-ugames-theme] .copyright,
+[data-ugames-theme] .copyright__company-info {
+  display: none !important;
+}

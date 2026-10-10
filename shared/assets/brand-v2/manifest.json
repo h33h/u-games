@@ -1,0 +1,25 @@
+{
+  "generator": "built-in image_gen",
+  "palette": {
+    "charcoal": "#20202b",
+    "violet": "#7050ff",
+    "mint": "#57dfc2"
+  },
+  "assets": [
+    {
+      "file": "ugames-app-icon.png",
+      "purpose": "App icon source artwork",
+      "prompt": "Use case: logo-brand. Create a new production app icon for UGames using the supplied existing icon as a brand reference. Square 1024x1024 full-bleed opaque charcoal #20202b background, a bold smooth violet #7050ff letter U with a mint #57dfc2 right-facing play triangle in its negative space. Preserve the recognizable U-plus-play identity. Refine optical balance, precise rounded geometry, strong silhouette at 32 pixels. Gentle dimensional lighting, clean premium game launcher identity, restrained depth, no excessive glow. Centered mark, generous safe margins. No words, no border, no outer rounded-corner mask, no watermark. Single finished icon, not a presentation sheet."
+    },
+    {
+      "file": "ugames-logo-dark.png",
+      "purpose": "Horizontal wordmark on a dark background",
+      "prompt": "Use case: logo-brand. Create a production horizontal UGames wordmark image for a dark gaming app header. Wide 3:1 canvas with a completely flat opaque solid #20202b background everywhere, no vignette. Left: a bold smooth violet #7050ff U-shaped symbol with a mint #57dfc2 right-facing play triangle inside its hollow. Right: exact text \"UGames\", capital U and G and lowercase ames, in near-white #f4f2ff rounded geometric bold sans serif. Carefully balanced compact symbol and lettering, generous safe padding, legible at 180 pixels. Crisp solid vector-style edges and untextured fills. No shadow, no glow, no distress, no additional objects, no mockup, no tagline, no extra text, no watermark. A single finished horizontal logo asset, not a brand presentation sheet."
+    },
+    {
+      "file": "ugames-arcade-background.png",
+      "purpose": "Gaming background with quiet center for UI",
+      "prompt": "Use case: stylized-concept. Create a production 1536x1024 background illustration for UGames, a casual gaming app. Match its brand palette: deep charcoal #20202b, rich violet #7050ff, mint #57dfc2. Atmospheric playful miniature arcade cosmos, refined softly lit 3D rounded game objects concentrated along the outer edges: a controller silhouette, puzzle blocks, an orbital ball, curved racing track ribbons. Large very quiet dark central negative space for an app interface, low contrast at center, restrained violet/mint highlights near edges. Premium tactile matte materials and subtle depth, cohesive composition, cheerful but calm, no clutter. Full bleed opaque image. No words, no letters, no brands, no watermarks, no interface elements."
+    }
+  ]
+}

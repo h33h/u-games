@@ -376,26 +376,69 @@
     typeof win.MutationObserver === 'function'
   ) {
     const brand =
-      /(^|[^\p{L}\p{N}_@/.-])(?:яндекс(?:а|у|ом|е)?(?:[\s\u00a0]+игр(?:ы|а|ах|ам|ами)?)?|yandex(?:[\s\u00a0]+games)?)(?![\p{L}\p{N}_@/-]|\.[\p{L}\p{N}])/giu;
-    const labels = ['title', 'alt', 'aria-label', 'placeholder'];
+      /(^|[^\p{L}\p{N}_@/.-])(?:яндекс(?:а|у|ом|е)?(?:[\s\u00a0.·-]+игр(?:ы|а|ах|ам|ами)?)?|yandex(?:[\s\u00a0.·-]+games)?)(?![\p{L}\p{N}_@/-]|\.[\p{L}\p{N}])/giu;
+    const labels = ['title', 'alt', 'aria-label', 'aria-description', 'placeholder'];
+    const logoContainer = '.logo-link,.logotype,.domain-logo';
     const skipped =
       'script,style,noscript,textarea,input,[contenteditable]:not([contenteditable="false"])';
     const observedRoots = new WeakSet();
     const brandedImages = new WeakSet();
     const brandedGraphics = new WeakSet();
     const logo =
+      win.__UGamesBranding?.assets.logo ||
       'data:image/svg+xml,' +
-      encodeURIComponent(
-        '<svg xmlns="http://www.w3.org/2000/svg" width="140" height="32" viewBox="0 0 140 32"><text x="2" y="24" fill="#888888" font-family="system-ui,sans-serif" font-size="26" font-weight="700">UGames</text></svg>',
-      );
+        encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="140" height="32" viewBox="0 0 140 32"><text x="2" y="24" fill="#888888" font-family="system-ui,sans-serif" font-size="26" font-weight="700">UGames</text></svg>',
+        );
     function brandText(value) {
       return value.replace(brand, '$1UGames');
+    }
+    function isLogoURL(value) {
+      try {
+        const url = new win.URL(value, doc.baseURI);
+        return (
+          (url.hostname === 'static.games.yandex.net' &&
+            /^\/opengraph\/[^/]+\/default\.png$/.test(url.pathname)) ||
+          (url.hostname === 'yastatic.net' &&
+            /^\/s3\/games-static\/(?:favicons\/yandex\/|static-data\/images\/single-logo\/(?:games|yandex)\/)/.test(
+              url.pathname,
+            ))
+        );
+      } catch (_) {
+        return false;
+      }
+    }
+    function updateSplitText(element) {
+      // Keep inline nodes and their handlers when a brand spans several text nodes.
+      if (!element.firstElementChild || element.querySelector(skipped + ',svg,img')) {
+        return;
+      }
+      const value = element.textContent;
+      if (!value || brandText(value).trim() !== 'UGames') {
+        return;
+      }
+      const walker = doc.createTreeWalker(element, 4);
+      const nodes = [];
+      while (walker.nextNode()) {
+        nodes.push(walker.currentNode);
+      }
+      if (nodes.length > 1) {
+        const replacement = brandText(value);
+        if (nodes[0].data !== replacement) {
+          nodes[0].data = replacement;
+        }
+        for (const node of nodes.slice(1)) {
+          if (node.data !== '') {
+            node.data = '';
+          }
+        }
+      }
     }
     function updateNode(node) {
       const element = node.nodeType === 1 ? node : node.parentElement;
       if (!element || element.closest(skipped)) {
         // Placeholders are presentation; input values are owned by the user.
-        if (element && element.tagName === 'INPUT' && node === element) {
+        if (element && element.matches('input,textarea') && node === element) {
           for (const name of labels) {
             const value = element.getAttribute(name);
             if (value !== null && brandText(value) !== value) {
@@ -415,11 +458,53 @@
       if (node.nodeType !== 1) {
         return;
       }
+      updateSplitText(element);
+      if (
+        element.tagName === 'META' &&
+        element.matches(
+          '[name="description"],[name="application-name"],[name="apple-mobile-web-app-title"],[name="twitter:title"],[name="twitter:description"],[property="og:title"],[property="og:description"],[property="og:site_name"]',
+        )
+      ) {
+        const value = element.getAttribute('content');
+        if (value !== null && brandText(value) !== value) {
+          element.setAttribute('content', brandText(value));
+        }
+      }
+      if (
+        element.tagName === 'META' &&
+        element.matches('[property="og:image"],[name="twitter:image"]')
+      ) {
+        if (isLogoURL(element.getAttribute('content'))) {
+          brandedImages.add(element);
+        }
+        if (brandedImages.has(element) && element.getAttribute('content') !== logo) {
+          element.setAttribute('content', logo);
+        }
+      }
+      if (
+        element.tagName === 'LINK' &&
+        /^(?:icon|shortcut icon|apple-touch-icon|apple-touch-icon-precomposed)$/i.test(element.rel)
+      ) {
+        if (isLogoURL(element.href)) {
+          brandedImages.add(element);
+        }
+        if (
+          brandedImages.has(element) &&
+          element.getAttribute('href') !== (win.__UGamesBranding?.assets.icon || logo)
+        ) {
+          element.setAttribute('href', win.__UGamesBranding?.assets.icon || logo);
+          element.setAttribute('type', 'image/svg+xml');
+        }
+      }
       const description = labels.map((name) => element.getAttribute(name) || '').join(' ');
       const cssLogo = element.matches(
         '.Icon_type_logo,.Icon_type_logo-games,.Icon_type_logo-webapps',
       );
-      if (cssLogo || (element.localName === 'svg' && brandText(description) !== description)) {
+      if (
+        cssLogo ||
+        (element.localName === 'svg' &&
+          (brandText(description) !== description || element.closest(logoContainer)))
+      ) {
         brandedGraphics.add(element);
       }
       if (brandedGraphics.has(element)) {
@@ -459,8 +544,9 @@
       }
       if (element.tagName === 'IMG') {
         if (
-          brandText(description) !== description ||
-          element.closest('.logo-link,.logotype,.domain-logo')
+          labels.some((name) => brandText(element.getAttribute(name) || '').trim() === 'UGames') ||
+          element.closest(logoContainer) ||
+          isLogoURL(element.getAttribute('src'))
         ) {
           brandedImages.add(element);
         }
@@ -506,10 +592,14 @@
       const observer = new win.MutationObserver(function (changes) {
         for (const change of changes) {
           if (change.type === 'childList') {
+            updateNode(change.target);
             for (const node of change.addedNodes) {
               updateTree(node);
             }
           } else {
+            if (change.type === 'characterData' && change.target.parentElement) {
+              updateSplitText(change.target.parentElement);
+            }
             updateNode(change.target);
           }
         }
@@ -519,7 +609,16 @@
         childList: true,
         characterData: true,
         attributes: true,
-        attributeFilter: labels.concat(['src', 'srcset', 'class']),
+        attributeFilter: labels.concat([
+          'src',
+          'srcset',
+          'class',
+          'content',
+          'href',
+          'rel',
+          'name',
+          'property',
+        ]),
       });
       updateTree(root);
     }

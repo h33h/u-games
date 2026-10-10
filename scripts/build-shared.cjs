@@ -48,6 +48,33 @@ function compileContentRules(rules) {
   return result;
 }
 
+function buildBranding(rootDir) {
+  const directory = path.join(rootDir, 'shared');
+  const manifestPath = path.join(directory, 'branding.json');
+  if (!fs.existsSync(manifestPath)) {
+    return null;
+  }
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const assets = {};
+  for (const [name, file] of Object.entries(manifest)) {
+    const mime = { '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg' }[
+      path.extname(file)
+    ];
+    if (!mime) {
+      throw new Error('Unsupported branding asset: ' + file);
+    }
+    assets[name] =
+      'data:' + mime + ';base64,' + fs.readFileSync(path.join(directory, file)).toString('base64');
+  }
+  const css = fs.readFileSync(path.join(directory, 'portal-theme.css'), 'utf8');
+  for (const token of css.matchAll(/\{\{([^}]+)\}\}/g)) {
+    if (!assets[token[1]]) {
+      throw new Error('Missing branding asset: ' + token[1]);
+    }
+  }
+  return { assets, css };
+}
+
 function buildShared(rootDir) {
   const adapter = fs.readFileSync(path.join(rootDir, 'shared/ad-adapter.js'), 'utf8');
   if (!adapter.trim()) {
@@ -55,7 +82,20 @@ function buildShared(rootDir) {
   }
   const rules = JSON.parse(fs.readFileSync(path.join(rootDir, 'shared/ad-rules.json'), 'utf8'));
   const contentRules = compileContentRules(rules);
-  const script = 'window.__UGamesRules = Object.freeze(' + JSON.stringify(rules) + ');\n' + adapter;
+  const branding = buildBranding(rootDir);
+  const script =
+    'window.__UGamesRules = Object.freeze(' +
+    JSON.stringify(rules) +
+    ');\n' +
+    (branding
+      ? 'window.__UGamesBranding = ' +
+        JSON.stringify(branding) +
+        ';\n' +
+        'window.__UGamesBranding.css = window.__UGamesBranding.css.replace(/\\{\\{([^}]+)\\}\\}/g, function(_, key) { return window.__UGamesBranding.assets[key]; });\n' +
+        'Object.freeze(window.__UGamesBranding);\n'
+      : '') +
+    adapter +
+    (branding ? '\n' + fs.readFileSync(path.join(rootDir, 'shared/portal-theme.js'), 'utf8') : '');
   const android = path.join(rootDir, 'android/app/src/main/assets/ugames');
   const ios = path.join(rootDir, 'ios/UGames/Resources');
   fs.mkdirSync(android, { recursive: true });
@@ -69,7 +109,7 @@ function buildShared(rootDir) {
   );
 }
 
-module.exports = { buildShared, compileContentRules, validateRules };
+module.exports = { buildShared, buildBranding, compileContentRules, validateRules };
 if (require.main === module) {
   try {
     buildShared(path.resolve(process.argv[2] || path.join(__dirname, '..')));

@@ -22,8 +22,12 @@ val sharedAssets by tasks.registering(Exec::class) {
     inputs.files(
         "../../shared/ad-adapter.js",
         "../../shared/ad-rules.json",
+        "../../shared/branding.json",
+        "../../shared/portal-theme.js",
+        "../../shared/portal-theme.css",
         "../../scripts/build-shared.cjs"
     )
+    inputs.dir("../../shared/assets")
     outputs.dir("src/main/assets/ugames")
 }
 tasks.named("preBuild") { dependsOn(sharedAssets) }

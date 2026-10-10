@@ -51,7 +51,7 @@ const files = [...new Set(selected.length ? selected : listing.stdout.split('\0'
 
 const javascript = files.filter((file) => /\.(?:js|cjs|mjs|html)$/.test(file));
 const prettier = files.filter((file) =>
-  /\.(?:js|cjs|mjs|json|html|xml|plist|ya?ml|md)$/.test(file),
+  /\.(?:js|cjs|mjs|json|html|css|xml|plist|ya?ml|md)$/.test(file),
 );
 const kotlin = files.filter((file) => /\.(?:kt|kts)$/.test(file));
 const swift = files.filter((file) => file.endsWith('.swift'));

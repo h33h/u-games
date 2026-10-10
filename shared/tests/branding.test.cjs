@@ -137,3 +137,120 @@ test('prevents responsive picture sources from restoring the original branded ar
   await settle();
   assert.equal(source.getAttribute('srcset'), null);
 });
+
+test('rebrands dotted, hyphenated and split brand names while preserving controls', (t) => {
+  const win = page(
+    t,
+    `<p>Яндекс.Игры / Yandex.Games / Яндекс-Игры / Yandex Games</p>
+    <a href="/games/"><span>Ян</span><strong>декс</strong> <span>Игры</span></a>`,
+  );
+  const link = win.document.querySelector('a');
+  assert.equal(win.document.querySelector('p').textContent, 'UGames / UGames / UGames / UGames');
+  assert.equal(link.textContent, 'UGames');
+  assert.equal(link.querySelectorAll('span').length, 2);
+  assert.equal(link.href, 'https://yandex.ru/games/');
+});
+
+test('rebrands page metadata and icons and keeps navigation metadata intact', async (t) => {
+  const win = page(
+    t,
+    `<meta property="og:title" content="Яндекс Игры — каталог">
+    <meta property="og:site_name" content="Яндекс Игры">
+    <meta property="og:url" content="https://yandex.ru/games/">
+    <meta property="og:image" content="https://static.games.yandex.net/opengraph/ru/default.png">
+    <meta name="twitter:image" content="https://example.test/game.png">
+    <link rel="icon" href="https://yastatic.net/s3/games-static/favicons/yandex/favicon.ico">
+    <link rel="apple-touch-icon" href="https://yastatic.net/s3/games-static/favicons/yandex/apple-touch-icon.png">`,
+  );
+  const doc = win.document;
+  assert.equal(doc.querySelector('[property="og:title"]').content, 'UGames — каталог');
+  assert.equal(doc.querySelector('[property="og:site_name"]').content, 'UGames');
+  assert.equal(doc.querySelector('[property="og:url"]').content, 'https://yandex.ru/games/');
+  assert.match(decodeURIComponent(doc.querySelector('[property="og:image"]').content), /UGames/);
+  assert.equal(
+    doc.querySelector('[name="twitter:image"]').content,
+    'https://example.test/game.png',
+  );
+  for (const icon of doc.querySelectorAll('link')) {
+    assert.match(decodeURIComponent(icon.href), /UGames/);
+  }
+  doc.querySelector('[property="og:title"]').content = 'Yandex Games';
+  doc.querySelector('link').href = 'https://yastatic.net/s3/games-static/favicons/yandex/logo.svg';
+  await settle();
+  assert.equal(doc.querySelector('[property="og:title"]').content, 'UGames');
+  assert.match(decodeURIComponent(doc.querySelector('link').href), /UGames/);
+});
+
+test('replaces unlabelled portal artwork without rebranding game thumbnails', async (t) => {
+  const win = page(
+    t,
+    `<a class="logo-link" href="/games/"><svg><use href="#portal-logo"/></svg></a>
+    <img id="logo" src="https://yastatic.net/s3/games-static/static-data/images/single-logo/games/short_color_bgdark_ru.png">
+    <img id="thumbnail" alt="Игра Яндекс" src="https://avatars.mds.yandex.net/get-games/123/orig">`,
+  );
+  const doc = win.document;
+  assert.equal(doc.querySelector('svg').textContent, 'UGames');
+  assert.equal(doc.querySelector('svg use'), null);
+  assert.match(decodeURIComponent(doc.querySelector('#logo').src), /UGames/);
+  assert.equal(
+    doc.querySelector('#thumbnail').src,
+    'https://avatars.mds.yandex.net/get-games/123/orig',
+  );
+  doc.querySelector('svg').innerHTML = '<path d="M0 0h20v20z"/>';
+  await settle();
+  assert.equal(doc.querySelector('svg path'), null);
+  assert.equal(doc.querySelector('svg').textContent, 'UGames');
+});
+
+test('rebrands textarea labels while preserving user text', (t) => {
+  const win = page(
+    t,
+    '<textarea placeholder="Отзывы о Яндекс Играх" aria-label="Яндекс Игры">Яндекс</textarea>',
+  );
+  const input = win.document.querySelector('textarea');
+  assert.equal(input.placeholder, 'Отзывы о UGames');
+  assert.equal(input.getAttribute('aria-label'), 'UGames');
+  assert.equal(input.value, 'Яндекс');
+});
+
+test('uses bundled wordmark and compact app mark without disturbing links', (t) => {
+  const dom = new JSDOM(
+    '<a class="logo-link" href="/games/"><img alt="Яндекс Игры" src="logo.png"></a><link rel="icon" href="https://yastatic.net/s3/games-static/favicons/yandex/logo.svg">',
+    { runScripts: 'outside-only', url: 'https://yandex.ru/games/' },
+  );
+  t.after(() => dom.window.close());
+  dom.window.__UGamesBranding = {
+    assets: { logo: 'data:image/svg+xml,UGames-wordmark', icon: 'data:image/svg+xml,UGames-mark' },
+  };
+  dom.window.eval(source);
+  assert.equal(dom.window.document.querySelector('img').src, 'data:image/svg+xml,UGames-wordmark');
+  assert.equal(dom.window.document.querySelector('link').href, 'data:image/svg+xml,UGames-mark');
+  assert.equal(dom.window.document.querySelector('a').href, 'https://yandex.ru/games/');
+});
+
+test('split brand normalization stops producing DOM mutations once settled', async (t) => {
+  const dom = new JSDOM('<a><span>Ян</span><strong>декс</strong> <span>Игры</span></a>', {
+    runScripts: 'outside-only',
+    url: 'https://yandex.ru/games/',
+  });
+  t.after(() => dom.window.close());
+  const realObserver = dom.window.MutationObserver;
+  let callbacks = 0;
+  dom.window.MutationObserver = class extends realObserver {
+    constructor(callback) {
+      super((records, observer) => {
+        callbacks++;
+        // Bound the regression so an event-loop starvation bug can be reported.
+        if (callbacks > 20) {
+          observer.disconnect();
+          return;
+        }
+        callback(records, observer);
+      });
+    }
+  };
+  dom.window.eval(source);
+  await settle();
+  assert.equal(dom.window.document.querySelector('a').textContent, 'UGames');
+  assert.ok(callbacks < 20, 'brand normalization keeps scheduling observer callbacks');
+});

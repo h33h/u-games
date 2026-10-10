@@ -1,0 +1,191 @@
+{
+  "auditedAt": "2026-10-11",
+  "method": "Live in-app browser navigation, DOM snapshots, screenshots, computed CSS backgrounds and page asset inventory",
+  "scope": "Public source portal; generated UGames assets are not yet integrated. No sign-in or purchase performed.",
+  "pages": [
+    {
+      "name": "Главная",
+      "url": "https://yandex.ru/games/",
+      "findings": [
+        "Short logo",
+        "Catalog background",
+        "Login invitation illustration",
+        "Game and store carousel banners"
+      ]
+    },
+    {
+      "name": "Каталог",
+      "url": "https://yandex.ru/games/catalog",
+      "findings": [
+        "Short logo",
+        "Genre and navigation SVG icons",
+        "Game thumbnails and preview videos"
+      ]
+    },
+    {
+      "name": "Категории",
+      "url": "https://yandex.ru/games/categories",
+      "findings": [
+        "Genre SVG icons",
+        "Developer footer illustration encoded as a CSS data:image/svg+xml background (.footer__image)"
+      ]
+    },
+    {
+      "name": "Скидки и акции",
+      "url": "https://yandex.ru/games/promos",
+      "findings": ["Promotional game cards and artwork"]
+    },
+    {
+      "name": "Мои игры",
+      "url": "https://yandex.ru/games/user",
+      "findings": ["Default profile avatar", "Settings SVG icons", "Played game thumbnails"]
+    },
+    {
+      "name": "Игра: стартовый экран",
+      "url": "https://yandex.ru/games/app/hexa-block-2048-388224",
+      "findings": [
+        "Long logo in header",
+        "Short logo in start dialog",
+        "Game background is a plain black 1200x680 JPEG",
+        "Genre and rating icons"
+      ]
+    },
+    {
+      "name": "Игровое меню",
+      "url": "https://yandex.ru/games/app/hexa-block-2048-388224#menu",
+      "findings": ["Repeated portal logo", "Catalog, share, rate, help and fullscreen controls"]
+    },
+    {
+      "name": "Поиск",
+      "url": "https://yandex.ru/games/search",
+      "findings": [
+        "Loading spinner",
+        "An unmatched query falls back to recommended games; no distinct empty-state illustration confirmed"
+      ]
+    },
+    {
+      "name": "Магазин",
+      "url": "https://yandex.ru/games/shop",
+      "findings": [
+        "Four category illustrations: Steam topup, game currency, gift cards, game keys",
+        "Product banners and artwork"
+      ]
+    }
+  ],
+  "observedResources": [
+    {
+      "type": "short-logo",
+      "url": "https://yastatic.net/s3/games-static/static-data/images/single-logo/games/short_color_bgdark_ru@2x.png",
+      "width": 1112,
+      "height": 240
+    },
+    {
+      "type": "long-logo",
+      "url": "https://yastatic.net/s3/games-static/static-data/images/single-logo/games/long_color_bgdark_ru@2x.png",
+      "width": 1617,
+      "height": 241
+    },
+    {
+      "type": "catalog-background",
+      "url": "https://yandex.ru/games/cdn/games-static/static-data/images/background/background-dark-purple.jpg"
+    },
+    {
+      "type": "game-background",
+      "url": "https://yandex.ru/games/cdn/games-static/static-data/images/background/background-game.jpg",
+      "width": 1200,
+      "height": 680,
+      "appearance": "Plain black"
+    },
+    {
+      "type": "currency-icon",
+      "url": "https://yastatic.net/s3/games-static/static-data/images/payments/yan-coin-icon40.png",
+      "width": 40,
+      "height": 40
+    },
+    {
+      "type": "decorative-art",
+      "url": "https://yastatic.net/s3/games-static/static-data/images/art/purple_close.png"
+    },
+    {
+      "type": "favicon",
+      "url": "https://yastatic.net/s3/games-static/favicons/yandex/logo.svg?v=1"
+    },
+    {
+      "type": "font",
+      "url": "https://yastatic.net/s3/home/fonts/ys/3/text-variable-full.woff2",
+      "family": "Yandex Sans"
+    },
+    {
+      "type": "shop-category-art",
+      "url": "https://yastatic.net/s3/games-static/static-data/images/shop/shortcuts/steam-topup.png"
+    },
+    {
+      "type": "shop-category-art",
+      "url": "https://yastatic.net/s3/games-static/static-data/images/shop/shortcuts/game-topups.png"
+    },
+    {
+      "type": "shop-category-art",
+      "url": "https://yastatic.net/s3/games-static/static-data/images/shop/shortcuts/gift-cards.png"
+    },
+    {
+      "type": "shop-category-art",
+      "url": "https://yastatic.net/s3/games-static/static-data/images/shop/shortcuts/game-keys.png"
+    }
+  ],
+  "suggestedUGamesResources": [
+    {
+      "priority": 1,
+      "name": "Compact and wide header wordmarks",
+      "format": "SVG or transparent PNG",
+      "note": "Use separate aspect ratios matching catalog, game header, start dialog and game menu. Current generated logo has a dark backdrop."
+    },
+    {
+      "priority": 1,
+      "name": "Small U-plus-play mark",
+      "format": "SVG, PNG",
+      "note": "Favicon and narrow headers; readable at 16, 24, 32 and 48 pixels"
+    },
+    {
+      "priority": 1,
+      "name": "UI font",
+      "format": "WOFF2 or platform system font",
+      "note": "Replace the source portal's Yandex Sans through the shared adapter"
+    },
+    {
+      "priority": 2,
+      "name": "Genre and navigation icon set",
+      "format": "SVG",
+      "note": "Keep consistent visual weight; existing icons include puzzle, racing, cards, strategy and other genres"
+    },
+    {
+      "priority": 2,
+      "name": "Default player avatar",
+      "format": "SVG or PNG",
+      "note": "Violet and mint UGames identity"
+    },
+    {
+      "priority": 2,
+      "name": "Login invitation and developer/footer illustrations",
+      "format": "Transparent PNG or SVG",
+      "note": "Existing artwork includes controller/gift-box imagery and phone/cards artwork"
+    },
+    {
+      "priority": 3,
+      "name": "Calm catalog background",
+      "format": "JPEG or WebP",
+      "note": "The generated arcade image can serve as art source, but the interface needs low contrast behind controls"
+    },
+    {
+      "priority": 3,
+      "name": "Shop category artwork",
+      "format": "PNG or WebP",
+      "note": "Only needed if UGames retains the store section"
+    }
+  ],
+  "notes": [
+    "Asset inventories include observed network resources as well as current DOM assets; counts must not be interpreted as unique visible branding elements.",
+    "Game thumbnails, trailers, game-specific sprites and third-party product logos are content assets rather than UGames identity replacements.",
+    "Currency artwork should retain a clear association with the actual payment provider and unit; changing its name would require a separate product decision.",
+    "No implementation changes were made during this audit."
+  ]
+}

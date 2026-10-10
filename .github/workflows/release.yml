@@ -118,6 +118,7 @@ jobs:
       - run: brew install xcodegen
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
+      - run: npm run build:shared
       - run: xcodegen generate --spec ios/project.yml
       - name: Test on iPhone simulator
         run: |

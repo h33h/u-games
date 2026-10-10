@@ -105,31 +105,7 @@ final class ProtectedWebViewTests: XCTestCase {
         XCTAssertEqual(controller.view.backgroundColor, .systemBackground)
     }
 
-    func testMenuRestoresPositionAndStaysReachableAfterRotation() throws {
-        let suite = "FloatingMenuTests.\(UUID().uuidString)"
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        defaults.set(0.25, forKey: "gameMenu.x")
-        defaults.set(0.75, forKey: "gameMenu.y")
-        let button = FloatingMenuButton(defaults: defaults)
-        let portrait = CGRect(x: 0, y: 44, width: 390, height: 766)
-        button.place(in: portrait)
-        XCTAssertEqual(button.frame.minX, 90.5, accuracy: 0.01)
-        XCTAssertEqual(button.frame.minY, 581.5, accuracy: 0.01)
-
-        let landscape = CGRect(x: 44, y: 0, width: 756, height: 369)
-        button.place(in: landscape)
-        XCTAssertTrue(landscape.contains(button.frame))
-        XCTAssertEqual(button.frame.minX, 226, accuracy: 0.01)
-        XCTAssertEqual(button.frame.minY, 239.75, accuracy: 0.01)
-
-        defaults.set(1.0, forKey: "gameMenu.x")
-        button.restorePosition()
-        button.place(in: portrait)
-        XCTAssertEqual(button.frame.maxX, 382, accuracy: 0.01)
-    }
-
-    func testFullscreenShellKeepsOnlyMenuButtonAboveGame() throws {
+    func testFullscreenShellLeavesGameWithoutNativeControls() throws {
         let webView = try makeView()
         let controller = GameViewController(preparedView: webView)
         let navigation = UINavigationController(rootViewController: controller)
@@ -143,18 +119,9 @@ final class ProtectedWebViewTests: XCTestCase {
         XCTAssertTrue(navigation.isNavigationBarHidden)
         XCTAssertTrue(controller.prefersStatusBarHidden)
         XCTAssertEqual(webView.frame, controller.view.safeAreaLayoutGuide.layoutFrame)
-        let menu = try XCTUnwrap(controller.view.subviews.compactMap { $0 as? UIButton }
-            .first { $0.accessibilityLabel == "Меню" })
-        XCTAssertTrue(controller.view.safeAreaLayoutGuide.layoutFrame.contains(menu.frame))
-        XCTAssertGreaterThanOrEqual(menu.bounds.width, 44)
+        XCTAssertTrue(controller.view.subviews.compactMap { $0 as? UIButton }.isEmpty)
         XCTAssertTrue(controller.view.hitTest(CGPoint(x: 100, y: 400), with: nil)?
             .isDescendant(of: webView) == true)
-
-        controller.showProtectionError()
-        controller.view.layoutIfNeeded()
-        menu.center = CGPoint(x: controller.view.bounds.midX, y: controller.view.bounds.midY)
-        XCTAssertTrue(controller.view.hitTest(menu.center, with: nil)?
-            .isDescendant(of: menu) == true)
     }
 
     private func makeView(configuration: WKWebViewConfiguration? = nil) throws -> WKWebView {

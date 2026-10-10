@@ -110,70 +110,16 @@ class ProtectedWebViewTest {
         }
     }
 
-    @Test fun draggingMenuDoesNotClickAndRestoresPositionAfterResize() {
-        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-            scenario.onActivity { activity ->
-                val suite = "menu-test-${java.util.UUID.randomUUID()}"
-                val context = object : android.content.ContextWrapper(activity) {
-                    override fun getSharedPreferences(name: String, mode: Int) =
-                        activity.getSharedPreferences(suite, mode)
-                }
-                val preferences = context.getSharedPreferences("gameMenu", 0)
-                try {
-                    val container = android.widget.FrameLayout(context)
-                    container.setPadding(30, 60, 30, 20)
-                    val button = FloatingMenuButton(context)
-                    container.addView(button)
-                    container.layout(0, 0, 400, 800)
-                    button.layout(0, 0, 48, 48)
-                    button.place()
-                    var clicks = 0
-                    button.setOnClickListener { clicks++ }
-                    fun touch(action: Int, x: Float, y: Float) {
-                        val event = android.view.MotionEvent.obtain(0, 0, action, x, y, 0)
-                        button.onTouchEvent(event)
-                        event.recycle()
-                    }
-                    touch(android.view.MotionEvent.ACTION_DOWN, 200f, 200f)
-                    touch(android.view.MotionEvent.ACTION_MOVE, -1000f, -1000f)
-                    touch(android.view.MotionEvent.ACTION_UP, -1000f, -1000f)
-                    assertEquals(0, clicks)
-                    assertEquals(0f, preferences.getFloat("x", -1f), 0.01f)
-                    assertEquals(0f, preferences.getFloat("y", -1f), 0.01f)
-                    val restored = FloatingMenuButton(context)
-                    container.addView(restored)
-                    container.layout(0, 0, 800, 400)
-                    button.place()
-                    restored.layout(0, 0, 48, 48)
-                    restored.place()
-                    assertEquals(button.x, restored.x, 0.01f)
-                    assertEquals(button.y, restored.y, 0.01f)
-                    assertTrue(restored.x >= 30)
-                    assertTrue(restored.y >= 60)
-                    assertTrue(restored.x + restored.width <= 770)
-                    assertTrue(restored.y + restored.height <= 380)
-                    touch(android.view.MotionEvent.ACTION_DOWN, 20f, 20f)
-                    touch(android.view.MotionEvent.ACTION_UP, 20f, 20f)
-                    assertEquals(1, clicks)
-                } finally {
-                    preferences.edit().clear().commit()
-                }
-            }
-        }
-    }
-
-    @Test fun fullscreenMenuStaysAboveGameAndSurvivesPopupChanges() {
+    @Test fun fullscreenGameHasNoNativeMenuAndKeepsPopupNavigation() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
                 val root = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
-                val menu = allViews(root).single { it.contentDescription == "Меню" }
+                assertTrue(allViews(root).none { it is android.widget.ImageButton })
                 val popup = ProtectedWebViewFactory.create(activity)
                 activity.showWindow(popup)
-                assertTrue(menu.isAttachedToWindow)
                 assertTrue(popup.isAttachedToWindow)
-                assertTrue(menu.parent !== popup.parent)
                 activity.closeWindow(popup)
-                assertTrue(menu.isAttachedToWindow)
+                assertFalse(popup.isAttachedToWindow)
             }
         }
     }
@@ -473,7 +419,8 @@ class ProtectedWebViewTest {
             scenario.onActivity { activity ->
                 allViews(
                     activity.findViewById(android.R.id.content)
-                ).filterIsInstance<android.widget.Button>().last().performClick()
+                ).filterIsInstance<android.widget.Button>()
+                    .single { it.text == "Попробовать снова" }.performClick()
             }
             lateinit var restored: WebView
             scenario.onActivity { activity ->

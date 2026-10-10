@@ -7,7 +7,6 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
     private let preparedView: WKWebView?
     private let spinner = UIActivityIndicatorView(style: .medium)
     private var errorPanel: UIStackView?
-    private let menuButton = FloatingMenuButton()
     private(set) var retryURL = URL(string: "https://yandex.ru/games/")!
 
     init(preparedView: WKWebView? = nil) {
@@ -23,8 +22,6 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         super.viewDidLoad()
         title = "UGames"
         view.backgroundColor = .systemBackground
-        menuButton.addTarget(self, action: #selector(showMenu), for: .touchUpInside)
-        view.addSubview(menuButton)
         spinner.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(spinner)
         NSLayoutConstraint.activate([
@@ -45,35 +42,6 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         navigationController?.setNavigationBarHidden(true, animated: false)
-        menuButton.restorePosition()
-        view.setNeedsLayout()
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        var area = view.safeAreaLayoutGuide.layoutFrame
-        area.size.height = max(
-            0,
-            min(area.maxY, view.keyboardLayoutGuide.layoutFrame.minY) - area.minY
-        )
-        menuButton.place(in: area)
-    }
-
-    @objc private func showMenu() {
-        let menu = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
-        menu.addAction(UIAlertAction(title: "Назад", style: .default) { [weak self] _ in
-            self?.goBack()
-        })
-        menu.addAction(UIAlertAction(title: "Каталог", style: .default) { [weak self] _ in
-            self?.openCatalog()
-        })
-        menu.addAction(UIAlertAction(title: "Обновить", style: .default) { [weak self] _ in
-            self?.retry()
-        })
-        menu.addAction(UIAlertAction(title: "Отмена", style: .cancel))
-        menu.popoverPresentationController?.sourceView = menuButton
-        menu.popoverPresentationController?.sourceRect = menuButton.bounds
-        present(menu, animated: true)
     }
 
     private func prepareAndLoad(_ url: URL) {
@@ -112,25 +80,9 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         }
     }
 
-    @objc private func goBack() {
-        errorPanel?.removeFromSuperview()
-        errorPanel = nil
-        webView?.isHidden = false
-        view.backgroundColor = webView?.underPageBackgroundColor ?? .systemBackground
-        if let navigation = navigationController,
-           navigation.viewControllers.first !== self
-        {
-            navigation.popViewController(animated: true)
-        } else if webView?.canGoBack == true {
-            webView?.goBack()
-        } else {
-            openCatalog()
-        }
-    }
-
     @objc private func openCatalog() {
-        if navigationController?.viewControllers.first !== self {
-            navigationController?.popToRootViewController(animated: true)
+        if let navigation = navigationController, navigation.viewControllers.first !== self {
+            navigation.popToRootViewController(animated: true)
             if let root = navigationController?.viewControllers
                 .first as? GameViewController
             {
@@ -171,7 +123,13 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         retry.titleLabel?.adjustsFontForContentSizeCategory = true
         retry.addTarget(self, action: #selector(self.retry), for: .touchUpInside)
         retry.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
-        let panel = UIStackView(arrangedSubviews: [label, retry])
+        let catalog = UIButton(type: .system)
+        catalog.setTitle("В каталог", for: .normal)
+        catalog.titleLabel?.font = .preferredFont(forTextStyle: .body)
+        catalog.titleLabel?.adjustsFontForContentSizeCategory = true
+        catalog.addTarget(self, action: #selector(openCatalog), for: .touchUpInside)
+        catalog.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        let panel = UIStackView(arrangedSubviews: [label, retry, catalog])
         panel.axis = .vertical
         panel.spacing = 16
         panel.translatesAutoresizingMaskIntoConstraints = false
@@ -188,7 +146,6 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
             panel.centerYAnchor.constraint(equalTo: view.safeAreaLayoutGuide.centerYAnchor),
         ])
         errorPanel = panel
-        view.bringSubviewToFront(menuButton)
     }
 
     func showProtectionError() {
@@ -286,19 +243,6 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         navigationController?.popViewController(animated: true)
     }
 
-    private func presentGameDialog(_ alert: UIAlertController) {
-        // A running game can request a dialog while its navigation menu is open.
-        if let menu = presentedViewController as? UIAlertController,
-           menu.preferredStyle == .actionSheet
-        {
-            menu.dismiss(animated: false) { [weak self] in
-                self?.present(alert, animated: true)
-            }
-        } else {
-            present(alert, animated: true)
-        }
-    }
-
     func webView(
         _: WKWebView,
         runJavaScriptAlertPanelWithMessage message: String,
@@ -307,7 +251,7 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
     ) {
         let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "ОК", style: .default) { _ in completionHandler() })
-        presentGameDialog(alert)
+        present(alert, animated: true)
     }
 
     func webView(
@@ -323,7 +267,7 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
             })
         alert
             .addAction(UIAlertAction(title: "ОК", style: .default) { _ in completionHandler(true) })
-        presentGameDialog(alert)
+        present(alert, animated: true)
     }
 
     func webView(
@@ -343,6 +287,6 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
             .addAction(UIAlertAction(title: "ОК", style: .default) { _ in
                 completionHandler(alert.textFields?.first?.text)
             })
-        presentGameDialog(alert)
+        present(alert, animated: true)
     }
 }

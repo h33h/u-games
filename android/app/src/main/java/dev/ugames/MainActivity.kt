@@ -11,7 +11,6 @@ import android.webkit.WebView
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.activity.ComponentActivity
@@ -25,7 +24,6 @@ class MainActivity : ComponentActivity() {
     private lateinit var root: FrameLayout
     private lateinit var content: FrameLayout
     private lateinit var loading: ProgressBar
-    private lateinit var menuButton: FloatingMenuButton
     private var fullscreen: View? = null
     private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
     private var lastUrl = HOME
@@ -54,7 +52,6 @@ class MainActivity : ComponentActivity() {
                     WindowInsetsCompat.Type.mandatorySystemGestures()
             )
             view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
-            view.post { if (::menuButton.isInitialized) menuButton.place() }
             insets
         }
         loading =
@@ -65,9 +62,6 @@ class MainActivity : ComponentActivity() {
         content = FrameLayout(this)
         root.addView(content, FrameLayout.LayoutParams(-1, -1))
         root.addView(loading, FrameLayout.LayoutParams(-1, dp(2), Gravity.TOP))
-        menuButton = FloatingMenuButton(this).apply { setOnClickListener { showMenu() } }
-        root.addView(menuButton, FrameLayout.LayoutParams(dp(48), dp(48)))
-        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> menuButton.place() }
         setContentView(root)
         enterImmersiveMode()
         root.requestApplyInsets()
@@ -93,28 +87,6 @@ class MainActivity : ComponentActivity() {
                 layoutInDisplayCutoutMode =
                     LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
-        }
-    }
-
-    private fun showMenu() {
-        PopupMenu(this, menuButton).apply {
-            menu.add(0, 1, 0, "Назад")
-            menu.add(0, 2, 1, "Каталог")
-            menu.add(0, 3, 2, "Обновить")
-            setOnMenuItemClickListener {
-                when (it.itemId) {
-                    1 -> goBack()
-
-                    2 -> {
-                        while (windows.size > 1) current?.let(::closeWindow)
-                        load(HOME)
-                    }
-
-                    3 -> if (current == null) createAndLoad(lastUrl) else load(lastUrl)
-                }
-                true
-            }
-            show()
         }
     }
 
@@ -200,6 +172,16 @@ class MainActivity : ComponentActivity() {
                 }
             },
             LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(16) }
+        )
+        panel.addView(
+            Button(this).apply {
+                text = "В каталог"
+                minHeight = dp(48)
+                setOnClickListener {
+                    while (windows.size > 1) current?.let(::closeWindow)
+                    if (current == null) createAndLoad(HOME) else load(HOME)
+                }
+            }
         )
         content.removeAllViews()
         content.addView(panel, FrameLayout.LayoutParams(-1, -1))

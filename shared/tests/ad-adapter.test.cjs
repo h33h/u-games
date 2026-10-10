@@ -161,3 +161,46 @@ test('immutable ad API rejects init and notifies native shell instead of returni
   assert.equal(env.context.__UGamesAdapter.status, 'unsupported');
   assert.equal(f.calls(), 0);
 });
+
+test('immutable init stops the page and notifies native protection', () => {
+  const f = sdkFixture();
+  let notified = 0, stopped = 0;
+  const provider = {};
+  Object.defineProperty(provider, 'init', { value: () => f.sdk });
+  const env = environment({ YaGames: provider, stop() { stopped++; }, __UGamesProtection: { unsupported() { notified++; } } });
+  assert.throws(() => env.inject(), /advertisement interface/);
+  assert.equal(notified, 1);
+  assert.equal(stopped, 1);
+  assert.equal(env.context.__UGamesAdapter.status, 'unsupported');
+});
+
+test('same SDK is protected again after its adv object or methods change', async () => {
+  const first = sdkFixture(), second = sdkFixture();
+  const env = environment({ YaGames: { init: () => first.sdk } });
+  env.inject();
+  env.context.YaGames.init();
+  first.sdk.adv = second.sdk.adv;
+  env.context.YaGames.init().adv.showRewardedVideo({});
+  // An original callable can be replaced even without replacing adv itself.
+  let original = 0;
+  first.sdk.adv.showFullscreenAdv = () => original++;
+  env.context.YaGames.init().adv.showFullscreenAdv({});
+  await settle();
+  assert.equal(second.calls(), 0);
+  assert.equal(original, 0);
+});
+
+for (const publish of ['defineProperty', 'defineProperties', 'reflect']) {
+  test(`SDK published by ${publish} is protected before the first polling tick`, async () => {
+    const f = sdkFixture(), env = environment({ fixture: f.sdk });
+    env.inject();
+    const expression = publish === 'defineProperty'
+      ? "Object.defineProperty(window, 'YaGames', {value: provider, configurable: true});"
+      : publish === 'defineProperties'
+      ? "Object.defineProperties(window, {YaGames: {value: provider, configurable: true}});"
+      : "Reflect.defineProperty(window, 'YaGames', {value: provider, configurable: true});";
+    vm.runInContext(`var provider = {init: function(){return fixture;}}; ${expression} YaGames.init().adv.showFullscreenAdv({});`, env.context);
+    await settle();
+    assert.equal(f.calls(), 0);
+  });
+}

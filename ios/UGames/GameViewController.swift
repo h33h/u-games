@@ -6,7 +6,7 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
     private let preparedView: WKWebView?
     private let spinner = UIActivityIndicatorView(style: .medium)
     private var errorPanel: UIStackView?
-    private var lastURL = URL(string: "https://yandex.ru/games/")!
+    private(set) var retryURL = URL(string: "https://yandex.ru/games/")!
     private var isRoot: Bool { preparedView == nil }
 
     init(preparedView: WKWebView? = nil) {
@@ -35,7 +35,7 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
             spinner.centerYAnchor.constraint(equalTo: view.centerYAnchor)
         ])
         if let preparedView = preparedView { attach(preparedView) }
-        else { prepareAndLoad(lastURL) }
+        else { prepareAndLoad(retryURL) }
     }
 
     private func prepareAndLoad(_ url: URL) {
@@ -77,14 +77,14 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
             if let root = navigationController?.viewControllers.first as? GameViewController { root.openCatalog() }
             return
         }
-        lastURL = URL(string: "https://yandex.ru/games/")!
+        retryURL = URL(string: "https://yandex.ru/games/")!
         retry()
     }
     @objc private func retry() {
         errorPanel?.removeFromSuperview(); errorPanel = nil
         webView?.isHidden = false
-        if let webView = webView { webView.load(URLRequest(url: lastURL)) }
-        else { prepareAndLoad(lastURL) }
+        if let webView = webView { webView.load(URLRequest(url: retryURL)) }
+        else { prepareAndLoad(retryURL) }
     }
     private func showError(_ message: String) {
         spinner.stopAnimating()
@@ -121,7 +121,7 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         spinner.stopAnimating()
-        if let url = webView.url, url.scheme == "https" { lastURL = url }
+        if let url = webView.url, url.scheme == "https" { retryURL = url }
         if isRoot { navigationItem.leftBarButtonItem?.isEnabled = webView.canGoBack }
     }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
@@ -133,6 +133,10 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         let scheme = action.request.url?.scheme
         if scheme == "https" || scheme == "http" || scheme == "about" {
+            if action.targetFrame?.isMainFrame == true,
+               let url = action.request.url, scheme == "https" || scheme == "http" {
+                retryURL = url
+            }
             decisionHandler(.allow)
         } else {
             decisionHandler(.cancel)

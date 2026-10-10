@@ -61,4 +61,6 @@ xcodebuild build -project ios/UGames.xcodeproj -scheme UGames \
 
 Подробности: [спецификация](docs/superpowers/specs/2026-10-10-u-games-design.md),
 [план](docs/superpowers/plans/2026-10-10-u-games.md),
-[наблюдения SDK](docs/verification/2026-10-10-provider-investigation.md).
+[наблюдения SDK](docs/verification/2026-10-10-provider-investigation.md),
+[приёмка](docs/verification/2026-10-10-mobile-acceptance.md),
+[решения при выполнении](docs/verification/2026-10-10-execution-decisions.md).

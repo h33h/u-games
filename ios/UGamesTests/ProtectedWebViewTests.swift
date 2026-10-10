@@ -143,6 +143,43 @@ final class ProtectedWebViewTests: XCTestCase {
         XCTAssertTrue(view.isHidden)
     }
 
+    func testFailedNavigationRetainsRetryTargetInRootAndPopup() throws {
+        for popup in [false, true] {
+            let controller = popup ? GameViewController(preparedView: try makeView()) : GameViewController()
+            controller.loadViewIfNeeded()
+            let ready = expectation(description: "Controller attaches its protected view")
+            var surface: WKWebView?
+            let readyDeadline = Date().addingTimeInterval(10)
+            func findView() {
+                surface = controller.view.subviews.compactMap { $0 as? WKWebView }.first
+                if surface != nil || Date() >= readyDeadline { ready.fulfill() }
+                else { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: findView) }
+            }
+            findView()
+            wait(for: [ready], timeout: 12)
+            let webView = try XCTUnwrap(surface)
+            webView.stopLoading()
+            let target = URL(string: "http://127.0.0.1:1/failed-game?popup=\(popup)")!
+            webView.load(URLRequest(url: target))
+            let failed = expectation(description: "Local closed port shows the error panel")
+            let deadline = Date().addingTimeInterval(8)
+            func pollError() {
+                if webView.isHidden || Date() >= deadline { failed.fulfill() }
+                else { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: pollError) }
+            }
+            pollError()
+            wait(for: [failed], timeout: 10)
+            XCTAssertTrue(webView.isHidden)
+            XCTAssertEqual(controller.retryURL, target)
+            let panel = try XCTUnwrap(controller.view.subviews.compactMap { $0 as? UIStackView }.first)
+            let retryButton = try XCTUnwrap(panel.arrangedSubviews.compactMap { $0 as? UIButton }.first)
+            retryButton.sendActions(for: .touchUpInside)
+            XCTAssertFalse(webView.isHidden)
+            XCTAssertEqual(webView.url, target)
+            webView.stopLoading()
+        }
+    }
+
     func testProcessTerminationDoesNotReplayReward() throws {
         let view = try makeView()
         let controller = GameViewController(preparedView: view)

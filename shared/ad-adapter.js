@@ -3,9 +3,12 @@
   if (win.__UGamesAdapter && win.__UGamesAdapter.version === 1) return;
   const state = { version: 1, status: 'waiting', intercepted: { fullscreen: 0, rewarded: 0, banner: 0, portal: 0 }, callbackErrors: 0 };
   Object.defineProperty(win, '__UGamesAdapter', { value: state, configurable: false });
-  const sdkSeen = new WeakSet();
   const initSeen = new WeakSet();
   const providersSeen = new WeakSet();
+  const watched = new WeakMap();
+  const objectAPI = win.Object || Object;
+  const reflectAPI = win.Reflect || Reflect;
+  const defineProperty = objectAPI.defineProperty;
 
   function invoke(callbacks, name, value) {
     if (!callbacks || typeof callbacks[name] !== 'function') return;
@@ -29,25 +32,8 @@
     state.intercepted.banner++;
     return Promise.resolve({ stickyAdvIsShowing: false });
   }
-  function patchSdk(sdk) {
-    if (!sdk || !sdk.adv || sdkSeen.has(sdk)) return sdk;
-    try {
-      const adv = sdk.adv;
-      for (const [name, replacement] of [
-        ['showFullscreenAdv', completeFullscreen],
-        ['showRewardedVideo', completeRewarded],
-        ['showBannerAdv', bannerHidden],
-        ['hideBannerAdv', bannerHidden],
-        ['getBannerAdvStatus', bannerHidden],
-      ]) {
-        if (typeof adv[name] === 'function') {
-          adv[name] = replacement;
-          if (adv[name] !== replacement) throw new Error('immutable advertisement API');
-        }
-      }
-      sdkSeen.add(sdk);
-      state.status = 'active';
-    } catch (_) {
+  function unsupported() {
+    if (state.status !== 'unsupported') {
       state.status = 'unsupported';
       try {
         if (win.__UGamesProtection && typeof win.__UGamesProtection.unsupported === 'function') {
@@ -57,8 +43,27 @@
         }
       } catch (_) {}
       if (typeof win.stop === 'function') win.stop();
-      throw new Error('UGames cannot protect this advertisement interface');
     }
+    throw new Error('UGames cannot protect this advertisement interface');
+  }
+  function patchSdk(sdk) {
+    if (!sdk || !sdk.adv) return sdk;
+    try {
+      const adv = sdk.adv;
+      for (const [name, replacement] of [
+        ['showFullscreenAdv', completeFullscreen],
+        ['showRewardedVideo', completeRewarded],
+        ['showBannerAdv', bannerHidden],
+        ['hideBannerAdv', bannerHidden],
+        ['getBannerAdvStatus', bannerHidden],
+      ]) {
+        if (typeof adv[name] === 'function' && adv[name] !== replacement) {
+          adv[name] = replacement;
+          if (adv[name] !== replacement) throw new Error('immutable advertisement API');
+        }
+      }
+      state.status = 'active';
+    } catch (_) { unsupported(); }
     return sdk;
   }
   function wrapInit(original) {
@@ -70,17 +75,53 @@
     initSeen.add(init);
     return init;
   }
+  // Preserve descriptor semantics while protecting synchronous SDK publication.
+  // Only the two observed properties are transformed; unrelated definitions pass through.
+  function protectedDescriptor(object, key, descriptor) {
+    const transform = watched.get(object)?.get(key);
+    if (!transform) return descriptor;
+    const result = { ...descriptor };
+    if ('value' in result) result.value = transform(result.value);
+    if (typeof result.get === 'function') {
+      const get = result.get;
+      result.get = function () { return transform(get.call(this)); };
+    }
+    return result;
+  }
+  objectAPI.defineProperty = function (object, key, descriptor) {
+    return defineProperty(object, key, protectedDescriptor(object, key, descriptor));
+  };
+  const defineProperties = objectAPI.defineProperties;
+  objectAPI.defineProperties = function (object, descriptors) {
+    const protectedProperties = {};
+    for (const key of reflectAPI.ownKeys(descriptors)) {
+      if (Object.prototype.propertyIsEnumerable.call(descriptors, key)) {
+        defineProperty(protectedProperties, key, { value: protectedDescriptor(object, key, descriptors[key]), enumerable: true });
+      }
+    }
+    return defineProperties(object, protectedProperties);
+  };
+  const reflectDefine = reflectAPI.defineProperty;
+  reflectAPI.defineProperty = function (object, key, descriptor) {
+    return reflectDefine(object, key, protectedDescriptor(object, key, descriptor));
+  };
   function observeProperty(object, key, transform) {
+    let properties = watched.get(object);
+    if (!properties) { properties = new Map(); watched.set(object, properties); }
+    properties.set(key, transform);
     const descriptor = Object.getOwnPropertyDescriptor(object, key);
-    if (descriptor && (!descriptor.configurable || descriptor.writable === false)) {
-      if (typeof object[key] === 'function') {
-        try { object[key] = transform(object[key]); } catch (_) {}
+    if (descriptor && !descriptor.configurable) {
+      const original = object[key];
+      const replacement = transform(original);
+      if (replacement !== original) {
+        try { object[key] = replacement; } catch (_) { unsupported(); }
+        if (object[key] !== replacement) unsupported();
       }
       return;
     }
     let current = descriptor && descriptor.get ? descriptor.get.call(object) : object[key];
     current = transform(current);
-    Object.defineProperty(object, key, {
+    defineProperty(object, key, {
       configurable: true,
       enumerable: descriptor ? descriptor.enumerable : true,
       get() { return descriptor && descriptor.get ? transform(descriptor.get.call(object)) : current; },
@@ -93,15 +134,20 @@
   function hookProvider(provider) {
     if (!provider || (typeof provider !== 'object' && typeof provider !== 'function')) return provider;
     if (!providersSeen.has(provider)) {
+      observeProperty(provider, 'init', wrapInit);
       providersSeen.add(provider);
-      try { observeProperty(provider, 'init', wrapInit); } catch (_) {}
     }
     if (typeof provider.init === 'function') {
-      try { provider.init = wrapInit(provider.init); } catch (_) {}
+      const original = provider.init;
+      const replacement = wrapInit(original);
+      if (original !== replacement) {
+        try { provider.init = replacement; } catch (_) { unsupported(); }
+        if (provider.init !== replacement) unsupported();
+      }
     }
     return provider;
   }
-  try { observeProperty(win, 'YaGames', hookProvider); } catch (_) {}
+  observeProperty(win, 'YaGames', hookProvider);
   hookProvider(win.YaGames);
   let timer = win.setInterval(function () { hookProvider(win.YaGames); }, 250);
   if (typeof win.addEventListener === 'function') {

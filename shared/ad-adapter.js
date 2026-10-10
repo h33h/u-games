@@ -49,6 +49,15 @@
       state.status = 'active';
     } catch (_) {
       state.status = 'unsupported';
+      try {
+        if (win.__UGamesProtection && typeof win.__UGamesProtection.unsupported === 'function') {
+          win.__UGamesProtection.unsupported();
+        } else if (win.webkit && win.webkit.messageHandlers && win.webkit.messageHandlers.ugamesProtection) {
+          win.webkit.messageHandlers.ugamesProtection.postMessage('unsupported');
+        }
+      } catch (_) {}
+      if (typeof win.stop === 'function') win.stop();
+      throw new Error('UGames cannot protect this advertisement interface');
     }
     return sdk;
   }
@@ -102,6 +111,22 @@
     });
   }
   const rules = win.__UGamesRules;
+  if (typeof win.open === 'function') {
+    const originalOpen = win.open;
+    try {
+      win.open = function open() {
+        const popup = originalOpen.apply(this, arguments);
+        const destination = arguments[0];
+        if (popup && (destination == null || destination === '' || String(destination).startsWith('about:blank'))) {
+          try {
+            if (rules && !popup.__UGamesRules) popup.__UGamesRules = rules;
+            installInWindow(popup);
+          } catch (_) { /* Cross-origin windows remain protected by native document-start injection. */ }
+        }
+        return popup;
+      };
+    } catch (_) {}
+  }
   const doc = win.document;
   if (rules && doc && typeof win.MutationObserver === 'function') {
     function suppressPortalAds() {

@@ -132,3 +132,32 @@ test('banner methods return hidden state and never call provider', async () => {
   }
   assert.equal(f.calls(), 0);
 });
+
+test('blank popup is protected before its opener writes a game SDK into it', async () => {
+  const child = environment(), f = sdkFixture();
+  const parent = environment({ open(url) { assert.equal(url, 'about:blank'); return child.context; } });
+  parent.inject();
+  const popup = parent.context.open('about:blank');
+  popup.YaGames = { init: () => Promise.resolve(f.sdk) };
+  const sdk = await popup.YaGames.init();
+  let rewards = 0;
+  sdk.adv.showRewardedVideo({ callbacks: { onRewarded() { rewards++; } } });
+  await settle();
+  assert.equal(rewards, 1);
+  assert.equal(f.calls(), 0);
+});
+
+test('immutable ad API rejects init and notifies native shell instead of returning unsafe SDK', async () => {
+  const f = sdkFixture();
+  Object.freeze(f.sdk.adv);
+  let notifications = 0;
+  const env = environment({
+    YaGames: { init: () => Promise.resolve(f.sdk) },
+    __UGamesProtection: { unsupported() { notifications++; } },
+  });
+  env.inject();
+  await assert.rejects(env.context.YaGames.init(), /advertisement interface/);
+  assert.equal(notifications, 1);
+  assert.equal(env.context.__UGamesAdapter.status, 'unsupported');
+  assert.equal(f.calls(), 0);
+});

@@ -33,3 +33,6 @@ test('invalid host and regex are rejected before packaging', () => {
   assert.throws(() => compiler().validateRules({ ...rules, blockedHosts: ['yandex.ru/ads'] }));
   assert.throws(() => compiler().validateRules({ ...rules, blockedUrlPatterns: ['['] }));
 });
+test('WebKit-incompatible regex disjunction is rejected before app startup', () => {
+  assert.throws(() => compiler().validateRules({ ...rules, blockedUrlPatterns: ['^https?://example\\.test/ad(a|b)'] }));
+});

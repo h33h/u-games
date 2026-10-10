@@ -4,7 +4,8 @@
   "blockedUrlPatterns": [
     "^https?://yandex\\.ru/ads/",
     "^https?://yastatic\\.net/safeframe-bundles/",
-    "^https?://yastatic\\.net/s3/games-static/static-data/ads-async\\.js([?]|$)"
+    "^https?://yastatic\\.net/s3/games-static/static-data/ads-async\\.js$",
+    "^https?://yastatic\\.net/s3/games-static/static-data/ads-async\\.js[?]"
   ],
   "hiddenSelectors": [
     ".sticky-banner-container",

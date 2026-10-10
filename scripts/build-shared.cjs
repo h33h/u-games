@@ -14,6 +14,7 @@ function validateRules(rules) {
   }
   for (const pattern of rules.blockedUrlPatterns) {
     if (!pattern.startsWith('^https?://')) throw new Error('Resource patterns must anchor scheme and hostname');
+    if (pattern.includes('|')) throw new Error('WebKit does not support regex disjunction; use separate rules');
     new RegExp(pattern);
   }
 }

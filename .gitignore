@@ -1,0 +1,14 @@
+.DS_Store
+.tools/
+.superpowers/
+node_modules/
+android/.gradle/
+android/local.properties
+android/**/build/
+android/app/src/main/assets/ugames/
+ios/UGames.xcodeproj/
+ios/UGames/Resources/ad-adapter.js
+ios/UGames/Resources/content-rules.json
+ios/build/
+*.xcuserstate
+*.xcuserdatad/

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ru"><meta charset="utf-8"><title>U Games lifecycle fixture</title>
+<body><p id="result">waiting</p>
+<script>
+window.fixtureResult = { original: 0, rewards: 0, closes: 0, fullscreen: 0, early: !!window.__UGamesAdapter, child: null };
+window.addEventListener('message', function(event) {
+  if (event.data && event.data.type === 'ugames-fixture') window.fixtureResult.child = event.data.result;
+});
+setTimeout(async function() {
+  const sdk = { adv: {
+    showFullscreenAdv() { window.fixtureResult.original++; },
+    showRewardedVideo() { window.fixtureResult.original++; }
+  }, getPlayer() { return { level: 7 }; } };
+  window.YaGames = { init() { return Promise.resolve(sdk); } };
+  const active = await window.YaGames.init();
+  active.adv.showFullscreenAdv({ callbacks: { onClose() { window.fixtureResult.fullscreen++; } } });
+  active.adv.showRewardedVideo({ callbacks: {
+    onRewarded() { window.fixtureResult.rewards++; },
+    onClose() { window.fixtureResult.closes++; document.getElementById('result').textContent = 'complete'; }
+  } });
+}, 30);
+</script>
+<iframe src="frame.html"></iframe>
+</body></html>

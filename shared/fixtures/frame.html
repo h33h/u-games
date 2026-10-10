@@ -1,0 +1,12 @@
+<!doctype html>
+<html><meta charset="utf-8"><title>Child lifecycle fixture</title><body>
+<script>
+const result = { early: !!window.__UGamesAdapter, original: 0, rewards: 0, closes: 0 };
+window.YaGames = { init() { return Promise.resolve({ adv: {
+  showRewardedVideo() { result.original++; }
+} }); } };
+window.YaGames.init().then(sdk => sdk.adv.showRewardedVideo({ callbacks: {
+  onRewarded() { result.rewards++; },
+  onClose() { result.closes++; parent.postMessage({ type: 'ugames-fixture', result }, '*'); }
+} }));
+</script></body></html>

@@ -246,7 +246,7 @@ final class ProtectedWebViewTests: XCTestCase {
         child.navigationDelegate = loaded
         child.loadHTMLString(
             "<script>window.earlyProtection = !!window.__UGamesAdapter;</script>",
-            baseURL: URL(string: "https://fixture.ugames.test/")
+            baseURL: URL(string: "https://yandex.ru/games/")
         )
         wait(for: [done], timeout: 5)
     }
@@ -283,7 +283,7 @@ final class ProtectedWebViewTests: XCTestCase {
           YaGames.init().catch(function(){});
         }, 20);
         </script>
-        """, baseURL: URL(string: "https://fixture.ugames.test/"))
+        """, baseURL: URL(string: "https://yandex.ru/games/"))
         let notified = expectation(description: "Native shell hides unsupported game")
         let deadline = Date().addingTimeInterval(5)
         func poll() {
@@ -323,19 +323,27 @@ final class ProtectedWebViewTests: XCTestCase {
             wait(for: [ready], timeout: 12)
             let webView = try XCTUnwrap(surface)
             webView.stopLoading()
-            let target = try XCTUnwrap(URL(string: "http://127.0.0.1:1/failed-game?popup=\(popup)"))
-            webView.load(URLRequest(url: target))
-            let failed = expectation(description: "Local closed port shows the error panel")
-            let deadline = Date().addingTimeInterval(8)
-            func pollError() {
-                if webView.isHidden || Date() >= deadline {
-                    failed.fulfill()
+            let target =
+                try XCTUnwrap(URL(string: "https://yandex.ru/games/app/failed-game?popup=\(popup)"))
+            webView.loadHTMLString("<p>Game fixture</p>", baseURL: target)
+            let loaded = expectation(description: "Allowed game navigation sets the retry target")
+            func pollLoaded() {
+                if webView.url == target, !webView.isLoading {
+                    loaded.fulfill()
                 } else {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: pollError)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: pollLoaded)
                 }
             }
-            pollError()
-            wait(for: [failed], timeout: 10)
+            pollLoaded()
+            wait(for: [loaded], timeout: 5)
+            controller.webView(
+                webView,
+                didFailProvisionalNavigation: nil,
+                withError: NSError(
+                    domain: NSURLErrorDomain,
+                    code: NSURLErrorCannotConnectToHost
+                )
+            )
             XCTAssertTrue(webView.isHidden)
             XCTAssertEqual(controller.retryURL, target)
             let panel = try XCTUnwrap(controller.view.subviews.compactMap { $0 as? UIStackView }
@@ -359,7 +367,7 @@ final class ProtectedWebViewTests: XCTestCase {
         window.YaGames = {init:function(){return Promise.resolve({adv:{showRewardedVideo:function(){}}});}};
         YaGames.init().then(function(sdk){sdk.adv.showRewardedVideo({callbacks:{onRewarded:function(){window.rewards++;}}});});
         </script>
-        """, baseURL: URL(string: "https://fixture.ugames.test/"))
+        """, baseURL: URL(string: "https://yandex.ru/games/"))
         let done = expectation(description: "Reward completed before process termination callback")
         let deadline = Date().addingTimeInterval(5)
         func poll() {

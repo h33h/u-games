@@ -27,7 +27,8 @@ object ProtectedWebViewFactory {
         activity: Activity,
         supportsDocumentStart: Boolean = WebViewFeature.isFeatureSupported(
             WebViewFeature.DOCUMENT_START_SCRIPT
-        )
+        ),
+        isPopup: Boolean = false
     ): WebView {
         if (!supportsDocumentStart) {
             throw UnsupportedOperationException(
@@ -82,12 +83,19 @@ object ProtectedWebViewFactory {
                 override fun shouldInterceptRequest(
                     view: WebView,
                     request: WebResourceRequest
-                ): WebResourceResponse? = if (filter.shouldBlock(request.url.toString())) {
+                ): WebResourceResponse? = if (
+                    filter.shouldBlock(request.url.toString()) ||
+                    GameNavigationPolicy.blocksDocumentRequest(
+                        request.url.toString(),
+                        request.isForMainFrame,
+                        request.requestHeaders
+                    )
+                ) {
                     WebResourceResponse(
                         "text/plain",
                         "utf-8",
                         403,
-                        "Blocked advertisement",
+                        "Blocked destination",
                         emptyMap(),
                         ByteArrayInputStream(ByteArray(0))
                     )
@@ -98,12 +106,17 @@ object ProtectedWebViewFactory {
                     view: WebView,
                     request: WebResourceRequest
                 ): Boolean {
-                    val scheme = request.url.scheme
-                    if (scheme == "https" || scheme == "http" || scheme == "about") return false
-                    (activity as? MainActivity)?.showError(
-                        "Эту ссылку нельзя открыть внутри приложения."
-                    )
-                    return true
+                    if (request.isForMainFrame) {
+                        val blocked = !GameNavigationPolicy.allows(request.url.toString())
+                        if (blocked && isPopup && (view.url == null || view.url == "about:blank")) {
+                            view.post { (activity as? MainActivity)?.closeWindow(view) }
+                        }
+                        return blocked
+                    }
+                    val source = request.requestHeaders.entries.firstOrNull {
+                        it.key.equals("Referer", ignoreCase = true)
+                    }?.value
+                    return !GameNavigationPolicy.allowsFrame(request.url.toString(), source)
                 }
                 override fun onPageStarted(
                     view: WebView,
@@ -154,7 +167,7 @@ object ProtectedWebViewFactory {
                     resultMsg: Message
                 ): Boolean {
                     val owner = activity as? MainActivity ?: return false
-                    val child = create(activity)
+                    val child = create(activity, isPopup = true)
                     owner.showWindow(child)
                     (resultMsg.obj as WebView.WebViewTransport).webView = child
                     resultMsg.sendToTarget()

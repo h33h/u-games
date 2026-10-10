@@ -24,6 +24,92 @@ import org.junit.runner.RunWith
 class ProtectedWebViewTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
 
+    @Test fun scriptedExternalNavigationKeepsTheGameAndItsFrame() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            lateinit var view: WebView
+            scenario.onActivity { activity ->
+                view = ProtectedWebViewFactory.create(activity)
+                activity.showWindow(view)
+                view.loadDataWithBaseURL(
+                    MainActivity.HOME,
+                    "<p id='game'>Game</p><iframe srcdoc=\"<p id='child'>Child</p>\"></iframe>",
+                    "text/html",
+                    "utf-8",
+                    null
+                )
+            }
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            while (System.nanoTime() < deadline) {
+                if (evaluate(
+                        view,
+                        "Boolean(document.getElementById('game') && document.querySelector('iframe').contentDocument.getElementById('child'))"
+                    ) ==
+                    "true"
+                ) {
+                    break
+                }
+                Thread.sleep(100)
+            }
+            var initialUrl: String? = null
+            scenario.onActivity { initialUrl = view.url }
+            evaluate(
+                view,
+                "document.querySelector('iframe').contentWindow.location.href = 'https://external.example/'; window.location.href = 'https://external.example/'; true"
+            )
+            Thread.sleep(500)
+            assertEquals(
+                "true",
+                evaluate(
+                    view,
+                    "Boolean(document.getElementById('game') && document.querySelector('iframe').contentDocument.getElementById('child'))"
+                )
+            )
+            scenario.onActivity {
+                assertEquals(initialUrl, view.url)
+                assertEquals(100, view.progress)
+                assertTrue(view.isAttachedToWindow)
+            }
+        }
+    }
+
+    @Test fun portalCleanupPreservesGamesAndRestoresReusedNavigation() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            lateinit var view: WebView
+            scenario.onActivity { activity ->
+                view = ProtectedWebViewFactory.create(activity)
+                activity.showWindow(view)
+                view.loadDataWithBaseURL(
+                    MainActivity.HOME,
+                    """
+                    <input id="search" placeholder="Найти игру">
+                    <div id="site" class="page-description">О сайте</div>
+                    <a id="shop" href="/games/shop">Магазин</a>
+                    <a id="game" href="/games/app/123">Играть</a>
+                    <script>
+                    setTimeout(function() {
+                      const hidden = id => getComputedStyle(document.getElementById(id)).display === 'none';
+                      const initial = hidden('site') && hidden('shop') && !hidden('game') && !hidden('search');
+                      document.getElementById('shop').href = '/games/category/puzzles';
+                      setTimeout(function() { window.portalResult = initial && !hidden('shop'); }, 100);
+                    }, 100);
+                    </script>
+                    """.trimIndent(),
+                    "text/html",
+                    "utf-8",
+                    null
+                )
+            }
+            val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
+            var result = "null"
+            while (System.nanoTime() < deadline) {
+                result = evaluate(view, "window.portalResult")
+                if (result == "true" || result == "false") break
+                Thread.sleep(100)
+            }
+            assertEquals("Portal chrome is hidden and game navigation stays usable", "true", result)
+        }
+    }
+
     @Test fun draggingMenuDoesNotClickAndRestoresPositionAfterResize() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
@@ -117,7 +203,7 @@ class ProtectedWebViewTest {
                         request: WebResourceRequest
                     ): WebResourceResponse? {
                         if (request.url.host !in
-                            listOf("fixture.ugames.test", "child.fixture.ugames.test")
+                            listOf("yandex.ru", "fixture.ugames.test", "child.fixture.ugames.test")
                         ) {
                             return parentClient.shouldInterceptRequest(v, request)
                         }
@@ -147,7 +233,7 @@ class ProtectedWebViewTest {
                     ): Boolean = parentClient.onRenderProcessGone(v, detail)
                 }
                 activity.showWindow(view)
-                view.loadUrl("https://fixture.ugames.test/sdk-lifecycle.html")
+                view.loadUrl("https://yandex.ru/games/sdk-lifecycle.html")
             }
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(15)
             var result: JSONObject? = null
@@ -244,7 +330,7 @@ class ProtectedWebViewTest {
                 }
                 evaluate(
                     view,
-                    "window.popup = window.open('https://fixture.ugames.test/sdk-lifecycle.html'); Boolean(window.popup)"
+                    "window.popup = window.open('https://yandex.ru/games/sdk-lifecycle.html'); Boolean(window.popup)"
                 )
                 assertTrue(
                     "Production ChromeClient creates the protected child",

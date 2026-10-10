@@ -232,24 +232,34 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
     }
 
     func webView(
-        _: WKWebView,
+        _ webView: WKWebView,
         decidePolicyFor action: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
-        let scheme = action.request.url?.scheme
-        if scheme == "https" || scheme == "http" || scheme == "about" {
+        guard let url = action.request.url else {
+            decisionHandler(.cancel)
+            return
+        }
+        let mainWindow = action.targetFrame?.isMainFrame != false
+        let allowed = mainWindow ? GameNavigationPolicy.allows(url) :
+            GameNavigationPolicy.allowsFrame(url, source: action.sourceFrame.request.url)
+        if allowed {
             if action.targetFrame?.isMainFrame == true,
-               let url = action.request.url, scheme == "https" || scheme == "http"
+               url.scheme == "https"
             {
                 retryURL = url
             }
             decisionHandler(.allow)
         } else {
             decisionHandler(.cancel)
-            if action.targetFrame?
-                .isMainFrame != false
+            if preparedView != nil,
+               webView.url == nil || webView.url?.absoluteString == "about:blank"
             {
-                showError("Эту ссылку нельзя открыть внутри приложения.")
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self,
+                          self.navigationController?.topViewController === self else { return }
+                    self.navigationController?.popViewController(animated: true)
+                }
             }
         }
     }
@@ -262,9 +272,10 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
     func webView(
         _ parent: WKWebView,
         createWebViewWith configuration: WKWebViewConfiguration,
-        for _: WKNavigationAction,
+        for action: WKNavigationAction,
         windowFeatures _: WKWindowFeatures
     ) -> WKWebView? {
+        guard let url = action.request.url, GameNavigationPolicy.allows(url) else { return nil }
         let child = ProtectedWebViewFactory.makePopup(configuration: configuration, parent: parent)
         let controller = GameViewController(preparedView: child)
         navigationController?.pushViewController(controller, animated: true)

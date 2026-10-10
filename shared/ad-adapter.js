@@ -226,12 +226,54 @@
     });
   }
   const rules = win.__UGamesRules;
+  function allowedDestination(value, target, source) {
+    if (value === 'about:blank') {
+      return true;
+    }
+    try {
+      const url = new win.URL(value, doc.baseURI);
+      if (url.href === 'about:blank') {
+        return true;
+      }
+      if (url.protocol !== 'https:' || url.username || url.password || url.port) {
+        return false;
+      }
+      if (
+        (/^(?:www\.)?yandex\.(?:ru|com)$/.test(url.hostname) &&
+          /^\/games(?:\/|$)/.test(url.pathname)) ||
+        (/^passport\.yandex\.(?:ru|com)$/.test(url.hostname) &&
+          /^\/(?:auth|registration)(?:\/|$)/.test(url.pathname))
+      ) {
+        return true;
+      }
+      // A game may navigate within its own frame, but cannot replace the app surface.
+      const localTarget = !target || target.toLowerCase() === '_self';
+      if (localTarget && /\.(?:games\.yandex\.net|games\.s3\.yandex\.net)$/.test(url.hostname)) {
+        return true;
+      }
+      const origin = new win.URL(source || doc.URL);
+      return (
+        localTarget &&
+        url.origin === origin.origin &&
+        !/^(?:(?:www|passport)\.)?yandex\.(?:ru|com)$/.test(url.hostname)
+      );
+    } catch (_) {
+      return false;
+    }
+  }
   if (typeof win.open === 'function') {
     const originalOpen = win.open;
     try {
       win.open = function open() {
-        const popup = originalOpen.apply(this, arguments);
         const destination = arguments[0];
+        if (
+          destination != null &&
+          destination !== '' &&
+          !allowedDestination(destination, '_blank')
+        ) {
+          return null;
+        }
+        const popup = originalOpen.apply(this, arguments);
         if (
           popup &&
           (destination == null ||
@@ -252,6 +294,81 @@
     } catch (_) {}
   }
   const doc = win.document;
+  if (doc && typeof doc.addEventListener === 'function') {
+    if (win.navigation && typeof win.navigation.addEventListener === 'function') {
+      win.navigation.addEventListener('navigate', function (event) {
+        const main = win === win.top;
+        const destination = event.destination.url;
+        if (!main && destination === 'about:srcdoc') {
+          return;
+        }
+        if (!allowedDestination(destination, main ? '_top' : '_self') && event.cancelable) {
+          event.preventDefault();
+        }
+      });
+    }
+    const navigationRoots = new WeakSet();
+    function protectNavigation(root) {
+      if (navigationRoots.has(root)) {
+        return;
+      }
+      navigationRoots.add(root);
+      function intercept(event) {
+        const path =
+          typeof event.composedPath === 'function' ? event.composedPath() : [event.target];
+        const element = path.find(
+          (node) =>
+            node.matches && node.matches(event.type === 'submit' ? 'form' : 'a[href],area[href]'),
+        );
+        if (!element) {
+          return;
+        }
+        const form = event.type === 'submit';
+        const submitter = form ? event.submitter : null;
+        const value = form
+          ? submitter?.hasAttribute('formaction')
+            ? submitter.formAction ||
+              new win.URL(submitter.getAttribute('formaction'), doc.baseURI).href
+            : element.action
+          : element.href;
+        const target =
+          (submitter?.getAttribute('formtarget') ?? element.target) ||
+          doc.querySelector('base[target]')?.target ||
+          '';
+        if (!allowedDestination(value, target)) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+      }
+      for (const event of ['click', 'auxclick', 'submit']) {
+        root.addEventListener(event, intercept, true);
+      }
+    }
+    protectNavigation(doc);
+    if (win.HTMLFormElement) {
+      const submit = win.HTMLFormElement.prototype.submit;
+      win.HTMLFormElement.prototype.submit = function () {
+        if (
+          allowedDestination(this.action, this.target || doc.querySelector('base[target]')?.target)
+        ) {
+          return submit.apply(this, arguments);
+        }
+      };
+    }
+    if (win.Element && typeof win.Element.prototype.attachShadow === 'function') {
+      const attachShadow = win.Element.prototype.attachShadow;
+      win.Element.prototype.attachShadow = function (options) {
+        const root = attachShadow.call(this, options);
+        protectNavigation(root);
+        return root;
+      };
+    }
+    for (const element of doc.querySelectorAll('*')) {
+      if (element.shadowRoot) {
+        protectNavigation(element.shadowRoot);
+      }
+    }
+  }
   // Change presentation only: SDK names, links, resource URLs and user input stay intact.
   if (
     doc &&
@@ -422,6 +539,74 @@
     const dismissedAds = new WeakSet();
     const adMarker =
       'a[href*="/games/_crpd/"], a[href*="/socialads-transparency-report"], a[href^="https://yandex.ru/an/count/"]';
+    // These selectors belong to the portal shell, never to embedded game documents.
+    const portalChrome = [
+      '.page-description',
+      '.left-panel__links',
+      '.left-panel__copyright',
+      '[data-testid="notifications-widget"]',
+      '[data-testid="notification-button-container"]',
+      '[data-testid="balance-button"]',
+      '[data-testid="new-catalog-header-user-menu-button-menu-item-help"]',
+    ].join(',');
+    const portalStyles = new WeakMap();
+    function suppressPortalContent(root) {
+      if (
+        !win.document ||
+        !/^(?:www\.)?yandex\.(?:ru|com)$/.test(win.location.hostname) ||
+        !/^\/games(?:\/|$)/.test(win.location.pathname)
+      ) {
+        return;
+      }
+      const targets = new Set();
+      for (const element of root.querySelectorAll(portalChrome)) {
+        targets.add(element.closest('.left-panel__block') || element);
+      }
+      for (const link of root.querySelectorAll('a[href]')) {
+        try {
+          const url = new win.URL(link.getAttribute('href'), doc.baseURI);
+          if (
+            /^(?:www\.)?yandex\.(?:ru|com)$/.test(url.hostname) &&
+            /^\/(?:games\/(?:shop|promos)|support\/games|legal\/(?:games_termsofuse|confidential|recommendations)|project\/games\/for-developers)(?:\/|$)/.test(
+              url.pathname,
+            )
+          ) {
+            targets.add(link.closest('li,[role="menuitem"]') || link);
+          }
+        } catch (_) {}
+      }
+      let previous = portalStyles.get(root);
+      if (!previous) {
+        previous = new Map();
+        portalStyles.set(root, previous);
+      }
+      for (const [element, properties] of previous) {
+        if (!targets.has(element)) {
+          hiddenAds.delete(element);
+          for (const [name, value, priority] of properties) {
+            if (value) {
+              element.style.setProperty(name, value, priority);
+            } else {
+              element.style.removeProperty(name);
+            }
+          }
+          previous.delete(element);
+        }
+      }
+      for (const element of targets) {
+        if (!previous.has(element)) {
+          previous.set(
+            element,
+            ['display', 'visibility'].map((name) => [
+              name,
+              element.style.getPropertyValue(name),
+              element.style.getPropertyPriority(name),
+            ]),
+          );
+        }
+        hideAd(element);
+      }
+    }
     function hideAd(element) {
       hiddenAds.add(element);
       // Avoid triggering our style observer again when nothing has changed.
@@ -447,6 +632,7 @@
       }
     }
     function suppressPortalAds(root) {
+      suppressPortalContent(root);
       for (const fullscreen of root.querySelectorAll('[data-fullscreen-element="root"]')) {
         if (fullscreen.querySelector(adMarker)) {
           dismissAd(fullscreen, fullscreen);

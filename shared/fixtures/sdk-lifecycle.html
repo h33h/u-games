@@ -2,7 +2,49 @@
 <html lang="ru"><meta charset="utf-8"><title>U Games lifecycle fixture</title>
 <body><p id="result">waiting</p>
 <script>
-window.fixtureResult = { original: 0, rewards: 0, closes: 0, fullscreen: 0, early: !!window.__UGamesAdapter, child: null };
+window.fixtureResult = { original: 0, rewards: 0, closes: 0, fullscreen: 0, early: !!window.__UGamesAdapter, child: null, shadowClosed: 0, shadowMode: null, innocentClosed: 0, obfuscatedClosed: 0 };
+const adContainer = document.createElement('div');
+adContainer.className = 'csr-uniq1';
+const adHost = document.createElement('div');
+adContainer.appendChild(adHost);
+document.body.appendChild(adContainer);
+const adRoot = adHost.attachShadow({ mode: 'closed' });
+window.fixtureResult.shadowMode = adRoot.mode;
+const ad = document.createElement('div');
+ad.setAttribute('data-fullscreen-element', 'root');
+const marker = document.createElement('a');
+marker.href = 'https://yandex.ru/socialads-transparency-report';
+marker.textContent = 'Social advertising fixture';
+const closeAd = document.createElement('div');
+closeAd.setAttribute('data-fullscreen-element', 'close');
+closeAd.addEventListener('click', function() { window.fixtureResult.shadowClosed++; adContainer.remove(); });
+ad.append(marker, closeAd);
+adRoot.appendChild(ad);
+const innocentHost = document.createElement('div');
+document.body.appendChild(innocentHost);
+const innocentRoot = innocentHost.attachShadow({ mode: 'closed' });
+const innocent = document.createElement('div');
+innocent.setAttribute('data-fullscreen-element', 'root');
+const innocentClose = document.createElement('div');
+innocentClose.setAttribute('data-fullscreen-element', 'close');
+innocentClose.addEventListener('click', function() { window.fixtureResult.innocentClosed++; });
+innocent.appendChild(innocentClose);
+innocentRoot.appendChild(innocent);
+const obfuscatedAd = document.createElement('div');
+obfuscatedAd.className = 'm345dc86b';
+obfuscatedAd.setAttribute('data-fullscreen-element', 'root');
+const obfuscatedLink = document.createElement('a');
+obfuscatedLink.href = 'https://yandex.ru/games/_crpd/test-ad';
+const obfuscatedClose = document.createElement('div');
+obfuscatedClose.setAttribute('data-fullscreen-element', 'close');
+obfuscatedClose.addEventListener('click', function() { window.fixtureResult.obfuscatedClosed++; obfuscatedAd.remove(); });
+obfuscatedAd.append(obfuscatedLink, obfuscatedClose);
+document.body.appendChild(obfuscatedAd);
+const saltedBanner = document.createElement('div');
+saltedBanner.className = 'ixz2hGtK2mbhNuv7ZPk5ewHOHrCNvmnaQ adv-focusable';
+saltedBanner.textContent = 'Advertising banner fixture';
+document.body.appendChild(saltedBanner);
+setTimeout(function() { window.fixtureResult.saltedBannerHidden = getComputedStyle(saltedBanner).display === 'none'; }, 25);
 window.addEventListener('message', function(event) {
   if (event.data && event.data.type === 'ugames-fixture') window.fixtureResult.child = event.data.result;
 });

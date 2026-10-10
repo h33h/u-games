@@ -1,0 +1,62 @@
+name: UGames
+options:
+  deploymentTarget:
+    iOS: "15.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+targets:
+  UGames:
+    type: application
+    platform: iOS
+    sources:
+      - path: UGames
+    info:
+      path: UGames/Info.plist
+      properties:
+        CFBundleDisplayName: U Games
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default Configuration
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.ugames.app
+    preBuildScripts:
+      - name: Package shared protection
+        script: sh "$SRCROOT/../scripts/build-ios-shared.sh"
+        basedOnDependencyAnalysis: false
+  UGamesTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: UGamesTests
+      - path: ../shared/fixtures
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.ugames.app.tests
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: UGames
+schemes:
+  UGames:
+    build:
+      targets:
+        UGames: all
+        UGamesTests: [test]
+    test:
+      targets:
+        - UGamesTests
+      parallelizable: false

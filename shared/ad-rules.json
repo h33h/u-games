@@ -9,7 +9,9 @@
   ],
   "hiddenSelectors": [
     ".sticky-banner-container",
+    ".adv-focusable",
     ".aab-adv",
+    ".csr-uniq1",
     ".play-modal.adv-focusable"
   ]
 }

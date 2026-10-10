@@ -1,7 +1,7 @@
 (function installInWindow(win) {
   'use strict';
   if (win.__UGamesAdapter && win.__UGamesAdapter.version === 1) return;
-  const state = { version: 1, status: 'waiting', intercepted: { fullscreen: 0, rewarded: 0, banner: 0 }, callbackErrors: 0 };
+  const state = { version: 1, status: 'waiting', intercepted: { fullscreen: 0, rewarded: 0, banner: 0, portal: 0 }, callbackErrors: 0 };
   Object.defineProperty(win, '__UGamesAdapter', { value: state, configurable: false });
   const sdkSeen = new WeakSet();
   const initSeen = new WeakSet();
@@ -129,7 +129,47 @@
   }
   const doc = win.document;
   if (rules && doc && typeof win.MutationObserver === 'function') {
+    const dismissedShadows = new WeakSet();
+    const dismissedPortalRoots = new WeakSet();
+    function observeAdvertisingShadow(root) {
+      function suppressShadowAd() {
+        const marker = root.querySelector('a[href*="/socialads-transparency-report"], a[href^="https://yandex.ru/an/count/"]');
+        if (!marker) return;
+        const container = root.host.closest('.csr-uniq1') || root.host;
+        container.style.setProperty('display', 'none', 'important');
+        container.style.setProperty('visibility', 'hidden', 'important');
+        const close = root.querySelector('[data-fullscreen-element="close"]');
+        if (close && !dismissedShadows.has(root)) {
+          dismissedShadows.add(root);
+          state.intercepted.portal++;
+          close.click();
+        }
+      }
+      const observer = new win.MutationObserver(suppressShadowAd);
+      observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['href', 'data-fullscreen-element'] });
+      suppressShadowAd();
+    }
+    if (win.Element && typeof win.Element.prototype.attachShadow === 'function') {
+      const originalAttach = win.Element.prototype.attachShadow;
+      win.Element.prototype.attachShadow = function attachShadow(options) {
+        const root = originalAttach.call(this, options);
+        observeAdvertisingShadow(root);
+        return root;
+      };
+    }
     function suppressPortalAds() {
+      for (const root of doc.querySelectorAll('[data-fullscreen-element="root"]')) {
+        const marker = root.querySelector('a[href*="/games/_crpd/"], a[href*="/socialads-transparency-report"], a[href^="https://yandex.ru/an/count/"]');
+        if (!marker) continue;
+        root.style.setProperty('visibility', 'hidden', 'important');
+        root.style.setProperty('display', 'none', 'important');
+        const close = root.querySelector('[data-fullscreen-element="close"]');
+        if (close && !dismissedPortalRoots.has(root)) {
+          dismissedPortalRoots.add(root);
+          state.intercepted.portal++;
+          close.click();
+        }
+      }
       const close = doc.querySelector('.play-modal.adv-focusable.play-modal_visible .close-button_type_adv-fullscreen');
       if (close) close.click();
       for (const selector of rules.hiddenSelectors) {
@@ -140,7 +180,7 @@
       }
     }
     const observer = new win.MutationObserver(suppressPortalAds);
-    observer.observe(doc, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
+    observer.observe(doc, { subtree: true, childList: true, attributes: true, attributeFilter: ['class', 'href', 'data-fullscreen-element'] });
     suppressPortalAds();
   }
 })(window);

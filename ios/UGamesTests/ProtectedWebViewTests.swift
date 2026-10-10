@@ -1,0 +1,175 @@
+import XCTest
+import WebKit
+@testable import UGames
+
+private final class FixtureSchemeHandler: NSObject, WKURLSchemeHandler {
+    func webView(_ webView: WKWebView, start task: WKURLSchemeTask) {
+        let name = task.request.url!.lastPathComponent
+        guard ["sdk-lifecycle.html", "frame.html"].contains(name),
+              let file = Bundle(for: ProtectedWebViewTests.self).url(forResource: name, withExtension: nil, subdirectory: "fixtures"),
+              let data = try? Data(contentsOf: file),
+              let html = String(data: data, encoding: .utf8) else {
+            task.didFailWithError(NSError(domain: "Fixture", code: 404)); return
+        }
+        let bytes = html.replacingOccurrences(of: "src=\"frame.html\"", with: "src=\"ugames-fixture://child/frame.html\"").data(using: .utf8)!
+        task.didReceive(URLResponse(url: task.request.url!, mimeType: "text/html", expectedContentLength: bytes.count, textEncodingName: "utf-8"))
+        task.didReceive(bytes)
+        task.didFinish()
+    }
+    func webView(_ webView: WKWebView, stop task: WKURLSchemeTask) {}
+}
+
+private final class PageCompletion: NSObject, WKNavigationDelegate {
+    let loaded: (WKWebView) -> Void
+    init(loaded: @escaping (WKWebView) -> Void) { self.loaded = loaded }
+    func webView(_ view: WKWebView, didFinish navigation: WKNavigation!) { loaded(view) }
+}
+
+private final class NavigationOutcome: NSObject, WKNavigationDelegate {
+    let completed: (Error?) -> Void
+    init(completed: @escaping (Error?) -> Void) { self.completed = completed }
+    func webView(_ view: WKWebView, didFinish navigation: WKNavigation!) { completed(nil) }
+    func webView(_ view: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { completed(error) }
+    func webView(_ view: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { completed(error) }
+}
+
+@MainActor
+final class ProtectedWebViewTests: XCTestCase {
+    private func makeView(configuration: WKWebViewConfiguration? = nil) throws -> WKWebView {
+        let ready = expectation(description: "Protected view ready")
+        var result: Result<WKWebView, Error>?
+        ProtectedWebViewFactory.make(configuration: configuration) { value in result = value; ready.fulfill() }
+        wait(for: [ready], timeout: 15)
+        return try XCTUnwrap(result).get()
+    }
+
+    private func fixtureResult(_ view: WKWebView) throws -> [String: Any] {
+        let ready = expectation(description: "Both frames finish without ads")
+        var result: [String: Any]?
+        let deadline = Date().addingTimeInterval(10)
+        func poll() {
+            view.evaluateJavaScript("JSON.stringify(window.fixtureResult || null)") { value, error in
+                if let text = value as? String, let data = text.data(using: .utf8),
+                   let candidate = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+                   (candidate["closes"] as? Int) == 1,
+                   ((candidate["child"] as? [String: Any])?["closes"] as? Int) == 1 {
+                    result = candidate; ready.fulfill()
+                } else if Date() < deadline {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: poll)
+                } else { ready.fulfill() }
+            }
+        }
+        poll()
+        wait(for: [ready], timeout: 12)
+        return try XCTUnwrap(result)
+    }
+
+    func testAdapterRunsBeforePageSDKInAllFrames() throws {
+        let configuration = WKWebViewConfiguration()
+        configuration.setURLSchemeHandler(FixtureSchemeHandler(), forURLScheme: "ugames-fixture")
+        let view = try makeView(configuration: configuration)
+        view.load(URLRequest(url: URL(string: "ugames-fixture://main/sdk-lifecycle.html")!))
+        let result = try fixtureResult(view)
+        XCTAssertEqual(result["early"] as? Bool, true)
+        XCTAssertEqual(result["original"] as? Int, 0)
+        XCTAssertEqual(result["rewards"] as? Int, 1)
+        XCTAssertEqual(result["fullscreen"] as? Int, 1)
+        XCTAssertEqual(result["shadowClosed"] as? Int, 1)
+        XCTAssertEqual(result["shadowMode"] as? String, "closed")
+        XCTAssertEqual(result["innocentClosed"] as? Int, 0)
+        XCTAssertEqual(result["obfuscatedClosed"] as? Int, 1)
+        XCTAssertEqual(result["saltedBannerHidden"] as? Bool, true)
+        let child = try XCTUnwrap(result["child"] as? [String: Any])
+        XCTAssertEqual(child["early"] as? Bool, true)
+        XCTAssertEqual(child["original"] as? Int, 0)
+        XCTAssertEqual(child["rewards"] as? Int, 1)
+    }
+
+    func testPopupKeepsAdapterAndDataStore() throws {
+        let original = try makeView()
+        let popupConfiguration = WKWebViewConfiguration()
+        popupConfiguration.websiteDataStore = original.configuration.websiteDataStore
+        popupConfiguration.processPool = original.configuration.processPool
+        let child = ProtectedWebViewFactory.makePopup(configuration: popupConfiguration, parent: original)
+        XCTAssertTrue(child.configuration.websiteDataStore === original.configuration.websiteDataStore)
+        XCTAssertTrue(child.configuration.websiteDataStore.isPersistent)
+        let done = expectation(description: "Popup script acts before SDK")
+        let loaded = PageCompletion { child in
+            child.evaluateJavaScript("window.earlyProtection") { value, error in
+                XCTAssertNil(error)
+                XCTAssertEqual(value as? Bool, true)
+                done.fulfill()
+            }
+        }
+        child.navigationDelegate = loaded
+        child.loadHTMLString("<script>window.earlyProtection = !!window.__UGamesAdapter;</script>", baseURL: URL(string: "https://fixture.ugames.test/"))
+        wait(for: [done], timeout: 5)
+    }
+
+    func testContentRulesInstalledBeforeNavigation() throws {
+        let view = try makeView()
+        let blocked = expectation(description: "Advertising URL blocked on the first navigation")
+        let delegate = NavigationOutcome { error in
+            XCTAssertNotNil(error)
+            XCTAssertTrue(error?.localizedDescription.lowercased().contains("content blocker") == true, String(describing: error))
+            blocked.fulfill()
+        }
+        view.navigationDelegate = delegate
+        view.load(URLRequest(url: URL(string: "https://yandex.ru/ads/system/context.js")!))
+        wait(for: [blocked], timeout: 10)
+    }
+
+    func testImmutableSDKShowsAnErrorInsteadOfReturningUnsafeMethods() throws {
+        let view = try makeView()
+        let controller = GameViewController(preparedView: view)
+        controller.loadViewIfNeeded()
+        view.loadHTMLString("""
+            <script>
+            setTimeout(function() {
+              window.YaGames = {init:function(){return Promise.resolve({adv:Object.freeze({showFullscreenAdv:function(){}})});}};
+              YaGames.init().catch(function(){});
+            }, 20);
+            </script>
+            """, baseURL: URL(string: "https://fixture.ugames.test/"))
+        let notified = expectation(description: "Native shell hides unsupported game")
+        let deadline = Date().addingTimeInterval(5)
+        func poll() {
+            if view.isHidden { notified.fulfill() }
+            else if Date() < deadline { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: poll) }
+            else { notified.fulfill() }
+        }
+        poll()
+        wait(for: [notified], timeout: 6)
+        XCTAssertTrue(view.isHidden)
+    }
+
+    func testProcessTerminationDoesNotReplayReward() throws {
+        let view = try makeView()
+        let controller = GameViewController(preparedView: view)
+        controller.loadViewIfNeeded()
+        view.loadHTMLString("""
+            <script>
+            window.rewards = 0;
+            window.YaGames = {init:function(){return Promise.resolve({adv:{showRewardedVideo:function(){}}});}};
+            YaGames.init().then(function(sdk){sdk.adv.showRewardedVideo({callbacks:{onRewarded:function(){window.rewards++;}}});});
+            </script>
+            """, baseURL: URL(string: "https://fixture.ugames.test/"))
+        let done = expectation(description: "Reward completed before process termination callback")
+        let deadline = Date().addingTimeInterval(5)
+        func poll() {
+            view.evaluateJavaScript("window.rewards") { value, _ in
+                if value as? Int == 1 {
+                    controller.webViewWebContentProcessDidTerminate(view)
+                    XCTAssertTrue(view.isHidden)
+                    view.evaluateJavaScript("window.rewards") { value, _ in
+                        XCTAssertEqual(value as? Int, 1)
+                        done.fulfill()
+                    }
+                } else if Date() < deadline { DispatchQueue.main.asyncAfter(deadline: .now() + 0.05, execute: poll) }
+                else { XCTFail("Reward was not completed"); done.fulfill() }
+            }
+        }
+        poll()
+        wait(for: [done], timeout: 6)
+    }
+}

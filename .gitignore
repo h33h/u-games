@@ -10,5 +10,8 @@ ios/UGames.xcodeproj/
 ios/UGames/Resources/ad-adapter.js
 ios/UGames/Resources/content-rules.json
 ios/build/
+ios/build-device/
+.impeccable/review/
+dist/
 *.xcuserstate
 *.xcuserdatad/

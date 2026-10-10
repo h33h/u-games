@@ -4,7 +4,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const modulePath = path.join(__dirname, '../../scripts/build-shared.cjs');
-const compiler = () => fs.existsSync(modulePath) ? require(modulePath) : { compileContentRules: () => [], validateRules() {} };
+const compiler = () =>
+  fs.existsSync(modulePath)
+    ? require(modulePath)
+    : { compileContentRules: () => [], validateRules() {} };
 const rules = {
   version: 1,
   blockedHosts: ['an.yandex.ru'],
@@ -25,7 +28,10 @@ for (const [url, wanted] of [
 ]) {
   test('compiled WebKit filter decision: ' + url, () => {
     const compiled = compiler().compileContentRules(rules);
-    const blocked = compiled.some(rule => rule.action.type === 'block' && new RegExp(rule.trigger['url-filter'], 'i').test(url));
+    const blocked = compiled.some(
+      (rule) =>
+        rule.action.type === 'block' && new RegExp(rule.trigger['url-filter'], 'i').test(url),
+    );
     assert.equal(blocked, wanted);
   });
 }
@@ -34,5 +40,10 @@ test('invalid host and regex are rejected before packaging', () => {
   assert.throws(() => compiler().validateRules({ ...rules, blockedUrlPatterns: ['['] }));
 });
 test('WebKit-incompatible regex disjunction is rejected before app startup', () => {
-  assert.throws(() => compiler().validateRules({ ...rules, blockedUrlPatterns: ['^https?://example\\.test/ad(a|b)'] }));
+  assert.throws(() =>
+    compiler().validateRules({
+      ...rules,
+      blockedUrlPatterns: ['^https?://example\\.test/ad(a|b)'],
+    }),
+  );
 });

@@ -1,11 +1,11 @@
 name: UGames
 options:
   deploymentTarget:
-    iOS: "15.0"
+    iOS: '15.0'
 settings:
   base:
-    SWIFT_VERSION: "5.0"
-    TARGETED_DEVICE_FAMILY: "1"
+    SWIFT_VERSION: '5.0'
+    TARGETED_DEVICE_FAMILY: '1'
     CODE_SIGN_STYLE: Automatic
     ENABLE_USER_SCRIPT_SANDBOXING: NO
 targets:

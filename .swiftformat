@@ -1,0 +1,10 @@
+--swiftversion 5.0
+--indent 4
+--maxwidth 100
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--allman false
+--semicolons never
+--ifdef no-indent
+--disable redundantSelf,initCoderUnavailable

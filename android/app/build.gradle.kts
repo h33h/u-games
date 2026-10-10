@@ -19,7 +19,11 @@ android {
 val sharedAssets by tasks.registering(Exec::class) {
     workingDir = rootProject.projectDir.parentFile
     commandLine("node", "scripts/build-shared.cjs")
-    inputs.files("../../shared/ad-adapter.js", "../../shared/ad-rules.json", "../../scripts/build-shared.cjs")
+    inputs.files(
+        "../../shared/ad-adapter.js",
+        "../../shared/ad-rules.json",
+        "../../scripts/build-shared.cjs"
+    )
     outputs.dir("src/main/assets/ugames")
 }
 tasks.named("preBuild") { dependsOn(sharedAssets) }

@@ -1,0 +1,5 @@
+brew "ktlint"
+brew "swiftformat"
+brew "swiftlint"
+brew "shellcheck"
+brew "shfmt"

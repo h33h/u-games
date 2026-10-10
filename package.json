@@ -4,7 +4,25 @@
   "private": true,
   "scripts": {
     "test": "node --test shared/tests/*.test.cjs",
-    "build:shared": "node scripts/build-shared.cjs"
+    "build:shared": "node scripts/build-shared.cjs",
+    "prepare": "husky",
+    "lint": "node scripts/code-quality.cjs lint",
+    "format": "node scripts/code-quality.cjs format",
+    "format:check": "node scripts/code-quality.cjs format:check",
+    "check": "npm run lint && npm test"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": "^20.19.0 || ^22.13.0 || >=24"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@prettier/plugin-xml": "3.4.2",
+    "eslint": "10.12.0",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-html": "8.2.1",
+    "globals": "16.5.0",
+    "husky": "9.1.7",
+    "lint-staged": "16.4.0",
+    "prettier": "3.9.10"
+  }
 }

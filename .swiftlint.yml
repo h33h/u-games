@@ -1,0 +1,19 @@
+included:
+  - ios/UGames
+  - ios/UGamesTests
+excluded:
+  - ios/UGames/Resources
+disabled_rules:
+  # SwiftFormat owns whitespace and wrapping; UIKit delegate names are fixed by the SDK.
+  - trailing_comma
+  - opening_brace
+  - vertical_parameter_alignment
+  - identifier_name
+  - function_parameter_count
+  - line_length
+type_body_length:
+  warning: 400
+  error: 500
+function_body_length:
+  warning: 100
+  error: 150

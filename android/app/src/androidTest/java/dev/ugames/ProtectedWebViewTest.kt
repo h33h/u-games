@@ -8,13 +8,17 @@ import android.webkit.WebViewClient
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import org.json.JSONObject
-import org.junit.Assert.*
-import org.junit.Test
-import org.junit.runner.RunWith
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
+import org.json.JSONObject
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class ProtectedWebViewTest {
@@ -24,7 +28,10 @@ class ProtectedWebViewTest {
         val value = AtomicReference<String>()
         val latch = CountDownLatch(1)
         instrumentation.runOnMainSync {
-            view.evaluateJavascript(script) { value.set(it); latch.countDown() }
+            view.evaluateJavascript(script) {
+                value.set(it)
+                latch.countDown()
+            }
         }
         assertTrue("JavaScript response", latch.await(5, TimeUnit.SECONDS))
         return value.get()
@@ -37,17 +44,39 @@ class ProtectedWebViewTest {
                 view = ProtectedWebViewFactory.create(activity)
                 val parentClient = view.webViewClient
                 view.webViewClient = object : WebViewClient() {
-                    override fun shouldInterceptRequest(v: WebView, request: WebResourceRequest): WebResourceResponse? {
-                        if (request.url.host !in listOf("fixture.ugames.test", "child.fixture.ugames.test")) return parentClient.shouldInterceptRequest(v, request)
+                    override fun shouldInterceptRequest(
+                        v: WebView,
+                        request: WebResourceRequest
+                    ): WebResourceResponse? {
+                        if (request.url.host !in
+                            listOf("fixture.ugames.test", "child.fixture.ugames.test")
+                        ) {
+                            return parentClient.shouldInterceptRequest(v, request)
+                        }
                         val name = request.url.lastPathSegment ?: return null
                         return if (name in listOf("sdk-lifecycle.html", "frame.html")) {
-                            val html = instrumentation.context.assets.open(name).bufferedReader().use { it.readText() }
-                                .replace("src=\"frame.html\"", "src=\"https://child.fixture.ugames.test/frame.html\"")
+                            val html = instrumentation.context.assets.open(
+                                name
+                            ).bufferedReader().use {
+                                it.readText()
+                            }
+                                .replace(
+                                    "src=\"frame.html\"",
+                                    "src=\"https://child.fixture.ugames.test/frame.html\""
+                                )
                             WebResourceResponse("text/html", "utf-8", html.byteInputStream())
-                        } else WebResourceResponse("text/plain", "utf-8", java.io.ByteArrayInputStream(ByteArray(0)))
+                        } else {
+                            WebResourceResponse(
+                                "text/plain",
+                                "utf-8",
+                                java.io.ByteArrayInputStream(ByteArray(0))
+                            )
+                        }
                     }
-                    override fun onRenderProcessGone(v: WebView, detail: android.webkit.RenderProcessGoneDetail): Boolean =
-                        parentClient.onRenderProcessGone(v, detail)
+                    override fun onRenderProcessGone(
+                        v: WebView,
+                        detail: android.webkit.RenderProcessGoneDetail
+                    ): Boolean = parentClient.onRenderProcessGone(v, detail)
                 }
                 activity.showWindow(view)
                 view.loadUrl("https://fixture.ugames.test/sdk-lifecycle.html")
@@ -59,8 +88,11 @@ class ProtectedWebViewTest {
                 val decoded = org.json.JSONTokener(raw).nextValue()
                 if (decoded is String && decoded != "null") {
                     val candidate = JSONObject(decoded)
-                    if (candidate.optJSONObject("child")?.optInt("closes") == 1 && candidate.optInt("closes") == 1) {
-                        result = candidate; break
+                    if (candidate.optJSONObject("child")?.optInt("closes") == 1 &&
+                        candidate.optInt("closes") == 1
+                    ) {
+                        result = candidate
+                        break
                     }
                 }
                 Thread.sleep(100)
@@ -70,17 +102,42 @@ class ProtectedWebViewTest {
             assertEquals(0, result.getInt("original"))
             assertEquals(1, result.getInt("rewards"))
             assertEquals(1, result.getInt("fullscreen"))
-            assertEquals("A closed social advertising shadow is dismissed", 1, result.getInt("shadowClosed"))
+            assertEquals(
+                "A closed social advertising shadow is dismissed",
+                1,
+                result.getInt("shadowClosed")
+            )
             assertEquals("Encapsulation is preserved", "closed", result.getString("shadowMode"))
-            assertEquals("Non-advertising components are untouched", 0, result.getInt("innocentClosed"))
-            assertEquals("Obfuscated portal advertisements are dismissed", 1, result.getInt("obfuscatedClosed"))
-            assertTrue("Salted banners retain their advertising marker", result.getBoolean("saltedBannerHidden"))
+            assertEquals(
+                "Non-advertising components are untouched",
+                0,
+                result.getInt("innocentClosed")
+            )
+            assertEquals(
+                "Obfuscated portal advertisements are dismissed",
+                1,
+                result.getInt("obfuscatedClosed")
+            )
+            assertTrue(
+                "Salted banners retain their advertising marker",
+                result.getBoolean("saltedBannerHidden")
+            )
             assertTrue(result.getJSONObject("child").getBoolean("early"))
             assertEquals(0, result.getJSONObject("child").getInt("original"))
             assertEquals(1, result.getJSONObject("child").getInt("rewards"))
             if (reload) {
-                instrumentation.runOnMainSync { view.onPause(); view.onResume() }
-                assertEquals(1, JSONObject(org.json.JSONTokener(evaluate(view, "JSON.stringify(window.fixtureResult)")).nextValue() as String).getInt("rewards"))
+                instrumentation.runOnMainSync {
+                    view.onPause()
+                    view.onResume()
+                }
+                assertEquals(
+                    1,
+                    JSONObject(
+                        org.json.JSONTokener(
+                            evaluate(view, "JSON.stringify(window.fixtureResult)")
+                        ).nextValue() as String
+                    ).getInt("rewards")
+                )
             }
             if (popup) {
                 val windowCreated = CountDownLatch(1)
@@ -88,10 +145,16 @@ class ProtectedWebViewTest {
                     val actual = view.webChromeClient
                     val fixtureClient = view.webViewClient
                     view.webChromeClient = object : android.webkit.WebChromeClient() {
-                        override fun onCreateWindow(parent: WebView, dialog: Boolean, gesture: Boolean, msg: android.os.Message): Boolean {
+                        override fun onCreateWindow(
+                            parent: WebView,
+                            dialog: Boolean,
+                            gesture: Boolean,
+                            msg: android.os.Message
+                        ): Boolean {
                             val accepted = actual!!.onCreateWindow(parent, dialog, gesture, msg)
                             if (accepted) {
-                                val child = requireNotNull((msg.obj as WebView.WebViewTransport).webView)
+                                val child =
+                                    requireNotNull((msg.obj as WebView.WebViewTransport).webView)
                                 child.webViewClient = fixtureClient
                                 windowCreated.countDown()
                             }
@@ -99,12 +162,22 @@ class ProtectedWebViewTest {
                         }
                     }
                 }
-                evaluate(view, "window.popup = window.open('https://fixture.ugames.test/sdk-lifecycle.html'); Boolean(window.popup)")
-                assertTrue("Production ChromeClient creates the protected child", windowCreated.await(5, TimeUnit.SECONDS))
+                evaluate(
+                    view,
+                    "window.popup = window.open('https://fixture.ugames.test/sdk-lifecycle.html'); Boolean(window.popup)"
+                )
+                assertTrue(
+                    "Production ChromeClient creates the protected child",
+                    windowCreated.await(5, TimeUnit.SECONDS)
+                )
                 val limit = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
                 var early = "false"
                 while (System.nanoTime() < limit) {
-                    early = evaluate(view, "Boolean(window.popup && window.popup.fixtureResult && window.popup.fixtureResult.early && window.popup.fixtureResult.rewards === 1)")
+                    early =
+                        evaluate(
+                            view,
+                            "Boolean(window.popup && window.popup.fixtureResult && window.popup.fixtureResult.early && window.popup.fixtureResult.rewards === 1)"
+                        )
                     if (early == "true") break
                     Thread.sleep(100)
                 }
@@ -115,7 +188,9 @@ class ProtectedWebViewTest {
     }
 
     @Test fun documentStartAdapterProtectsMainFrameAndChild() = exerciseFixture()
+
     @Test fun returningFromBackgroundDoesNotReplayReward() = exerciseFixture(true)
+
     @Test fun popupUsesProtectedFactory() = exerciseFixture(popup = true)
 
     @Test fun backClosesPopupWithoutNavigatingParent() {
@@ -153,25 +228,35 @@ class ProtectedWebViewTest {
             scenario.onActivity { activity ->
                 val view = ProtectedWebViewFactory.create(activity)
                 activity.showWindow(view)
-                view.loadDataWithBaseURL(MainActivity.HOME, """
+                view.loadDataWithBaseURL(
+                    MainActivity.HOME,
+                    """
                     <script>setTimeout(function(){
                       window.YaGames = {init:function(){return Promise.resolve({adv:Object.freeze({
                         showFullscreenAdv:function(){}
                       })});}};
                       YaGames.init().catch(function(){});
                     }, 20);</script>
-                """.trimIndent(), "text/html", "utf-8", null)
+                    """.trimIndent(),
+                    "text/html",
+                    "utf-8",
+                    null
+                )
             }
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
             var blocked = false
             while (System.nanoTime() < deadline) {
                 scenario.onActivity { activity ->
-                    blocked = allViews(activity.findViewById(android.R.id.content)).none { it is WebView }
+                    blocked =
+                        allViews(activity.findViewById(android.R.id.content)).none { it is WebView }
                 }
                 if (blocked) break
                 Thread.sleep(100)
             }
-            assertTrue("Unsupported SDK removes the game surface instead of returning unsafe methods", blocked)
+            assertTrue(
+                "Unsupported SDK removes the game surface instead of returning unsafe methods",
+                blocked
+            )
         }
     }
 
@@ -181,7 +266,9 @@ class ProtectedWebViewTest {
             scenario.onActivity { activity ->
                 game = ProtectedWebViewFactory.create(activity)
                 activity.showWindow(game)
-                game.loadDataWithBaseURL(MainActivity.HOME, """
+                game.loadDataWithBaseURL(
+                    MainActivity.HOME,
+                    """
                     <script>
                     window.fixtureRewards = 0;
                     window.YaGames = {init:function(){return Promise.resolve({adv:{
@@ -191,7 +278,11 @@ class ProtectedWebViewTest {
                       onRewarded:function(){window.fixtureRewards++;}
                     }});});
                     </script>
-                """.trimIndent(), "text/html", "utf-8", null)
+                    """.trimIndent(),
+                    "text/html",
+                    "utf-8",
+                    null
+                )
             }
             val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
             var rewarded = "0"
@@ -206,18 +297,24 @@ class ProtectedWebViewTest {
             var removed = false
             while (System.nanoTime() < crashDeadline) {
                 scenario.onActivity { activity ->
-                    removed = allViews(activity.findViewById(android.R.id.content)).none { it is WebView }
+                    removed =
+                        allViews(activity.findViewById(android.R.id.content)).none { it is WebView }
                 }
                 if (removed) break
                 Thread.sleep(100)
             }
             assertTrue("Crashed views are removed and a recovery action is shown", removed)
             scenario.onActivity { activity ->
-                allViews(activity.findViewById(android.R.id.content)).filterIsInstance<android.widget.Button>().last().performClick()
+                allViews(
+                    activity.findViewById(android.R.id.content)
+                ).filterIsInstance<android.widget.Button>().last().performClick()
             }
             lateinit var restored: WebView
             scenario.onActivity { activity ->
-                restored = allViews(activity.findViewById(android.R.id.content)).filterIsInstance<WebView>().single()
+                restored =
+                    allViews(
+                        activity.findViewById(android.R.id.content)
+                    ).filterIsInstance<WebView>().single()
             }
             val restoreDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10)
             var restoredURL: String? = null
@@ -226,8 +323,15 @@ class ProtectedWebViewTest {
                 if (restoredURL?.startsWith("https://") == true) break
                 Thread.sleep(100)
             }
-            assertTrue("Retry returns to the saved HTTPS page, not the internal crash URL", restoredURL?.startsWith("https://") == true)
-            assertEquals("Old reward request is not inserted in the new document", "0", evaluate(restored, "window.fixtureRewards || 0"))
+            assertTrue(
+                "Retry returns to the saved HTTPS page, not the internal crash URL",
+                restoredURL?.startsWith("https://") == true
+            )
+            assertEquals(
+                "Old reward request is not inserted in the new document",
+                "0",
+                evaluate(restored, "window.fixtureRewards || 0")
+            )
         }
     }
 }

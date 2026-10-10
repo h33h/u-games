@@ -101,4 +101,21 @@
       if (timer === null) timer = win.setInterval(function () { hookProvider(win.YaGames); }, 250);
     });
   }
+  const rules = win.__UGamesRules;
+  const doc = win.document;
+  if (rules && doc && typeof win.MutationObserver === 'function') {
+    function suppressPortalAds() {
+      const close = doc.querySelector('.play-modal.adv-focusable.play-modal_visible .close-button_type_adv-fullscreen');
+      if (close) close.click();
+      for (const selector of rules.hiddenSelectors) {
+        for (const element of doc.querySelectorAll(selector)) {
+          element.style.setProperty('display', 'none', 'important');
+          element.style.setProperty('visibility', 'hidden', 'important');
+        }
+      }
+    }
+    const observer = new win.MutationObserver(suppressPortalAds);
+    observer.observe(doc, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
+    suppressPortalAds();
+  }
 })(window);

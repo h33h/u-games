@@ -1,0 +1,186 @@
+name: CI and Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: brew bundle
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+      - run: brew install actionlint
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+      - run: actionlint
+      - run: npm run check
+
+  android:
+    name: Android
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      UGAMES_BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+      - name: Set version
+        run: echo "UGAMES_VERSION=$(node -p 'require("./package.json").version')" >> "$GITHUB_ENV"
+      - name: Restore release signing key
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$KEYSTORE_BASE64"
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/ugames-release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/ugames-release.jks" >> "$GITHUB_ENV"
+      - name: Test and build APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon testDebugUnitTest lintRelease assembleRelease
+      - name: Verify and stage signed APK
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose android/app/build/outputs/apk/release/app-release.apk
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release.apk dist/UGames.apk
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          name: android-release
+          path: dist/UGames.apk
+          if-no-files-found: error
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/ugames-release.jks"
+
+  ios:
+    name: iOS
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: brew install xcodegen
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+      - run: xcodegen generate --spec ios/project.yml
+      - name: Test on iPhone simulator
+        run: |
+          simulator=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; print(next(d["udid"] for devices in json.load(sys.stdin)["devices"].values() for d in devices if d["name"].startswith("iPhone")))')
+          xcodebuild test -project ios/UGames.xcodeproj -scheme UGames \
+            -destination "platform=iOS Simulator,id=$simulator" \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Archive for iPhone without signing
+        env:
+          BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          xcodebuild archive -project ios/UGames.xcodeproj -scheme UGames \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/UGames.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
+            MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p "$RUNNER_TEMP/ipa/Payload" dist
+          ditto "$RUNNER_TEMP/UGames.xcarchive/Products/Applications/UGames.app" "$RUNNER_TEMP/ipa/Payload/UGames.app"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/dist/UGames-unsigned.ipa" Payload)
+          unzip -t dist/UGames-unsigned.ipa
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-release
+          path: dist/UGames-unsigned.ipa
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: [quality, android, ios]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          pattern: '*-release'
+          merge-multiple: true
+          path: dist
+      - name: Publish APK and IPA together
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BUILD_NUMBER: ${{ github.run_number }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          version=$(node -p 'require("./package.json").version')
+          tag="v${version}-build.${BUILD_NUMBER}-${COMMIT_SHA:0:7}"
+          test -s dist/UGames.apk
+          test -s dist/UGames-unsigned.ipa
+          (cd dist && sha256sum UGames.apk UGames-unsigned.ipa > SHA256SUMS.txt)
+          printf 'Commit: %s\n\nAPK is signed with the persistent Android release key.\nIPA is unsigned and requires re-signing before installation.\n' "$COMMIT_SHA" > "$RUNNER_TEMP/release-notes.md"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --target "$COMMIT_SHA" --draft \
+              --title "UGames $version · build $BUILD_NUMBER" \
+              --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi
+          if [ "$(gh release view "$tag" --json isDraft --jq .isDraft)" = true ]; then
+            gh release upload "$tag" dist/UGames.apk dist/UGames-unsigned.ipa dist/SHA256SUMS.txt --clobber
+            gh release edit "$tag" --draft=false --latest=false
+          fi
+          if [ "$(gh api "repos/$GH_REPO/commits/main" --jq .sha)" = "$COMMIT_SHA" ]; then
+            gh release edit "$tag" --latest
+          fi

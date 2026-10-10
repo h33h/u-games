@@ -77,6 +77,44 @@ cd android
 
 Тесты iOS запускайте через Product → Test в Xcode со схемой `UGames`.
 
+## Авторелиз и защита main
+
+GitHub Actions проверяет каждый PR в `main` и каждый коммит в `main`: форматирование,
+линтеры, общие JavaScript-тесты, Android unit-тесты и Android Lint, iOS-тесты на
+симуляторе, Release-сборки Android и iOS. После успешного завершения всех трёх jobs
+(`Quality`, `Android`, `iOS`) коммит в `main` публикует GitHub Release с файлами:
+
+- `UGames.apk` — APK, подписанный постоянным ключом Android.
+- `UGames-unsigned.ipa` — сборка для физических iPhone без подписи. Перед установкой
+  её нужно переподписать своим сертификатом и provisioning profile.
+- `SHA256SUMS.txt` — контрольные суммы обоих файлов.
+
+Версия приложения берётся из `package.json`, номер сборки — из `github.run_number`.
+Тег имеет вид `v0.1.0-build.42-abcdef0`. Каждый запуск для `main` сохраняется;
+новый коммит не отменяет предыдущую сборку. Повторный запуск того же workflow
+использует тот же тег. Релиз сначала создаётся как черновик и публикуется после
+загрузки обоих файлов. Ручной запуск через Actions → CI and Release также доступен;
+публикация разрешена только из `main`.
+
+Для подписи Android в Settings → Secrets and variables → Actions нужны секреты
+`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` и
+`ANDROID_KEY_PASSWORD`. Keystore передаётся в Base64. Сохраните резервную копию
+ключа и паролей вне GitHub: замена ключа нарушит обновление установленных APK.
+В PR ключ не используется и APK собирается без подписи.
+
+Настройки защиты находятся в `.github/main-protection.json`. Администратор может
+применить их после включения workflow:
+
+```sh
+gh api --method PUT repos/h33h/u-games/branches/main/protection \
+  --input .github/main-protection.json
+```
+
+Защита требует PR, успешных проверок `Quality`, `Android`, `iOS`, актуальной базы
+`main` и разрешения обсуждений. Force-push и удаление запрещены; правила действуют
+и для администраторов. В одиночном проекте чужой approving review не обязателен.
+Для приватного репозитория GitHub требует тариф с поддержкой protected branches.
+
 ## Структура проекта
 
 | Папка      | Содержимое                                                              |

@@ -3,6 +3,7 @@
 .superpowers/
 node_modules/
 android/.gradle/
+android/.kotlin/
 android/local.properties
 android/**/build/
 android/app/src/main/assets/ugames/

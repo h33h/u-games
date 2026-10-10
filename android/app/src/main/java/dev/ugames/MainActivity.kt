@@ -5,23 +5,27 @@ import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
-import android.view.WindowInsets
+import android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 
 class MainActivity : ComponentActivity() {
     private val windows = mutableListOf<WebView>()
-    private lateinit var root: LinearLayout
+    private lateinit var root: FrameLayout
     private lateinit var content: FrameLayout
     private lateinit var loading: ProgressBar
-    private lateinit var toolbar: LinearLayout
+    private lateinit var menuButton: FloatingMenuButton
     private var fullscreen: View? = null
     private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
     private var lastUrl = HOME
@@ -39,56 +43,33 @@ class MainActivity : ComponentActivity() {
             }
         )
         super.onCreate(savedInstanceState)
-        root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        root = FrameLayout(this)
         root.setOnApplyWindowInsetsListener { view, insets ->
-            if (Build.VERSION.SDK_INT >= 30) {
-                val safe = insets.getInsets(
-                    WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout() or
-                        WindowInsets.Type.ime()
-                )
-                view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
-            } else {
-                @Suppress("DEPRECATION")
-                view.setPadding(
-                    insets.systemWindowInsetLeft,
-                    insets.systemWindowInsetTop,
-                    insets.systemWindowInsetRight,
-                    insets.systemWindowInsetBottom
-                )
-            }
+            val compatible = WindowInsetsCompat.toWindowInsetsCompat(insets, view)
+            // Keep game controls clear of cutouts, the keyboard and reserved system gestures.
+            val safe = compatible.getInsets(
+                WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime() or
+                    WindowInsetsCompat.Type.systemBars() or
+                    WindowInsetsCompat.Type.mandatorySystemGestures()
+            )
+            view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
+            view.post { if (::menuButton.isInitialized) menuButton.place() }
             insets
         }
-        toolbar =
-            LinearLayout(this).apply {
-                gravity = Gravity.CENTER_VERTICAL
-                setPadding(dp(8), 0, dp(8), 0)
-            }
-        fun action(title: String, onClick: () -> Unit) = Button(this).apply {
-            text = title
-            minHeight = dp(48)
-            contentDescription = title
-            setOnClickListener { onClick() }
-        }
-        toolbar.addView(action("Назад") { goBack() })
-        toolbar.addView(
-            TextView(this).apply {
-                text = "UGames"
-                gravity = Gravity.CENTER
-                setTextAppearance(android.R.style.TextAppearance_Material_Title)
-            },
-            LinearLayout.LayoutParams(0, dp(56), 1f)
-        )
-        toolbar.addView(action("Каталог") { load(HOME) })
         loading =
             ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
                 isIndeterminate = true
                 visibility = View.GONE
             }
         content = FrameLayout(this)
-        root.addView(toolbar)
-        root.addView(loading, LinearLayout.LayoutParams(-1, dp(2)))
-        root.addView(content, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(content, FrameLayout.LayoutParams(-1, -1))
+        root.addView(loading, FrameLayout.LayoutParams(-1, dp(2), Gravity.TOP))
+        menuButton = FloatingMenuButton(this).apply { setOnClickListener { showMenu() } }
+        root.addView(menuButton, FrameLayout.LayoutParams(dp(48), dp(48)))
+        root.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> menuButton.place() }
         setContentView(root)
+        enterImmersiveMode()
         root.requestApplyInsets()
         lastUrl = savedInstanceState?.getString("lastUrl") ?: HOME
         createAndLoad(lastUrl)
@@ -100,6 +81,46 @@ class MainActivity : ComponentActivity() {
                 }
             }
         )
+    }
+
+    private fun enterImmersiveMode() {
+        WindowCompat.getInsetsController(window, root).apply {
+            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            hide(WindowInsetsCompat.Type.systemBars())
+        }
+        if (Build.VERSION.SDK_INT >= 28) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode =
+                    LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
+    }
+
+    private fun showMenu() {
+        PopupMenu(this, menuButton).apply {
+            menu.add(0, 1, 0, "Назад")
+            menu.add(0, 2, 1, "Каталог")
+            menu.add(0, 3, 2, "Обновить")
+            setOnMenuItemClickListener {
+                when (it.itemId) {
+                    1 -> goBack()
+
+                    2 -> {
+                        while (windows.size > 1) current?.let(::closeWindow)
+                        load(HOME)
+                    }
+
+                    3 -> if (current == null) createAndLoad(lastUrl) else load(lastUrl)
+                }
+                true
+            }
+            show()
+        }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && ::root.isInitialized) enterImmersiveMode()
     }
 
     private fun createAndLoad(url: String) {
@@ -202,7 +223,6 @@ class MainActivity : ComponentActivity() {
         }
         fullscreen = view
         fullscreenCallback = callback
-        toolbar.visibility = View.GONE
         content.addView(view, FrameLayout.LayoutParams(-1, -1))
     }
 
@@ -211,7 +231,6 @@ class MainActivity : ComponentActivity() {
         fullscreen = null
         fullscreenCallback?.onCustomViewHidden()
         fullscreenCallback = null
-        if (::toolbar.isInitialized) toolbar.visibility = View.VISIBLE
     }
 
     private fun goBack() {

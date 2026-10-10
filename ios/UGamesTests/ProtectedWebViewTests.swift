@@ -70,6 +70,93 @@ private final class NavigationOutcome: NSObject, WKNavigationDelegate {
 
 @MainActor
 final class ProtectedWebViewTests: XCTestCase {
+    func testSafeAreaBackgroundFollowsPageAndResetsForErrors() throws {
+        let webView = try makeView()
+        let controller = GameViewController(preparedView: webView)
+        controller.loadViewIfNeeded()
+        func assertBackground(red: CGFloat, green: CGFloat, blue: CGFloat) throws {
+            let color = try XCTUnwrap(controller.view.backgroundColor)
+            var actualRed: CGFloat = 0
+            var actualGreen: CGFloat = 0
+            var actualBlue: CGFloat = 0
+            var alpha: CGFloat = 0
+            XCTAssertTrue(color.getRed(
+                &actualRed,
+                green: &actualGreen,
+                blue: &actualBlue,
+                alpha: &alpha
+            ))
+            XCTAssertEqual(actualRed, red, accuracy: 1 / 255)
+            XCTAssertEqual(actualGreen, green, accuracy: 1 / 255)
+            XCTAssertEqual(actualBlue, blue, accuracy: 1 / 255)
+            XCTAssertEqual(alpha, 1, accuracy: 0.01)
+        }
+        let dark = UIColor(red: 0.12, green: 0.15, blue: 0.18, alpha: 1)
+        webView.underPageBackgroundColor = dark
+        try assertBackground(red: 0.12, green: 0.15, blue: 0.18)
+
+        webView.underPageBackgroundColor = .white
+        try assertBackground(red: 1, green: 1, blue: 1)
+
+        webView.underPageBackgroundColor = dark
+        controller.showProtectionError()
+        XCTAssertEqual(controller.view.backgroundColor, .systemBackground)
+        webView.underPageBackgroundColor = .red
+        XCTAssertEqual(controller.view.backgroundColor, .systemBackground)
+    }
+
+    func testMenuRestoresPositionAndStaysReachableAfterRotation() throws {
+        let suite = "FloatingMenuTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(0.25, forKey: "gameMenu.x")
+        defaults.set(0.75, forKey: "gameMenu.y")
+        let button = FloatingMenuButton(defaults: defaults)
+        let portrait = CGRect(x: 0, y: 44, width: 390, height: 766)
+        button.place(in: portrait)
+        XCTAssertEqual(button.frame.minX, 90.5, accuracy: 0.01)
+        XCTAssertEqual(button.frame.minY, 581.5, accuracy: 0.01)
+
+        let landscape = CGRect(x: 44, y: 0, width: 756, height: 369)
+        button.place(in: landscape)
+        XCTAssertTrue(landscape.contains(button.frame))
+        XCTAssertEqual(button.frame.minX, 226, accuracy: 0.01)
+        XCTAssertEqual(button.frame.minY, 239.75, accuracy: 0.01)
+
+        defaults.set(1.0, forKey: "gameMenu.x")
+        button.restorePosition()
+        button.place(in: portrait)
+        XCTAssertEqual(button.frame.maxX, 382, accuracy: 0.01)
+    }
+
+    func testFullscreenShellKeepsOnlyMenuButtonAboveGame() throws {
+        let webView = try makeView()
+        let controller = GameViewController(preparedView: webView)
+        let navigation = UINavigationController(rootViewController: controller)
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        let window = UIWindow(windowScene: scene)
+        window.rootViewController = navigation
+        window.makeKeyAndVisible()
+        defer { window.isHidden = true }
+        navigation.view.layoutIfNeeded()
+
+        XCTAssertTrue(navigation.isNavigationBarHidden)
+        XCTAssertTrue(controller.prefersStatusBarHidden)
+        XCTAssertEqual(webView.frame, controller.view.safeAreaLayoutGuide.layoutFrame)
+        let menu = try XCTUnwrap(controller.view.subviews.compactMap { $0 as? UIButton }
+            .first { $0.accessibilityLabel == "Меню" })
+        XCTAssertTrue(controller.view.safeAreaLayoutGuide.layoutFrame.contains(menu.frame))
+        XCTAssertGreaterThanOrEqual(menu.bounds.width, 44)
+        XCTAssertTrue(controller.view.hitTest(CGPoint(x: 100, y: 400), with: nil)?
+            .isDescendant(of: webView) == true)
+
+        controller.showProtectionError()
+        controller.view.layoutIfNeeded()
+        menu.center = CGPoint(x: controller.view.bounds.midX, y: controller.view.bounds.midY)
+        XCTAssertTrue(controller.view.hitTest(menu.center, with: nil)?
+            .isDescendant(of: menu) == true)
+    }
+
     private func makeView(configuration: WKWebViewConfiguration? = nil) throws -> WKWebView {
         let ready = expectation(description: "Protected view ready")
         var result: Result<WKWebView, Error>?

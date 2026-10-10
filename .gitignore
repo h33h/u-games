@@ -16,3 +16,30 @@ ios/build-device/
 dist/
 *.xcuserstate
 *.xcuserdatad/
+
+# Local IDE settings
+.idea/
+*.iml
+
+# Local configuration and signing credentials
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.mobileprovision
+
+# Additional native build and test outputs
+android/**/.cxx/
+android/**/.externalNativeBuild/
+android/captures/
+ios/DerivedData/
+*.xcresult/
+
+# Node diagnostic logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

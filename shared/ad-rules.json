@@ -12,6 +12,14 @@
     ".adv-focusable",
     ".aab-adv",
     ".csr-uniq1",
-    ".play-modal.adv-focusable"
+    ".play-modal.adv-focusable",
+    ".grid-list__game-item_adv",
+    "[data-testid^=\"feed-banner-\"]",
+    "[data-testid=\"feed-grid-banner\"]",
+    "[class*=\"feed-adv-block-renderer-\"][class*=\"__wrapper--\"]",
+    "[class*=\"feed-grid-adv-container-\"][class*=\"__tile--\"]",
+    "[data-testid=\"feed-block-banner-promo\"]",
+    "[id^=\"promo_banner_\"]",
+    "[data-testid=\"banner-carousel-container\"]"
   ]
 }

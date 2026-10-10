@@ -177,6 +177,7 @@ final class ProtectedWebViewTests: XCTestCase {
                    let candidate = (try? JSONSerialization
                        .jsonObject(with: data)) as? [String: Any],
                    (candidate["closes"] as? Int) == 1,
+                   candidate["portalAdsHidden"] != nil,
                    ((candidate["child"] as? [String: Any])?["closes"] as? Int) == 1
                 {
                     result = candidate
@@ -213,6 +214,9 @@ final class ProtectedWebViewTests: XCTestCase {
         XCTAssertEqual(result["innocentClosed"] as? Int, 0)
         XCTAssertEqual(result["obfuscatedClosed"] as? Int, 1)
         XCTAssertEqual(result["saltedBannerHidden"] as? Bool, true)
+        XCTAssertEqual(result["portalAdsHidden"] as? Bool, true)
+        XCTAssertEqual(result["portalControlsVisible"] as? Bool, true)
+        XCTAssertEqual(result["catalogShadowAdHidden"] as? Bool, true)
         let child = try XCTUnwrap(result["child"] as? [String: Any])
         XCTAssertEqual(child["early"] as? Bool, true)
         XCTAssertEqual(child["original"] as? Int, 0)

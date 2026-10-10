@@ -157,7 +157,7 @@ class ProtectedWebViewTest {
                 if (decoded is String && decoded != "null") {
                     val candidate = JSONObject(decoded)
                     if (candidate.optJSONObject("child")?.optInt("closes") == 1 &&
-                        candidate.optInt("closes") == 1
+                        candidate.optInt("closes") == 1 && candidate.has("portalAdsHidden")
                     ) {
                         result = candidate
                         break
@@ -189,6 +189,18 @@ class ProtectedWebViewTest {
             assertTrue(
                 "Salted banners retain their advertising marker",
                 result.getBoolean("saltedBannerHidden")
+            )
+            assertTrue(
+                "Catalog and menu advertisements are hidden",
+                result.getBoolean("portalAdsHidden")
+            )
+            assertTrue(
+                "Regular games and menu controls remain visible",
+                result.getBoolean("portalControlsVisible")
+            )
+            assertTrue(
+                "Closed shadow catalog ads are hidden",
+                result.getBoolean("catalogShadowAdHidden")
             )
             assertTrue(result.getJSONObject("child").getBoolean("early"))
             assertEquals(0, result.getJSONObject("child").getInt("original"))

@@ -417,80 +417,131 @@
     }
   }
   if (rules && doc && typeof win.MutationObserver === 'function') {
-    const dismissedShadows = new WeakSet();
-    const dismissedPortalRoots = new WeakSet();
-    function observeAdvertisingShadow(root) {
-      function suppressShadowAd() {
-        const marker = root.querySelector(
-          'a[href*="/socialads-transparency-report"], a[href^="https://yandex.ru/an/count/"]',
-        );
-        if (!marker) {
-          return;
-        }
-        const container = root.host.closest('.csr-uniq1') || root.host;
-        container.style.setProperty('display', 'none', 'important');
-        container.style.setProperty('visibility', 'hidden', 'important');
-        const close = root.querySelector('[data-fullscreen-element="close"]');
-        if (close && !dismissedShadows.has(root)) {
-          dismissedShadows.add(root);
-          state.intercepted.portal++;
-          close.click();
+    const observedAdRoots = new WeakSet();
+    const hiddenAds = new WeakSet();
+    const dismissedAds = new WeakSet();
+    const adMarker =
+      'a[href*="/games/_crpd/"], a[href*="/socialads-transparency-report"], a[href^="https://yandex.ru/an/count/"]';
+    function hideAd(element) {
+      hiddenAds.add(element);
+      // Avoid triggering our style observer again when nothing has changed.
+      for (const [name, value] of [
+        ['display', 'none'],
+        ['visibility', 'hidden'],
+      ]) {
+        if (
+          element.style.getPropertyValue(name) !== value ||
+          element.style.getPropertyPriority(name) !== 'important'
+        ) {
+          element.style.setProperty(name, value, 'important');
         }
       }
-      const observer = new win.MutationObserver(suppressShadowAd);
-      observer.observe(root, {
-        childList: true,
-        subtree: true,
-        attributes: true,
-        attributeFilter: ['href', 'data-fullscreen-element'],
+    }
+    function dismissAd(root, container) {
+      hideAd(container);
+      const close = root.querySelector('[data-fullscreen-element="close"]');
+      if (close && !dismissedAds.has(close)) {
+        dismissedAds.add(close);
+        state.intercepted.portal++;
+        close.click();
+      }
+    }
+    function suppressPortalAds(root) {
+      for (const fullscreen of root.querySelectorAll('[data-fullscreen-element="root"]')) {
+        if (fullscreen.querySelector(adMarker)) {
+          dismissAd(fullscreen, fullscreen);
+        }
+      }
+      if (root.host && root.querySelector(adMarker)) {
+        dismissAd(root, root.host.closest('.csr-uniq1') || root.host);
+      }
+      const close = root.querySelector(
+        '.play-modal.adv-focusable.play-modal_visible .close-button_type_adv-fullscreen',
+      );
+      if (close && !dismissedAds.has(close)) {
+        dismissedAds.add(close);
+        close.click();
+      }
+      for (const selector of rules.hiddenSelectors) {
+        for (const element of root.querySelectorAll(selector)) {
+          hideAd(element);
+        }
+      }
+      // Paid catalog placements bypass the game SDK. Hide their entire grid slot.
+      for (const link of root.querySelectorAll('.game-card a[href]')) {
+        try {
+          if (
+            new win.URL(link.getAttribute('href'), doc.baseURI).searchParams.get('utm_source') ===
+            'game_promo_catalog'
+          ) {
+            const card = link.closest('.game-card');
+            hideAd(card.closest('.grid-list__game-item') || card);
+          }
+        } catch (_) {}
+      }
+      for (const badge of root.querySelectorAll('.game-badges__sticky-badge[title="Промо"]')) {
+        const card = badge.closest('.game-card');
+        if (card) {
+          hideAd(card.closest('.grid-list__game-item') || card);
+        }
+      }
+      for (const icon of root.querySelectorAll('.Icon_type_no-ads,.Icon_type_no-ads-mono')) {
+        const control = icon.closest('button,a,[role="button"],[role="menuitem"]');
+        if (control) {
+          hideAd(control);
+        }
+      }
+      // Document observers cannot see changes inside shadow roots.
+      for (const element of root.querySelectorAll('*')) {
+        if (element.shadowRoot) {
+          observeAdvertisingRoot(element.shadowRoot);
+        }
+      }
+    }
+    function observeAdvertisingRoot(root) {
+      if (observedAdRoots.has(root)) {
+        return;
+      }
+      observedAdRoots.add(root);
+      const observer = new win.MutationObserver(function (changes) {
+        let rescan = false;
+        for (const change of changes) {
+          if (change.type === 'attributes' && change.attributeName === 'style') {
+            if (hiddenAds.has(change.target)) {
+              hideAd(change.target);
+            }
+          } else {
+            rescan = true;
+          }
+        }
+        if (rescan) {
+          suppressPortalAds(root);
+        }
       });
-      suppressShadowAd();
+      observer.observe(root, {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        attributeFilter: [
+          'class',
+          'href',
+          'title',
+          'id',
+          'data-testid',
+          'data-fullscreen-element',
+          'style',
+        ],
+      });
+      suppressPortalAds(root);
     }
     if (win.Element && typeof win.Element.prototype.attachShadow === 'function') {
       const originalAttach = win.Element.prototype.attachShadow;
       win.Element.prototype.attachShadow = function attachShadow(options) {
         const root = originalAttach.call(this, options);
-        observeAdvertisingShadow(root);
+        observeAdvertisingRoot(root);
         return root;
       };
     }
-    function suppressPortalAds() {
-      for (const root of doc.querySelectorAll('[data-fullscreen-element="root"]')) {
-        const marker = root.querySelector(
-          'a[href*="/games/_crpd/"], a[href*="/socialads-transparency-report"], a[href^="https://yandex.ru/an/count/"]',
-        );
-        if (!marker) {
-          continue;
-        }
-        root.style.setProperty('visibility', 'hidden', 'important');
-        root.style.setProperty('display', 'none', 'important');
-        const close = root.querySelector('[data-fullscreen-element="close"]');
-        if (close && !dismissedPortalRoots.has(root)) {
-          dismissedPortalRoots.add(root);
-          state.intercepted.portal++;
-          close.click();
-        }
-      }
-      const close = doc.querySelector(
-        '.play-modal.adv-focusable.play-modal_visible .close-button_type_adv-fullscreen',
-      );
-      if (close) {
-        close.click();
-      }
-      for (const selector of rules.hiddenSelectors) {
-        for (const element of doc.querySelectorAll(selector)) {
-          element.style.setProperty('display', 'none', 'important');
-          element.style.setProperty('visibility', 'hidden', 'important');
-        }
-      }
-    }
-    const observer = new win.MutationObserver(suppressPortalAds);
-    observer.observe(doc, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ['class', 'href', 'data-fullscreen-element'],
-    });
-    suppressPortalAds();
+    observeAdvertisingRoot(doc);
   }
 })(window);

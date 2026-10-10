@@ -68,6 +68,43 @@
       setTimeout(function () {
         window.fixtureResult.saltedBannerHidden = getComputedStyle(saltedBanner).display === 'none';
       }, 25);
+      const portal = document.createElement('div');
+      portal.innerHTML = `
+        <ul>
+          <li id="catalog-ad" class="grid-list__game-item_adv">Реклама</li>
+          <li id="sponsored-card" class="grid-list__game-item"><div class="game-card"><a href="https://yandex.ru/games/app/123?utm_source=game_promo_catalog">Промо</a></div></li>
+          <li id="regular-card" class="grid-list__game-item"><div class="game-card"><a href="https://yandex.ru/games/app/456">Играть</a></div></li>
+        </ul>
+        <div id="catalog-feed" data-testid="feed-banner-0">Реклама</div>
+        <div id="catalog-carousel" data-testid="banner-carousel-container"><a href="https://yandex.ru/games/shop">За покупками</a></div>
+        <nav><button id="subscription"><span class="Icon_type_no-ads"></span>Отключить рекламу</button><button id="catalog-back">Назад</button></nav>
+        <div id="catalog-shadow-host"></div>
+      `;
+      document.body.appendChild(portal);
+      const catalogShadow = portal
+        .querySelector('#catalog-shadow-host')
+        .attachShadow({ mode: 'closed' });
+      catalogShadow.innerHTML =
+        '<div data-testid="feed-banner-1">Реклама</div><button>Играть</button>';
+      setTimeout(function () {
+        portal.querySelector('#sponsored-card').style.setProperty('display', 'block', 'important');
+        setTimeout(function () {
+          const hidden = (selector) =>
+            getComputedStyle(portal.querySelector(selector)).display === 'none';
+          window.fixtureResult.portalAdsHidden =
+            hidden('#catalog-ad') &&
+            hidden('#sponsored-card') &&
+            hidden('#catalog-feed') &&
+            hidden('#catalog-carousel') &&
+            hidden('#subscription');
+          window.fixtureResult.portalControlsVisible =
+            !hidden('#regular-card') &&
+            !hidden('#catalog-back') &&
+            getComputedStyle(catalogShadow.querySelector('button')).display !== 'none';
+          window.fixtureResult.catalogShadowAdHidden =
+            getComputedStyle(catalogShadow.querySelector('[data-testid]')).display === 'none';
+        }, 10);
+      }, 25);
       window.addEventListener('message', function (event) {
         if (event.data && event.data.type === 'ugames-fixture') {
           window.fixtureResult.child = event.data.result;

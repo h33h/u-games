@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
         toolbar.addView(action("Назад") { goBack() })
         toolbar.addView(
             TextView(this).apply {
-                text = "U Games"
+                text = "UGames"
                 gravity = Gravity.CENTER
                 setTextAppearance(android.R.style.TextAppearance_Material_Title)
             },
@@ -108,10 +108,10 @@ class MainActivity : ComponentActivity() {
             load(url)
         } catch (_: UnsupportedOperationException) {
             showError(
-                "Обнови Android System WebView и перезапусти U Games, чтобы открыть игры без рекламы."
+                "Обнови Android System WebView и перезапусти UGames, чтобы открыть игры без рекламы."
             )
         } catch (_: Exception) {
-            showError("Не удалось подготовить приложение. Попробуй перезапустить U Games.")
+            showError("Не удалось подготовить приложение. Попробуй перезапустить UGames.")
         }
     }
 

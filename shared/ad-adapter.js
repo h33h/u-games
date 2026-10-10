@@ -252,6 +252,170 @@
     } catch (_) {}
   }
   const doc = win.document;
+  // Change presentation only: SDK names, links, resource URLs and user input stay intact.
+  if (
+    doc &&
+    typeof doc.createTreeWalker === 'function' &&
+    typeof win.MutationObserver === 'function'
+  ) {
+    const brand =
+      /(^|[^\p{L}\p{N}_@/.-])(?:яндекс(?:а|у|ом|е)?(?:[\s\u00a0]+игр(?:ы|а|ах|ам|ами)?)?|yandex(?:[\s\u00a0]+games)?)(?![\p{L}\p{N}_@/-]|\.[\p{L}\p{N}])/giu;
+    const labels = ['title', 'alt', 'aria-label', 'placeholder'];
+    const skipped =
+      'script,style,noscript,textarea,input,[contenteditable]:not([contenteditable="false"])';
+    const observedRoots = new WeakSet();
+    const brandedImages = new WeakSet();
+    const brandedGraphics = new WeakSet();
+    const logo =
+      'data:image/svg+xml,' +
+      encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="140" height="32" viewBox="0 0 140 32"><text x="2" y="24" fill="#888888" font-family="system-ui,sans-serif" font-size="26" font-weight="700">UGames</text></svg>',
+      );
+    function brandText(value) {
+      return value.replace(brand, '$1UGames');
+    }
+    function updateNode(node) {
+      const element = node.nodeType === 1 ? node : node.parentElement;
+      if (!element || element.closest(skipped)) {
+        // Placeholders are presentation; input values are owned by the user.
+        if (element && element.tagName === 'INPUT' && node === element) {
+          for (const name of labels) {
+            const value = element.getAttribute(name);
+            if (value !== null && brandText(value) !== value) {
+              element.setAttribute(name, brandText(value));
+            }
+          }
+        }
+        return;
+      }
+      if (node.nodeType === 3) {
+        const replacement = brandText(node.data);
+        if (replacement !== node.data) {
+          node.data = replacement;
+        }
+        return;
+      }
+      if (node.nodeType !== 1) {
+        return;
+      }
+      const description = labels.map((name) => element.getAttribute(name) || '').join(' ');
+      const cssLogo = element.matches(
+        '.Icon_type_logo,.Icon_type_logo-games,.Icon_type_logo-webapps',
+      );
+      if (cssLogo || (element.localName === 'svg' && brandText(description) !== description)) {
+        brandedGraphics.add(element);
+      }
+      if (brandedGraphics.has(element)) {
+        if (element.localName === 'svg') {
+          if (element.textContent !== 'UGames' || element.querySelector('path,use,image')) {
+            const text = doc.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', '2');
+            text.setAttribute('y', '24');
+            text.setAttribute('fill', 'currentColor');
+            text.setAttribute('font-size', '26');
+            text.setAttribute('font-family', 'system-ui,sans-serif');
+            text.setAttribute('font-weight', '700');
+            text.textContent = 'UGames';
+            element.replaceChildren(text);
+          }
+          if (element.getAttribute('viewBox') !== '0 0 140 32') {
+            element.setAttribute('viewBox', '0 0 140 32');
+          }
+        } else {
+          if (element.textContent !== 'UGames') {
+            element.textContent = 'UGames';
+          }
+          element.style.setProperty('background-image', 'none', 'important');
+          element.style.setProperty('width', 'auto', 'important');
+          element.style.setProperty('font', '700 18px system-ui,sans-serif', 'important');
+          element.style.setProperty('white-space', 'nowrap', 'important');
+        }
+        if (element.getAttribute('aria-label') !== 'UGames') {
+          element.setAttribute('aria-label', 'UGames');
+        }
+      }
+      if (element.tagName === 'SOURCE') {
+        const image = element.closest('picture')?.querySelector('img');
+        if (image && brandedImages.has(image)) {
+          updateNode(image);
+        }
+      }
+      if (element.tagName === 'IMG') {
+        if (
+          brandText(description) !== description ||
+          element.closest('.logo-link,.logotype,.domain-logo')
+        ) {
+          brandedImages.add(element);
+        }
+        if (brandedImages.has(element)) {
+          // Keep the existing node, layout classes and link event handlers.
+          if (element.getAttribute('src') !== logo) {
+            element.setAttribute('src', logo);
+          }
+          element.removeAttribute('srcset');
+          if (element.alt !== 'UGames') {
+            element.alt = 'UGames';
+          }
+          const picture = element.closest('picture');
+          if (picture) {
+            for (const source of picture.querySelectorAll('source')) {
+              source.removeAttribute('srcset');
+            }
+          }
+        }
+      }
+      for (const name of labels) {
+        const value = element.getAttribute(name);
+        if (value !== null && brandText(value) !== value) {
+          element.setAttribute(name, brandText(value));
+        }
+      }
+      if (element.shadowRoot) {
+        observeBranding(element.shadowRoot);
+      }
+    }
+    function updateTree(root) {
+      updateNode(root);
+      const walker = doc.createTreeWalker(root, 1 | 4);
+      while (walker.nextNode()) {
+        updateNode(walker.currentNode);
+      }
+    }
+    function observeBranding(root) {
+      if (observedRoots.has(root)) {
+        return;
+      }
+      observedRoots.add(root);
+      const observer = new win.MutationObserver(function (changes) {
+        for (const change of changes) {
+          if (change.type === 'childList') {
+            for (const node of change.addedNodes) {
+              updateTree(node);
+            }
+          } else {
+            updateNode(change.target);
+          }
+        }
+      });
+      observer.observe(root, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+        attributes: true,
+        attributeFilter: labels.concat(['src', 'srcset', 'class']),
+      });
+      updateTree(root);
+    }
+    observeBranding(doc);
+    if (win.Element && typeof win.Element.prototype.attachShadow === 'function') {
+      const attachShadow = win.Element.prototype.attachShadow;
+      win.Element.prototype.attachShadow = function (options) {
+        const root = attachShadow.call(this, options);
+        observeBranding(root);
+        return root;
+      };
+    }
+  }
   if (rules && doc && typeof win.MutationObserver === 'function') {
     const dismissedShadows = new WeakSet();
     const dismissedPortalRoots = new WeakSet();

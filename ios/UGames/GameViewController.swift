@@ -22,7 +22,7 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "U Games"
+        title = "UGames"
         view.backgroundColor = .systemBackground
         if isRoot {
             let back = UIBarButtonItem(
@@ -69,7 +69,7 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
                 self.attach(view)
                 view.load(URLRequest(url: url))
             case .failure:
-                self.showError("Не удалось подготовить приложение. Попробуй перезапустить U Games.")
+                self.showError("Не удалось подготовить приложение. Попробуй перезапустить UGames.")
             }
         }
     }

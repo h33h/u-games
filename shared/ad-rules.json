@@ -9,6 +9,12 @@
   ],
   "hiddenSelectors": [
     ".sticky-banner-container",
+    ".adv-sticky-banner",
+    ".adv-sticky-banner__desktop-wrapper",
+    ".adv-sticky-banner__landscape-wrapper",
+    ".yandex-sticky-adv-banner__desktop-wrapper",
+    "[class*=\"adv-sticky-banner-manager-\"][class*=\"__disableAdButtonSlot--\"]",
+    "[class*=\"promo-noads-price-placement-\"][class*=\"__root--\"]",
     ".adv-focusable",
     ".aab-adv",
     ".csr-uniq1",
@@ -20,6 +26,8 @@
     "[class*=\"feed-grid-adv-container-\"][class*=\"__tile--\"]",
     "[data-testid=\"feed-block-banner-promo\"]",
     "[id^=\"promo_banner_\"]",
-    "[data-testid=\"banner-carousel-container\"]"
+    "[data-testid=\"banner-carousel-container\"]",
+    "[data-testid=\"feed-block-carousel\"]",
+    "[class*=\"banner-carousel-\"][class*=\"__root--\"]"
   ]
 }

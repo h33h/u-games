@@ -2,6 +2,38 @@
 import XCTest
 
 final class GameNavigationPolicyTests: XCTestCase {
+    func testYandexIdCanFinishSSOAndSynchronizeCookies() throws {
+        for value in [
+            "https://sso.passport.yandex.ru/prepare?uuid=fixture&goal=https%3A%2F%2Fya.ru%2F&finish=https%3A%2F%2Fyandex.ru%2Fgames%2F",
+            "https://sso.passport.yandex.com/prepare?uuid=fixture",
+            "https://sso.ya.ru/sync?uuid=fixture",
+        ] {
+            let url = try XCTUnwrap(URL(string: value))
+            XCTAssertTrue(GameNavigationPolicy.allows(url), value)
+            XCTAssertTrue(GameNavigationPolicy.allowsFrame(
+                url,
+                source: URL(string: "https://passport.yandex.ru/pwl-yandex/auth/finished")
+            ), value)
+        }
+        for value in [
+            "https://sso.passport.yandex.ru/profile",
+            "https://sso.passport.yandex.ru/prepare-evil",
+            "https://sso.passport.yandex.ru.evil.test/prepare",
+            "https://sso.ya.ru/profile",
+            "https://sso.ya.ru/sync-evil",
+            "https://sso.ya.ru.evil.test/sync",
+            "http://sso.ya.ru/sync",
+            "https://sso.ya.ru:444/sync",
+        ] {
+            let url = try XCTUnwrap(URL(string: value))
+            XCTAssertFalse(GameNavigationPolicy.allows(url), value)
+            XCTAssertFalse(GameNavigationPolicy.allowsFrame(
+                url,
+                source: URL(string: "https://sso.passport.yandex.ru/prepare")
+            ), value)
+        }
+    }
+
     func testCurrentYandexIdLoginAndVerificationCanOpen() throws {
         for value in [
             "https://passport.yandex.ru/pwl-yandex/auth/add?retpath=https%3A%2F%2Fyandex.ru%2Fgames%2F",

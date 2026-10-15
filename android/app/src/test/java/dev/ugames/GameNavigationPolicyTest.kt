@@ -5,6 +5,47 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GameNavigationPolicyTest {
+    @Test fun yandexIdCanFinishSSOAndSynchronizeCookies() {
+        for (url in listOf(
+            "https://sso.passport.yandex.ru/prepare?uuid=fixture&goal=https%3A%2F%2Fya.ru%2F&finish=https%3A%2F%2Fyandex.ru%2Fgames%2F",
+            "https://sso.passport.yandex.com/prepare?uuid=fixture",
+            "https://sso.ya.ru/sync?uuid=fixture"
+        )) {
+            assertTrue(url, GameNavigationPolicy.allows(url))
+            assertTrue(
+                url,
+                GameNavigationPolicy.allowsFrame(
+                    url,
+                    "https://passport.yandex.ru/pwl-yandex/auth/finished"
+                )
+            )
+            assertFalse(GameNavigationPolicy.blocksDocumentRequest(url, true, emptyMap()))
+            assertFalse(
+                GameNavigationPolicy.blocksDocumentRequest(
+                    url,
+                    false,
+                    mapOf("Sec-Fetch-Dest" to "iframe")
+                )
+            )
+        }
+        for (url in listOf(
+            "https://sso.passport.yandex.ru/profile",
+            "https://sso.passport.yandex.ru/prepare-evil",
+            "https://sso.passport.yandex.ru.evil.test/prepare",
+            "https://sso.ya.ru/profile",
+            "https://sso.ya.ru/sync-evil",
+            "https://sso.ya.ru.evil.test/sync",
+            "http://sso.ya.ru/sync",
+            "https://sso.ya.ru:444/sync"
+        )) {
+            assertFalse(url, GameNavigationPolicy.allows(url))
+            assertFalse(
+                url,
+                GameNavigationPolicy.allowsFrame(url, "https://sso.passport.yandex.ru/prepare")
+            )
+        }
+    }
+
     @Test fun currentYandexIdLoginAndVerificationCanOpen() {
         for (url in listOf(
             "https://passport.yandex.ru/pwl-yandex/auth/add?retpath=https%3A%2F%2Fyandex.ru%2Fgames%2F",

@@ -49,6 +49,65 @@ test('preserves the current Yandex ID login route for buttons, popups and form s
   assert.equal(win.open('https://passport.yandex.ru.evil.test/pwl-yandex/auth'), null);
 });
 
+test('completes Yandex ID SSO redirects and cookie synchronization forms', (t) => {
+  const { win, opened } = page(t, 'https://passport.yandex.ru/pwl-yandex/auth/finished');
+  for (const url of [
+    'https://sso.passport.yandex.ru/prepare?uuid=fixture&goal=https%3A%2F%2Fya.ru%2F&finish=https%3A%2F%2Fyandex.ru%2Fgames%2F',
+    'https://sso.passport.yandex.com/prepare?uuid=fixture',
+    'https://sso.ya.ru/sync?uuid=fixture',
+  ]) {
+    const event = new win.Event('navigate', { cancelable: true });
+    event.destination = { url };
+    assert.equal(win.navigation.dispatchEvent(event), true, url);
+    win.open(url);
+  }
+  assert.equal(opened.length, 3);
+  const form = win.document.createElement('form');
+  form.method = 'post';
+  form.action = 'https://sso.ya.ru/sync?uuid=fixture';
+  win.document.body.append(form);
+  assert.equal(
+    form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true })),
+    true,
+  );
+  // Passport submits the cookie synchronization form with form.submit().
+  let submitted = false;
+  win._virtualConsole.on('jsdomError', (error) => {
+    if (error.message.includes('HTMLFormElement.prototype.submit')) {
+      submitted = true;
+    }
+  });
+  form.submit();
+  assert.equal(submitted, true);
+});
+
+test('rejects unrelated SSO paths and lookalike hosts', (t) => {
+  const { win } = page(t, 'https://sso.passport.yandex.ru/prepare');
+  for (const url of [
+    'https://sso.passport.yandex.ru/profile',
+    'https://sso.passport.yandex.ru/prepare-evil',
+    'https://sso.passport.yandex.ru.evil.test/prepare',
+    'https://sso.ya.ru/profile',
+    'https://sso.ya.ru/sync-evil',
+    'https://sso.ya.ru.evil.test/sync',
+    'http://sso.ya.ru/sync',
+    'https://sso.ya.ru:444/sync',
+  ]) {
+    const event = new win.Event('navigate', { cancelable: true });
+    event.destination = { url };
+    assert.equal(win.navigation.dispatchEvent(event), false, url);
+    assert.equal(win.open(url), null, url);
+    const form = win.document.createElement('form');
+    form.action = url;
+    win.document.body.append(form);
+    assert.equal(
+      form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true })),
+      false,
+      url,
+    );
+  }
+});
+
 test('blocks external popups, app schemes and lookalike domains before creating a window', (t) => {
   const { win, opened } = page(t);
   for (const url of [

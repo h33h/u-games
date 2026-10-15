@@ -24,6 +24,9 @@ enum GameNavigationPolicy {
                 "www.yandex.com",
                 "passport.yandex.ru",
                 "passport.yandex.com",
+                "sso.passport.yandex.ru",
+                "sso.passport.yandex.com",
+                "sso.ya.ru",
             ].contains(host)
     }
 
@@ -41,6 +44,12 @@ enum GameNavigationPolicy {
         if ["passport.yandex.ru", "passport.yandex.com"].contains(host) {
             return ["/auth", "/registration", "/pwl-yandex"]
                 .contains { path == $0 || path.hasPrefix($0 + "/") }
+        }
+        if ["sso.passport.yandex.ru", "sso.passport.yandex.com"].contains(host) {
+            return path == "/prepare" || path == "/prepare/"
+        }
+        if host == "sso.ya.ru" {
+            return path == "/sync" || path == "/sync/"
         }
         return false
     }

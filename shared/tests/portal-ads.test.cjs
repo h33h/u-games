@@ -7,8 +7,8 @@ const { JSDOM } = require('jsdom');
 const source = fs.readFileSync(path.join(__dirname, '../ad-adapter.js'), 'utf8');
 const rules = JSON.parse(fs.readFileSync(path.join(__dirname, '../ad-rules.json'), 'utf8'));
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
-function page(t, html, prepare = () => {}) {
-  const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'https://yandex.ru/games/' });
+function page(t, html, prepare = () => {}, url = 'https://yandex.ru/games/') {
+  const dom = new JSDOM(html, { runScripts: 'outside-only', url });
   t.after(() => dom.window.close());
   dom.window.__UGamesRules = rules;
   prepare(dom.window);
@@ -110,3 +110,149 @@ test('hides the promotional carousel including store advertisements without hidi
   hidden(win.document.querySelector('#promo'));
   assert.equal(win.document.querySelector('#catalog').style.display, '');
 });
+
+test('collapses entire carousel, sticky and ad removal promotion placements', (t) => {
+  const win = page(
+    t,
+    `<div id="carousel" data-testid="feed-block-carousel" style="padding-bottom:26px"><div class="banner-carousel-critical-catalog-module__root--salted"><div data-testid="banner-carousel-container"></div></div></div>
+    <aside id="sticky" class="adv-sticky-banner__desktop-wrapper" style="width:315px"><div class="adv-sticky-banner"></div></aside>
+    <div id="landscape" class="adv-sticky-banner__landscape-wrapper" style="height:100px"></div>
+    <div id="button-slot" class="adv-sticky-banner-manager-critical-game-module__disableAdButtonSlot--salted"></div>
+    <div id="upsell" class="promo-noads-price-placement-critical-game-module__root--salted"><button>Отключить рекламу</button></div>
+    <div id="rotate" class="rotate-banner">Поверните экран</div><button id="login">Войти</button>`,
+  );
+  for (const id of ['carousel', 'sticky', 'landscape', 'button-slot', 'upsell']) {
+    hidden(win.document.getElementById(id));
+  }
+  for (const id of ['rotate', 'login']) {
+    assert.notEqual(win.getComputedStyle(win.document.getElementById(id)).display, 'none');
+  }
+});
+
+test('collapses ad-only feed and grid wrappers while preserving mixed game sections', (t) => {
+  const win = page(
+    t,
+    `<main><div id="feed" class="feed" style="padding:24px"><div id="section" class="feed__section"><div data-testid="feed-banner-1"></div></div></div>
+    <div id="mixed" class="feed__section"><div data-testid="feed-grid-banner"></div><button id="game">Играть</button></div>
+    <ul><li id="tile" class="grid-list__game-item"><div data-testid="feed-grid-banner"></div></li><li id="organic" class="grid-list__game-item">Игра</li></ul></main>`,
+  );
+  for (const id of ['feed', 'section', 'tile']) {
+    hidden(win.document.getElementById(id));
+  }
+  for (const id of ['mixed', 'game', 'organic']) {
+    assert.notEqual(win.getComputedStyle(win.document.getElementById(id)).display, 'none');
+  }
+  assert.notEqual(win.getComputedStyle(win.document.querySelector('main')).display, 'none');
+});
+
+test('restores a collapsed feed wrapper when the portal reuses it for games', async (t) => {
+  const win = page(
+    t,
+    '<div id="feed" class="feed" style="display:flex"><div id="section" class="feed__section" style="visibility:visible"><div data-testid="feed-banner-1"></div></div></div>',
+  );
+  const feed = win.document.getElementById('feed');
+  const section = win.document.getElementById('section');
+  hidden(feed);
+  hidden(section);
+  section.innerHTML = '<button>Играть</button>';
+  let clicks = 0;
+  section.firstElementChild.addEventListener('click', () => clicks++);
+  await settle();
+  assert.equal(feed.style.display, 'flex');
+  assert.equal(section.style.visibility, 'visible');
+  assert.notEqual(win.getComputedStyle(section).display, 'none');
+  section.firstElementChild.click();
+  assert.equal(clicks, 1);
+});
+
+test('collapses late ad-only shadow slots without changing game document layout', async (t) => {
+  const win = page(t, '<div id="host"></div>');
+  const root = win.document.getElementById('host').attachShadow({ mode: 'closed' });
+  root.innerHTML = '<div class="feed__section"><div data-testid="feed-banner-1"></div></div>';
+  await settle();
+  hidden(root.firstElementChild);
+  const game = page(
+    t,
+    '<div class="feed__section"><div data-testid="feed-banner-1"></div></div>',
+    () => {},
+    'https://app-123.cdn.games.yandex.net/game/',
+  );
+  assert.equal(game.document.querySelector('.feed__section').style.display, '');
+});
+
+test('collapses the outer feed slot when a closed shadow ad is dismissed', async (t) => {
+  const win = page(
+    t,
+    '<div class="feed"><div id="slot" class="feed__section" style="height:300px"><div id="host"></div></div><button id="game">Играть</button></div>',
+  );
+  const root = win.document.getElementById('host').attachShadow({ mode: 'closed' });
+  root.innerHTML =
+    '<a href="https://yandex.ru/games/_crpd/123">Реклама</a><button data-fullscreen-element="close">Закрыть</button>';
+  await settle();
+  hidden(win.document.getElementById('slot'));
+  assert.notEqual(win.getComputedStyle(win.document.querySelector('.feed')).display, 'none');
+  assert.notEqual(win.getComputedStyle(win.document.getElementById('game')).display, 'none');
+});
+
+test('removes paid similar-game cards and their slots while preserving organic suggestions', (t) => {
+  const win = page(
+    t,
+    '<div class="play-similar-games"><div class="horizontal-container__list"><div id="paid" class="play-similar-games-tile"><a class="play-similar-games-tile__image" href="/games/app/123?utm_source=game_promo_similar_games">Промо</a></div><div id="organic" class="play-similar-games-tile"><a href="/games/app/456#referrer=similar">Другая игра</a></div></div></div>',
+  );
+  hidden(win.document.getElementById('paid'));
+  assert.notEqual(win.getComputedStyle(win.document.getElementById('organic')).display, 'none');
+  assert.notEqual(
+    win.getComputedStyle(win.document.querySelector('.play-similar-games')).display,
+    'none',
+  );
+});
+
+test('restores similar-game tiles when a rerender reuses a paid tile for an organic game', async (t) => {
+  const win = page(
+    t,
+    '<div id="tile" class="play-similar-games-tile" style="display:inline-flex"><a href="/games/app/123?utm_source=game_promo_similar_games">Промо</a></div>',
+  );
+  const tile = win.document.getElementById('tile');
+  hidden(tile);
+  tile.firstElementChild.href = '/games/app/456#referrer=similar';
+  await settle();
+  assert.equal(tile.style.display, 'inline-flex');
+});
+
+test('keeps suppressing explicit sponsored Yandex cards in embedded game documents', (t) => {
+  const win = page(
+    t,
+    '<div class="feed__section"><div id="paid" class="game-card"><a href="https://yandex.ru/games/app/123?utm_source=game_promo_catalog">Промо</a></div></div>',
+    () => {},
+    'https://app-123.cdn.games.yandex.net/game/',
+  );
+  hidden(win.document.getElementById('paid'));
+  assert.equal(win.document.querySelector('.feed__section').style.display, '');
+});
+
+for (const timing of ['sync', 'async']) {
+  test(`keeps an empty ad slot collapsed after its shadow host is removed ${timing}`, async (t) => {
+    const win = page(
+      t,
+      '<div id="slot" class="feed__section" style="height:300px"><div id="host"></div></div>',
+    );
+    const host = win.document.getElementById('host');
+    const slot = win.document.getElementById('slot');
+    const root = host.attachShadow({ mode: 'closed' });
+    root.innerHTML =
+      '<a href="https://yandex.ru/games/_crpd/123">Реклама</a><button data-fullscreen-element="close">Закрыть</button>';
+    root.querySelector('button').addEventListener('click', () => {
+      if (timing === 'sync') {
+        host.remove();
+      } else {
+        win.setTimeout(() => host.remove(), 0);
+      }
+    });
+    await settle();
+    assert.equal(host.isConnected, false);
+    hidden(slot);
+    slot.innerHTML = '<button>Играть</button>';
+    await settle();
+    assert.notEqual(win.getComputedStyle(slot).display, 'none');
+  });
+}

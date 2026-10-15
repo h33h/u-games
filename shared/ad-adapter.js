@@ -546,7 +546,10 @@
         (/^(?:www\.)?yandex\.(?:ru|com)$/.test(url.hostname) &&
           /^\/games(?:\/|$)/.test(url.pathname)) ||
         (/^passport\.yandex\.(?:ru|com)$/.test(url.hostname) &&
-          /^\/(?:auth|registration|pwl-yandex)(?:\/|$)/.test(url.pathname))
+          /^\/(?:auth|registration|pwl-yandex)(?:\/|$)/.test(url.pathname)) ||
+        (/^sso\.passport\.yandex\.(?:ru|com)$/.test(url.hostname) &&
+          /^\/prepare\/?$/.test(url.pathname)) ||
+        (url.hostname === 'sso.ya.ru' && /^\/sync\/?$/.test(url.pathname))
       ) {
         return true;
       }
@@ -559,7 +562,8 @@
       return (
         localTarget &&
         url.origin === origin.origin &&
-        !/^(?:(?:www|passport)\.)?yandex\.(?:ru|com)$/.test(url.hostname)
+        !/^(?:(?:www|passport|sso\.passport)\.)?yandex\.(?:ru|com)$/.test(url.hostname) &&
+        url.hostname !== 'sso.ya.ru'
       );
     } catch (_) {
       return false;
@@ -952,36 +956,87 @@
       '[data-testid="balance-button"]',
       '[data-testid="new-catalog-header-user-menu-button-menu-item-help"]',
     ].join(',');
+    const adSlotWrappers = '.feed,.feed__section,.grid-list__game-item';
     const portalStyles = new WeakMap();
     function suppressPortalContent(root) {
-      if (
-        !win.document ||
-        !/^(?:www\.)?yandex\.(?:ru|com)$/.test(win.location.hostname) ||
-        !/^\/games(?:\/|$)/.test(win.location.pathname)
-      ) {
+      if (!win.document) {
         return;
       }
+      const isPortal =
+        /^(?:www\.)?yandex\.(?:ru|com)$/.test(win.location.hostname) &&
+        /^\/games(?:\/|$)/.test(win.location.pathname);
       const targets = new Set();
-      for (const element of root.querySelectorAll(portalChrome)) {
-        targets.add(element.closest('.left-panel__block') || element);
+      if (isPortal) {
+        for (const element of root.querySelectorAll(portalChrome)) {
+          targets.add(element.closest('.left-panel__block') || element);
+        }
+        for (const link of root.querySelectorAll('a[href]')) {
+          try {
+            const url = new win.URL(link.getAttribute('href'), doc.baseURI);
+            if (
+              /^(?:www\.)?yandex\.(?:ru|com)$/.test(url.hostname) &&
+              /^\/(?:games\/(?:shop|promos)|support\/games|legal\/(?:games_termsofuse|confidential|recommendations)|project\/games\/for-developers)(?:\/|$)/.test(
+                url.pathname,
+              )
+            ) {
+              targets.add(link.closest('li,[role="menuitem"]') || link);
+            }
+          } catch (_) {}
+        }
       }
-      for (const link of root.querySelectorAll('a[href]')) {
+      // Paid placements bypass the game SDK. Remove their whole card or grid slot.
+      for (const link of root.querySelectorAll(
+        '.game-card a[href],.play-similar-games-tile a[href]',
+      )) {
         try {
-          const url = new win.URL(link.getAttribute('href'), doc.baseURI);
-          if (
-            /^(?:www\.)?yandex\.(?:ru|com)$/.test(url.hostname) &&
-            /^\/(?:games\/(?:shop|promos)|support\/games|legal\/(?:games_termsofuse|confidential|recommendations)|project\/games\/for-developers)(?:\/|$)/.test(
-              url.pathname,
-            )
-          ) {
-            targets.add(link.closest('li,[role="menuitem"]') || link);
+          const source = new win.URL(link.getAttribute('href'), doc.baseURI).searchParams.get(
+            'utm_source',
+          );
+          if (source === 'game_promo_catalog' || source === 'game_promo_similar_games') {
+            const card = link.closest('.game-card,.play-similar-games-tile');
+            targets.add(card.closest('.grid-list__game-item') || card);
           }
         } catch (_) {}
+      }
+      for (const badge of root.querySelectorAll('.game-badges__sticky-badge[title="Промо"]')) {
+        const card = badge.closest('.game-card');
+        if (card) {
+          targets.add(card.closest('.grid-list__game-item') || card);
+        }
       }
       let previous = portalStyles.get(root);
       if (!previous) {
         previous = new Map();
         portalStyles.set(root, previous);
+      }
+      function containsOnlyAds(container) {
+        let hasAd = false;
+        for (const node of container.childNodes) {
+          if (node.nodeType === 3 && node.textContent.trim()) {
+            return false;
+          }
+          if (node.nodeType !== 1 || ['SCRIPT', 'STYLE', 'TEMPLATE'].includes(node.tagName)) {
+            continue;
+          }
+          if (
+            targets.has(node) ||
+            (hiddenAds.has(node) && !previous.has(node)) ||
+            (node.matches(adSlotWrappers) && containsOnlyAds(node))
+          ) {
+            hasAd = true;
+          } else {
+            return false;
+          }
+        }
+        return hasAd || previous.has(container);
+      }
+      // Collapse spacing owned by ad-only sections, and restore reused game sections below.
+      if (isPortal) {
+        for (const slot of root.querySelectorAll(adSlotWrappers)) {
+          if ((!hiddenAds.has(slot) || previous.has(slot)) && containsOnlyAds(slot)) {
+            targets.add(slot);
+          }
+        }
       }
       for (const [element, properties] of previous) {
         if (!targets.has(element)) {
@@ -1027,6 +1082,8 @@
     }
     function dismissAd(root, container) {
       hideAd(container);
+      // Closing an ad can synchronously detach its host; remember its outer slot first.
+      suppressPortalContent(container.getRootNode());
       const close = root.querySelector('[data-fullscreen-element="close"]');
       if (close && !dismissedAds.has(close)) {
         dismissedAds.add(close);
@@ -1035,14 +1092,14 @@
       }
     }
     function suppressPortalAds(root) {
-      suppressPortalContent(root);
       for (const fullscreen of root.querySelectorAll('[data-fullscreen-element="root"]')) {
         if (fullscreen.querySelector(adMarker)) {
           dismissAd(fullscreen, fullscreen);
         }
       }
       if (root.host && root.querySelector(adMarker)) {
-        dismissAd(root, root.host.closest('.csr-uniq1') || root.host);
+        const container = root.host.closest('.csr-uniq1') || root.host;
+        dismissAd(root, container);
       }
       const close = root.querySelector(
         '.play-modal.adv-focusable.play-modal_visible .close-button_type_adv-fullscreen',
@@ -1056,30 +1113,13 @@
           hideAd(element);
         }
       }
-      // Paid catalog placements bypass the game SDK. Hide their entire grid slot.
-      for (const link of root.querySelectorAll('.game-card a[href]')) {
-        try {
-          if (
-            new win.URL(link.getAttribute('href'), doc.baseURI).searchParams.get('utm_source') ===
-            'game_promo_catalog'
-          ) {
-            const card = link.closest('.game-card');
-            hideAd(card.closest('.grid-list__game-item') || card);
-          }
-        } catch (_) {}
-      }
-      for (const badge of root.querySelectorAll('.game-badges__sticky-badge[title="Промо"]')) {
-        const card = badge.closest('.game-card');
-        if (card) {
-          hideAd(card.closest('.grid-list__game-item') || card);
-        }
-      }
       for (const icon of root.querySelectorAll('.Icon_type_no-ads,.Icon_type_no-ads-mono')) {
         const control = icon.closest('button,a,[role="button"],[role="menuitem"]');
         if (control) {
           hideAd(control);
         }
       }
+      suppressPortalContent(root);
       // Document observers cannot see changes inside shadow roots.
       for (const element of root.querySelectorAll('*')) {
         if (element.shadowRoot) {

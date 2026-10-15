@@ -2,6 +2,21 @@
 import XCTest
 
 final class GameNavigationPolicyTests: XCTestCase {
+    func testCurrentYandexIdLoginAndVerificationCanOpen() throws {
+        for value in [
+            "https://passport.yandex.ru/pwl-yandex/auth/add?retpath=https%3A%2F%2Fyandex.ru%2Fgames%2F",
+            "https://passport.yandex.com/pwl-yandex/auth/verify",
+        ] {
+            XCTAssertTrue(try GameNavigationPolicy.allows(XCTUnwrap(URL(string: value))), value)
+        }
+        for value in [
+            "https://passport.yandex.ru/pwl-yandex-evil/auth",
+            "https://passport.yandex.ru.evil.test/pwl-yandex/auth",
+        ] {
+            XCTAssertFalse(try GameNavigationPolicy.allows(XCTUnwrap(URL(string: value))), value)
+        }
+    }
+
     func testSupportsS3GameHosting() throws {
         XCTAssertTrue(try GameNavigationPolicy.allowsFrame(
             XCTUnwrap(URL(string: "https://app-374241.games.s3.yandex.net/helpers/fake-page")),

@@ -39,7 +39,8 @@ enum GameNavigationPolicy {
             return path == "/games" || path.hasPrefix("/games/")
         }
         if ["passport.yandex.ru", "passport.yandex.com"].contains(host) {
-            return ["/auth", "/registration"].contains { path == $0 || path.hasPrefix($0 + "/") }
+            return ["/auth", "/registration", "/pwl-yandex"]
+                .contains { path == $0 || path.hasPrefix($0 + "/") }
         }
         return false
     }

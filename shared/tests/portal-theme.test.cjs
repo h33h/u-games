@@ -7,6 +7,48 @@ const { JSDOM } = require('jsdom');
 const theme = fs.readFileSync(path.join(__dirname, '../portal-theme.js'), 'utf8');
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
 const assets = { logo: 'data:image/svg+xml,UGames-logo', icon: 'data:image/svg+xml,UGames-icon' };
+
+test('reports the visible page background to both native shells after theme changes', async (t) => {
+  const dom = new JSDOM(
+    '<html style="background:#eeeeee"><body style="background:#171520"></body></html>',
+    {
+      url: 'https://yandex.ru/games/',
+      runScripts: 'outside-only',
+    },
+  );
+  t.after(() => dom.window.close());
+  const win = dom.window;
+  const android = [];
+  const ios = [];
+  win.__UGamesAppearance = { postMessage: (color) => android.push(color) };
+  win.webkit = {
+    messageHandlers: { ugamesAppearance: { postMessage: (color) => ios.push(color) } },
+  };
+  win.eval(theme);
+  await settle();
+  assert.equal(android.at(-1), '#171520');
+  assert.equal(ios.at(-1), '#171520');
+  win.document.body.style.backgroundColor = '#fafafa';
+  await settle();
+  assert.equal(android.at(-1), '#fafafa');
+  assert.equal(ios.at(-1), '#fafafa');
+  win.document.body.style.backgroundColor = 'transparent';
+  await settle();
+  assert.equal(android.at(-1), '#eeeeee');
+  win.document.body.append(win.document.createElement('p'));
+  await settle();
+  assert.equal(android.length, 3);
+});
+
+test('embedded game frames cannot replace the shell background', async (t) => {
+  const win = page(t, '<iframe></iframe>');
+  const child = win.document.querySelector('iframe').contentWindow;
+  let reports = 0;
+  child.__UGamesAppearance = { postMessage: () => reports++ };
+  child.eval(theme);
+  await settle();
+  assert.equal(reports, 0);
+});
 function page(t, html, url = 'https://yandex.ru/games/') {
   const dom = new JSDOM(html, { url, runScripts: 'outside-only' });
   t.after(() => dom.window.close());

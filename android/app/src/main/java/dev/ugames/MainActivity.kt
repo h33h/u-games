@@ -1,6 +1,7 @@
 package dev.ugames
 
 import android.content.res.Configuration
+import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
@@ -21,6 +22,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 
 class MainActivity : ComponentActivity() {
     private val windows = mutableListOf<WebView>()
+    private val backgrounds = mutableMapOf<WebView, Int>()
     private lateinit var root: FrameLayout
     private lateinit var content: FrameLayout
     private lateinit var loading: ProgressBar
@@ -43,6 +45,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         root = FrameLayout(this)
+        root.setBackgroundColor(ProtectedWebViewFactory.defaultBackground)
+        window.setBackgroundDrawable(ColorDrawable(ProtectedWebViewFactory.defaultBackground))
         root.setOnApplyWindowInsetsListener { view, insets ->
             val compatible = WindowInsetsCompat.toWindowInsetsCompat(insets, view)
             // Keep game controls clear of cutouts, the keyboard and reserved system gestures.
@@ -113,17 +117,30 @@ class MainActivity : ComponentActivity() {
         windows.add(view)
         content.removeAllViews()
         content.addView(view, FrameLayout.LayoutParams(-1, -1))
+        setPageBackground(view, backgrounds[view] ?: ProtectedWebViewFactory.defaultBackground)
         view.onResume()
+    }
+
+    fun setPageBackground(view: WebView, color: Int) {
+        if (view !in windows) return
+        backgrounds[view] = color
+        view.setBackgroundColor(color)
+        if (view === current && view.parent === content) {
+            root.setBackgroundColor(color)
+            window.setBackgroundDrawable(ColorDrawable(color))
+        }
     }
 
     fun closeWindow(view: WebView) {
         if (!windows.remove(view)) return
+        backgrounds.remove(view)
         content.removeView(view)
         view.stopLoading()
         view.destroy()
         current?.let {
             content.removeAllViews()
             content.addView(it, FrameLayout.LayoutParams(-1, -1))
+            setPageBackground(it, backgrounds[it] ?: ProtectedWebViewFactory.defaultBackground)
             it.onResume()
         }
     }
@@ -134,6 +151,7 @@ class MainActivity : ComponentActivity() {
         current?.let {
             content.removeAllViews()
             content.addView(it, FrameLayout.LayoutParams(-1, -1))
+            setPageBackground(it, backgrounds[it] ?: ProtectedWebViewFactory.defaultBackground)
             it.loadUrl(url)
         }
     }
@@ -147,6 +165,10 @@ class MainActivity : ComponentActivity() {
     fun showError(message: String) {
         hideFullscreen()
         loading.visibility = View.GONE
+        val color = android.util.TypedValue()
+        theme.resolveAttribute(android.R.attr.colorBackground, color, true)
+        root.setBackgroundColor(color.data)
+        window.setBackgroundDrawable(ColorDrawable(color.data))
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -195,6 +217,7 @@ class MainActivity : ComponentActivity() {
             window.destroy()
         }
         windows.clear()
+        backgrounds.clear()
         showError("Игра закрылась. Можно открыть её снова.")
     }
 
@@ -236,6 +259,7 @@ class MainActivity : ComponentActivity() {
         current?.let {
             content.removeAllViews()
             content.addView(it, FrameLayout.LayoutParams(-1, -1))
+            setPageBackground(it, backgrounds[it] ?: ProtectedWebViewFactory.defaultBackground)
         }
     }
 
@@ -262,6 +286,7 @@ class MainActivity : ComponentActivity() {
             it.destroy()
         }
         windows.clear()
+        backgrounds.clear()
         super.onDestroy()
     }
 

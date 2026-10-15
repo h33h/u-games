@@ -14,6 +14,24 @@ private final class GameProtectionReceiver: NSObject, WKScriptMessageHandler {
     }
 }
 
+private final class PageAppearanceReceiver: NSObject, WKScriptMessageHandler {
+    func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame, let value = message.body as? String,
+              value.range(of: "^#[0-9a-fA-F]{6}$", options: .regularExpression) != nil,
+              let rgb = UInt32(value.dropFirst(), radix: 16), let view = message.webView
+        else { return }
+        let color = UIColor(
+            red: CGFloat((rgb >> 16) & 255) / 255,
+            green: CGFloat((rgb >> 8) & 255) / 255,
+            blue: CGFloat(rgb & 255) / 255,
+            alpha: 1
+        )
+        view.underPageBackgroundColor = color
+        view.backgroundColor = color
+        view.scrollView.backgroundColor = color
+    }
+}
+
 enum ProtectedWebViewFactory {
     static func make(
         configuration: WKWebViewConfiguration? = nil,
@@ -36,6 +54,7 @@ enum ProtectedWebViewFactory {
         let controller = config.userContentController
         if !controller.userScripts.contains(where: { $0.source == script }) {
             controller.add(GameProtectionReceiver(), name: "ugamesProtection")
+            controller.add(PageAppearanceReceiver(), name: "ugamesAppearance")
             controller.addUserScript(WKUserScript(
                 source: script,
                 injectionTime: .atDocumentStart,
@@ -80,6 +99,10 @@ enum ProtectedWebViewFactory {
 
     private static func readyView(configuration: WKWebViewConfiguration) -> WKWebView {
         let view = WKWebView(frame: .zero, configuration: configuration)
+        let background = UIColor(red: 23 / 255, green: 21 / 255, blue: 32 / 255, alpha: 1)
+        view.underPageBackgroundColor = background
+        view.backgroundColor = background
+        view.scrollView.backgroundColor = background
         view.allowsBackForwardNavigationGestures = true
         #if DEBUG
         if #available(iOS 16.4, *) {

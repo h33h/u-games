@@ -5,6 +5,20 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GameNavigationPolicyTest {
+    @Test fun currentYandexIdLoginAndVerificationCanOpen() {
+        for (url in listOf(
+            "https://passport.yandex.ru/pwl-yandex/auth/add?retpath=https%3A%2F%2Fyandex.ru%2Fgames%2F",
+            "https://passport.yandex.com/pwl-yandex/auth/verify"
+        )) {
+            assertTrue(url, GameNavigationPolicy.allows(url))
+            assertFalse(GameNavigationPolicy.blocksDocumentRequest(url, true, emptyMap()))
+        }
+        assertFalse(GameNavigationPolicy.allows("https://passport.yandex.ru/pwl-yandex-evil/auth"))
+        assertFalse(
+            GameNavigationPolicy.allows("https://passport.yandex.ru.evil.test/pwl-yandex/auth")
+        )
+    }
+
     @Test fun postDocumentsAreBlockedWithoutBlockingGameApiRequests() {
         val url = "https://external.example/submit"
         val headers = mapOf(

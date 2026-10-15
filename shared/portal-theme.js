@@ -136,3 +136,65 @@
     return root;
   };
 })(window);
+
+(function followPageBackground(win) {
+  'use strict';
+  const doc = win.document;
+  if (!doc || win !== win.top || win.__UGamesPageBackground) {
+    return;
+  }
+  win.__UGamesPageBackground = true;
+  let pending = false;
+  let previous;
+  function report() {
+    pending = false;
+    if (!doc.documentElement || !doc.body) {
+      return;
+    }
+    const root = win.getComputedStyle(doc.documentElement);
+    const dark =
+      root.colorScheme === 'dark' ||
+      (root.colorScheme.includes('dark') &&
+        win.matchMedia?.('(prefers-color-scheme: dark)').matches);
+    let rgb = dark ? [18, 18, 18] : [255, 255, 255];
+    for (const element of [doc.documentElement, doc.body]) {
+      const color = win.getComputedStyle(element).backgroundColor;
+      const channels = /^rgba?\(([^)]+)\)$/
+        .exec(color)?.[1]
+        .split(/[, /]+/)
+        .map(Number);
+      if (!channels || channels.length < 3 || channels.some((value) => !Number.isFinite(value))) {
+        continue;
+      }
+      const alpha = channels[3] ?? 1;
+      rgb = rgb.map((base, index) => Math.round(channels[index] * alpha + base * (1 - alpha)));
+    }
+    const color = '#' + rgb.map((channel) => channel.toString(16).padStart(2, '0')).join('');
+    if (color !== previous) {
+      previous = color;
+      win.__UGamesAppearance?.postMessage(color);
+      win.webkit?.messageHandlers?.ugamesAppearance?.postMessage(color);
+    }
+  }
+  function schedule() {
+    if (!pending) {
+      pending = true;
+      win.setTimeout(report, 0);
+    }
+  }
+  new win.MutationObserver(schedule).observe(doc, {
+    subtree: true,
+    childList: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: ['class', 'style', 'data-theme', 'data-ugames-page', 'media', 'href'],
+  });
+  doc.addEventListener('DOMContentLoaded', schedule);
+  doc.addEventListener('load', schedule, true);
+  doc.addEventListener('transitionend', schedule, true);
+  doc.addEventListener('animationend', schedule, true);
+  win.addEventListener('pageshow', schedule);
+  win.addEventListener('resize', schedule);
+  win.matchMedia?.('(prefers-color-scheme: dark)').addEventListener('change', schedule);
+  schedule();
+})(window);

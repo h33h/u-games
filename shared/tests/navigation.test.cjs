@@ -29,6 +29,26 @@ test('cancels scripted navigation events before an external document replaces th
   assert.equal(win.navigation.dispatchEvent(internal), true);
 });
 
+test('preserves the current Yandex ID login route for buttons, popups and form steps', (t) => {
+  const { win, opened } = page(t);
+  const url =
+    'https://passport.yandex.ru/pwl-yandex/auth/add?retpath=https%3A%2F%2Fyandex.ru%2Fgames%2F';
+  const event = new win.Event('navigate', { cancelable: true });
+  event.destination = { url };
+  assert.equal(win.navigation.dispatchEvent(event), true);
+  win.open(url);
+  assert.equal(opened.length, 1);
+  const form = win.document.createElement('form');
+  form.action = 'https://passport.yandex.ru/pwl-yandex/auth/verify';
+  win.document.body.append(form);
+  assert.equal(
+    form.dispatchEvent(new win.Event('submit', { bubbles: true, cancelable: true })),
+    true,
+  );
+  assert.equal(win.open('https://passport.yandex.ru/pwl-yandex-evil/auth'), null);
+  assert.equal(win.open('https://passport.yandex.ru.evil.test/pwl-yandex/auth'), null);
+});
+
 test('blocks external popups, app schemes and lookalike domains before creating a window', (t) => {
   const { win, opened } = page(t);
   for (const url of [

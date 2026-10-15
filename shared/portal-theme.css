@@ -4,6 +4,7 @@
   --ugames-accent: #7857ff;
   --ugames-mint: #57dfc2;
   --control-font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background-color: #171520 !important;
 }
 [data-ugames-theme] * {
   font-family:
@@ -101,6 +102,8 @@
 [data-ugames-theme] .left-panel__social-links {
   display: none !important;
 }
+[data-ugames-theme][data-ugames-page='game'],
+[data-ugames-theme][data-ugames-page='game'] body,
 [data-ugames-theme][data-ugames-page='game'] .background__image {
   background-image: none !important;
   background-color: #101019 !important;

@@ -73,7 +73,7 @@ object GameNavigationPolicy {
                         ) ||
                         (
                             host in listOf("passport.yandex.ru", "passport.yandex.com") &&
-                                listOf("/auth", "/registration").any {
+                                listOf("/auth", "/registration", "/pwl-yandex").any {
                                     path == it ||
                                         path.startsWith("$it/")
                                 }

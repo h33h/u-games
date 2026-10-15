@@ -3,6 +3,7 @@ package dev.ugames
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.pm.ApplicationInfo
+import android.graphics.Color
 import android.net.Uri
 import android.os.Message
 import android.view.View
@@ -16,12 +17,15 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.io.ByteArrayInputStream
 import org.json.JSONObject
 
 object ProtectedWebViewFactory {
+    val defaultBackground: Int = Color.rgb(23, 21, 32)
+
     @SuppressLint("SetJavaScriptEnabled")
     fun create(
         activity: Activity,
@@ -30,7 +34,9 @@ object ProtectedWebViewFactory {
         ),
         isPopup: Boolean = false
     ): WebView {
-        if (!supportsDocumentStart) {
+        if (!supportsDocumentStart ||
+            !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
+        ) {
             throw UnsupportedOperationException(
                 "Document-start injection is unavailable"
             )
@@ -56,6 +62,7 @@ object ProtectedWebViewFactory {
             activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         )
         return WebView(activity).apply {
+            setBackgroundColor(defaultBackground)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.setSupportMultipleWindows(true)
@@ -76,6 +83,23 @@ object ProtectedWebViewFactory {
                 },
                 "__UGamesProtection"
             )
+            WebViewCompat.addWebMessageListener(this, "__UGamesAppearance", setOf("*")) {
+                    view,
+                    message,
+                    _,
+                    mainFrame,
+                    _
+                ->
+                if (!mainFrame ||
+                    message.type != WebMessageCompat.TYPE_STRING
+                ) {
+                    return@addWebMessageListener
+                }
+                val value = message.data
+                if (value != null && value.matches(Regex("#[0-9a-fA-F]{6}"))) {
+                    (activity as? MainActivity)?.setPageBackground(view, Color.parseColor(value))
+                }
+            }
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
             WebViewCompat.addDocumentStartJavaScript(this, script, setOf("*"))

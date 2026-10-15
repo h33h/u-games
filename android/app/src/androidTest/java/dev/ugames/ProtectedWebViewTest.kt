@@ -24,6 +24,68 @@ import org.junit.runner.RunWith
 class ProtectedWebViewTest {
     private val instrumentation get() = InstrumentationRegistry.getInstrumentation()
 
+    @Test fun safeAreaFollowsDocumentAndRestoresParentAfterPopup() {
+        ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+            lateinit var view: WebView
+            scenario.onActivity { activity ->
+                view = ProtectedWebViewFactory.create(activity)
+                activity.showWindow(view)
+                view.loadDataWithBaseURL(
+                    "https://passport.yandex.ru/pwl-yandex/auth/add",
+                    "<body style='background:#171520'><iframe srcdoc=\"<body style='background:red'></body>\"></iframe><script>window.appearanceReady = true;</script></body>",
+                    "text/html",
+                    "utf-8",
+                    null
+                )
+            }
+            val loadedDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+            while (System.nanoTime() < loadedDeadline &&
+                evaluate(
+                    view,
+                    "window.appearanceReady === true && document.readyState === 'complete'"
+                ) !=
+                "true"
+            ) {
+                Thread.sleep(50)
+            }
+            assertEquals("true", evaluate(view, "window.appearanceReady === true"))
+            fun waitForBackground(color: Int) {
+                val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+                var actual: Int? = null
+                while (System.nanoTime() < deadline) {
+                    scenario.onActivity { activity ->
+                        val root = activity.findViewById<android.view.ViewGroup>(
+                            android.R.id.content
+                        ).getChildAt(0)
+                        actual =
+                            (root.background as? android.graphics.drawable.ColorDrawable)?.color
+                    }
+                    if (actual == color) break
+                    Thread.sleep(50)
+                }
+                assertEquals(color, actual)
+            }
+            waitForBackground(android.graphics.Color.rgb(23, 21, 32))
+            evaluate(view, "document.body.style.backgroundColor = '#fafafa'; true")
+            waitForBackground(android.graphics.Color.rgb(250, 250, 250))
+            lateinit var popup: WebView
+            scenario.onActivity { activity ->
+                popup = ProtectedWebViewFactory.create(activity)
+                activity.showWindow(popup)
+                popup.loadDataWithBaseURL(
+                    "https://passport.yandex.ru/pwl-yandex/auth/add",
+                    "<body style='background:#123456'></body>",
+                    "text/html",
+                    "utf-8",
+                    null
+                )
+            }
+            waitForBackground(android.graphics.Color.rgb(18, 52, 86))
+            scenario.onActivity { it.closeWindow(popup) }
+            waitForBackground(android.graphics.Color.rgb(250, 250, 250))
+        }
+    }
+
     @Test fun scriptedExternalNavigationKeepsTheGameAndItsFrame() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             lateinit var view: WebView

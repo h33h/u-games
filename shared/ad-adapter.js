@@ -546,7 +546,7 @@
         (/^(?:www\.)?yandex\.(?:ru|com)$/.test(url.hostname) &&
           /^\/games(?:\/|$)/.test(url.pathname)) ||
         (/^passport\.yandex\.(?:ru|com)$/.test(url.hostname) &&
-          /^\/(?:auth|registration)(?:\/|$)/.test(url.pathname))
+          /^\/(?:auth|registration|pwl-yandex)(?:\/|$)/.test(url.pathname))
       ) {
         return true;
       }

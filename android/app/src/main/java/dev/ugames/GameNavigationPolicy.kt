@@ -48,7 +48,10 @@ object GameNavigationPolicy {
                     "yandex.com",
                     "www.yandex.com",
                     "passport.yandex.ru",
-                    "passport.yandex.com"
+                    "passport.yandex.com",
+                    "sso.passport.yandex.ru",
+                    "sso.passport.yandex.com",
+                    "sso.ya.ru"
                 )
         }
     } catch (_: Exception) {
@@ -77,7 +80,12 @@ object GameNavigationPolicy {
                                     path == it ||
                                         path.startsWith("$it/")
                                 }
-                            )
+                            ) ||
+                        (
+                            host in listOf("sso.passport.yandex.ru", "sso.passport.yandex.com") &&
+                                path in listOf("/prepare", "/prepare/")
+                            ) ||
+                        (host == "sso.ya.ru" && path in listOf("/sync", "/sync/"))
                     )
             )
     } catch (_: Exception) {

@@ -124,9 +124,19 @@ jobs:
         run: |
           sdk_version=$(xcrun --sdk iphonesimulator --show-sdk-version)
           simulator=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]["com.apple.CoreSimulator.SimRuntime.iOS-"+sys.argv[1].replace(".", "-")]; print(next(d["udid"] for d in devices if d["name"].startswith("iPhone")))' "$sdk_version")
+          xcrun simctl bootstatus "$simulator" -b
           xcodebuild test -project ios/UGames.xcodeproj -scheme UGames \
             -destination "platform=iOS Simulator,id=$simulator" \
+            -collect-test-diagnostics never \
+            -resultBundlePath "$RUNNER_TEMP/UGamesTests.xcresult" \
             CODE_SIGNING_ALLOWED=NO
+      - name: Upload iOS test results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ios-test-results
+          path: ${{ runner.temp }}/UGamesTests.xcresult
+          if-no-files-found: ignore
       - name: Archive for iPhone without signing
         env:
           BUILD_NUMBER: ${{ github.run_number }}

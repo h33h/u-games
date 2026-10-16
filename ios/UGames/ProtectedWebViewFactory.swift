@@ -99,7 +99,7 @@ enum ProtectedWebViewFactory {
 
     private static func readyView(configuration: WKWebViewConfiguration) -> WKWebView {
         let view = WKWebView(frame: .zero, configuration: configuration)
-        let background = UIColor(red: 23 / 255, green: 21 / 255, blue: 32 / 255, alpha: 1)
+        let background = UGamesTheme.background
         view.underPageBackgroundColor = background
         view.backgroundColor = background
         view.scrollView.backgroundColor = background

@@ -1,3 +1,10 @@
 <resources>
   <color name="app_icon_background">#242331</color>
+  <color name="ugames_background">#171520</color>
+  <color name="ugames_surface">#2C263D</color>
+  <color name="ugames_accent">#7857FF</color>
+  <color name="ugames_mint">#57DFC2</color>
+  <color name="ugames_text">#F5F1FF</color>
+  <color name="ugames_on_accent">#FFFFFF</color>
+  <color name="ugames_secondary">#C1B7D6</color>
 </resources>

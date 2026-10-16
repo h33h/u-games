@@ -15,6 +15,89 @@
   const roots = new WeakSet();
   const styleId = 'ugames-portal-theme';
   const themedImages = new WeakMap();
+  const illustrationSelector =
+    '.footer__image,[class*="authorization"][class*="image"], [class*="auth-banner"][class*="image"], [class*="sticky-promo-banner"][class*="image"], [class*="stripe-"][class*="image--"], [class*="stripe-"][class*="Image--"]';
+  function artworkForURL(source) {
+    let url;
+    try {
+      url = new win.URL(source, doc.baseURI);
+    } catch (_) {
+      return null;
+    }
+    if (url.hostname === 'avatars.mds.yandex.net' && /^\/get-yapic\/0\/0-0\//.test(url.pathname)) {
+      return 'avatar';
+    }
+    const staticAsset =
+      (url.hostname === 'yastatic.net' && url.pathname.startsWith('/s3/games-static/')) ||
+      (/^(?:www\.)?yandex\.(?:ru|com)$/.test(url.hostname) &&
+        /^\/games\/(?:[^/]+\/)*cdn\/games-static\//.test(url.pathname));
+    if (!staticAsset) {
+      return null;
+    }
+    if (/\/favicons\/yandex\//.test(url.pathname)) {
+      return 'icon';
+    }
+    if (/\/images\/(?:single-logo\/(?:games|yandex)\/|logo\/v\d+\/yandex\/)/.test(url.pathname)) {
+      return 'logo';
+    }
+    if (/\/images\/background\/background-dark-purple\.(?:jpg|webp|avif)$/.test(url.pathname)) {
+      return 'background';
+    }
+    const shortcut = /\/images\/shop\/shortcuts\/([a-z-]+)(?:@2x)?\.(?:png|webp|avif|svg)$/.exec(
+      url.pathname,
+    );
+    if (shortcut) {
+      return 'shop-' + shortcut[1];
+    }
+    if (/\/images\/art\/purple_close(?:@2x)?\.(?:png|webp|avif)$/.test(url.pathname)) {
+      return 'controller';
+    }
+    return null;
+  }
+  function replacementFor(artwork) {
+    return branding.assets[artwork] || branding.assets.icon;
+  }
+  function artworkFor(element, source) {
+    const candidates = [source, element.getAttribute('srcset') || ''];
+    for (const node of element.closest('picture')?.querySelectorAll('source') || []) {
+      candidates.push(node.getAttribute('srcset') || '');
+    }
+    for (const candidate of candidates) {
+      // Provider responsive sources are ordinary CDN URLs; do not split bundled data URLs.
+      const values =
+        candidate.match(/(?:https?:)?\/\/[^\s,]+/g) ||
+        candidate.split(',').map((value) => value.trim().split(/\s+/)[0]);
+      for (const value of values) {
+        const artwork = artworkForURL(value);
+        if (artwork) {
+          return artwork;
+        }
+      }
+    }
+    if (element.matches(illustrationSelector)) {
+      return element.matches('.footer__image') ? 'developer' : 'controller';
+    }
+    return null;
+  }
+  function replaceInlineArtwork(element) {
+    for (const property of ['background-image', 'mask-image']) {
+      const original = element.style.getPropertyValue(property);
+      if (!original.includes('url(')) {
+        continue;
+      }
+      const replacement = original.replace(
+        /url\(\s*(?:"([^"]*)"|'([^']*)'|([^)]*))\s*\)/g,
+        (match, double, single, unquoted) => {
+          const artwork = artworkForURL((double ?? single ?? unquoted).trim());
+          return artwork ? 'url("' + replacementFor(artwork) + '")' : match;
+        },
+      );
+      if (replacement !== original) {
+        // Replacing just the URL preserves the portal's gradients and layer ordering.
+        element.style.setProperty(property, replacement, 'important');
+      }
+    }
+  }
   function ensureStyle(root) {
     if (!win.document) {
       return;
@@ -48,18 +131,32 @@
     if (!element || element.nodeType !== 1) {
       return;
     }
-    if (element.tagName === 'IMG') {
-      const match =
-        /^https:\/\/yastatic\.net\/s3\/games-static\/static-data\/images\/shop\/shortcuts\/([a-z-]+)\.png(?:[?].*)?$/.exec(
-          element.src,
-        );
-      if (match) {
-        themedImages.set(element, branding.assets['shop-' + match[1]] || branding.assets.icon);
+    if (element.tagName === 'IMG' || element.localName === 'image') {
+      const attribute = element.tagName === 'IMG' ? 'src' : 'href';
+      const source = element.getAttribute(attribute) || element.getAttribute('xlink:href') || '';
+      const previous = themedImages.get(element);
+      const responsive =
+        element.getAttribute('srcset') ||
+        element.closest('picture')?.querySelector('source[srcset]:not([srcset=""])');
+      if (!previous || source !== previous.replacement || responsive) {
+        delete element.dataset.ugamesImageFallback;
+        const artwork = artworkFor(element, source);
+        if (artwork) {
+          themedImages.set(element, {
+            replacement: replacementFor(artwork),
+          });
+        } else {
+          // Virtualized profile slots can be reused for a real player avatar.
+          themedImages.delete(element);
+        }
       }
-      const replacement = themedImages.get(element);
+      const replacement = themedImages.get(element)?.replacement;
       if (replacement) {
-        if (element.getAttribute('src') !== replacement) {
-          element.setAttribute('src', replacement);
+        if (element.getAttribute(attribute) !== replacement) {
+          element.setAttribute(attribute, replacement);
+        }
+        if (element.localName === 'image' && element.hasAttribute('xlink:href')) {
+          element.removeAttribute('xlink:href');
         }
         element.removeAttribute('srcset');
         for (const source of element.closest('picture')?.querySelectorAll('source') || []) {
@@ -67,9 +164,10 @@
         }
       }
     }
+    replaceInlineArtwork(element);
     if (element.tagName === 'SOURCE') {
       const image = element.closest('picture')?.querySelector('img');
-      if (image && themedImages.has(image)) {
+      if (image) {
         inspect(image);
       }
     }
@@ -97,6 +195,29 @@
       return;
     }
     roots.add(root);
+    root.addEventListener(
+      'error',
+      (event) => {
+        const image = event.target;
+        if (image?.tagName !== 'IMG' || themedImages.get(image)?.fallback) {
+          return;
+        }
+        const avatar = image.matches('[class*="avatar" i],[class*="user-account-pic"]');
+        themedImages.set(image, {
+          replacement: replacementFor(avatar ? 'avatar' : 'cover-placeholder'),
+          fallback: true,
+        });
+        // Clear failed responsive sources before the browser retries the local fallback.
+        image.removeAttribute('srcset');
+        for (const node of image.closest('picture')?.querySelectorAll('source') || []) {
+          node.removeAttribute('srcset');
+        }
+        image.dataset.ugamesImageFallback = '';
+        image.setAttribute('src', themedImages.get(image).replacement);
+        inspect(image);
+      },
+      true,
+    );
     const observer = new win.MutationObserver((changes) => {
       ensureStyle(root);
       for (const change of changes) {
@@ -120,9 +241,13 @@
         'src',
         'srcset',
         'href',
+        'xlink:href',
         'rel',
         'as',
         'id',
+        'class',
+        'style',
+        'data-ugames-artwork',
       ],
     });
     ensureStyle(root);
@@ -135,6 +260,16 @@
     observe(root);
     return root;
   };
+  for (const method of ['pushState', 'replaceState']) {
+    const original = win.history[method];
+    win.history[method] = function () {
+      const result = original.apply(this, arguments);
+      ensureStyle(doc);
+      return result;
+    };
+  }
+  win.addEventListener('popstate', () => ensureStyle(doc));
+  win.addEventListener('pageshow', () => ensureStyle(doc));
 })(window);
 
 (function followPageBackground(win) {

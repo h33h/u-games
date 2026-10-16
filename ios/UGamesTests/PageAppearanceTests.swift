@@ -74,6 +74,6 @@ final class PageAppearanceTests: XCTestCase {
         waitForBackground(UIColor(red: 250 / 255, green: 250 / 255, blue: 250 / 255, alpha: 1))
         controller.showProtectionError()
         webView.evaluateJavaScript("document.body.style.backgroundColor = 'red'")
-        XCTAssertEqual(controller.view.backgroundColor, .systemBackground)
+        XCTAssertEqual(controller.view.backgroundColor, UGamesTheme.background)
     }
 }

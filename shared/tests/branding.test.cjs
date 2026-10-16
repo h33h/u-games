@@ -228,6 +228,43 @@ test('uses bundled wordmark and compact app mark without disturbing links', (t) 
   assert.equal(dom.window.document.querySelector('a').href, 'https://yandex.ru/games/');
 });
 
+test('replaces unlabelled versioned profile logos without touching game thumbnails', (t) => {
+  const win = page(
+    t,
+    '<a href="/games/"><img src="https://yastatic.net/s3/games-static/static-data/images/logo/v2/yandex/ru/logo-light.png"></a><img id="game" src="https://avatars.mds.yandex.net/get-games/123/orig">',
+  );
+  assert.match(decodeURIComponent(win.document.querySelector('img').src), /UGames/);
+  assert.equal(
+    win.document.querySelector('#game').src,
+    'https://avatars.mds.yandex.net/get-games/123/orig',
+  );
+});
+
+test('uses actual bundled artwork for SVG and CSS logos and settles after portal rerenders', async (t) => {
+  const dom = new JSDOM(
+    '<a class="logo-link" href="/games/"><svg><path d="M0 0h20v20z"/></svg></a><span class="Icon_type_logo-games"></span>',
+    { runScripts: 'outside-only', url: 'https://yandex.ru/games/' },
+  );
+  t.after(() => dom.window.close());
+  dom.window.__UGamesBranding = {
+    assets: { logo: 'data:image/svg+xml,UGames-wordmark', icon: 'data:image/svg+xml,UGames-mark' },
+  };
+  dom.window.eval(source);
+  const doc = dom.window.document;
+  assert.equal(
+    doc.querySelector('svg image')?.getAttribute('href'),
+    'data:image/svg+xml,UGames-wordmark',
+  );
+  assert.match(doc.querySelector('.Icon_type_logo-games').style.backgroundImage, /UGames-mark/);
+  doc.querySelector('svg').innerHTML = '<path d="M0 0h10v10z"/>';
+  await settle();
+  assert.equal(
+    doc.querySelector('svg image')?.getAttribute('href'),
+    'data:image/svg+xml,UGames-wordmark',
+  );
+  assert.equal(doc.querySelector('a').pathname, '/games/');
+});
+
 test('split brand normalization stops producing DOM mutations once settled', async (t) => {
   const dom = new JSDOM('<a><span>Ян</span><strong>декс</strong> <span>Игры</span></a>', {
     runScripts: 'outside-only',

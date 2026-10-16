@@ -1,21 +1,395 @@
 /* UGames resources apply only to the portal shell, never inside game documents. */
 [data-ugames-theme] {
-  color-scheme: dark;
+  color-scheme: dark !important;
   --ugames-accent: #7857ff;
+  --ugames-accent-hover: #7350ee;
+  --ugames-accent-pressed: #6846eb;
   --ugames-mint: #57dfc2;
   --ugames-background: #171520;
-  --control-font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --ugames-surface: #211d30;
+  --ugames-raised: #2c263d;
+  --ugames-hover: #382f4e;
+  --ugames-selected: #3e3164;
+  --ugames-border: #53456d;
+  --ugames-border-strong: #8876aa;
+  --ugames-text: #f5f1ff;
+  --ugames-secondary: #c1b7d6;
+  --ugames-muted: #a99cbe;
+  --ugames-disabled: #8c7f9f;
+  --ugames-link: #bfaeff;
+  --ugames-on-accent: #fff;
+  --ugames-danger: #ff91ac;
+  --ugames-warning: #f4cb83;
+  --ugames-overlay: #101019cc;
+  --ugames-shadow: 0 12px 36px #0b081f66;
+  --ugames-font: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: var(--ugames-text) !important;
   background-color: var(--ugames-background) !important;
+  accent-color: var(--ugames-accent);
+  scrollbar-color: var(--ugames-border-strong) var(--ugames-background);
+}
+/* Bridge every portal design system, including lazy-loaded profile and legacy controls.
+   Keep these on local theme roots too: their own declarations otherwise beat inheritance. */
+[data-ugames-theme],
+[data-ugames-theme] body,
+[data-ugames-theme] :is(.Theme, .theme, [data-theme], [class*='theme_color_']) {
+  --control-font-family: var(--ugames-font) !important;
+  --button-font-family: var(--ugames-font) !important;
+  --color-background: var(--ugames-background) !important;
+  --color-main-theme: var(--ugames-background) !important;
+  --color-main-theme-new-home: var(--ugames-background) !important;
+  --color-bg-default: var(--ugames-surface) !important;
+  --color-background-variant: var(--ugames-surface) !important;
+  --color-background-main-light: var(--ugames-raised) !important;
+  --color-background-accent: var(--ugames-raised) !important;
+  --color-background-secondary-alpha: var(--ugames-raised) !important;
+  --color-background-paranja: var(--ugames-overlay) !important;
+  --color-background-dark-purple-gradient: var(--ugames-background) !important;
+  --fill-bg: var(--ugames-background) !important;
+  --fill-secondary-default: var(--ugames-raised) !important;
+  --fill-secondary-hover: var(--ugames-hover) !important;
+  --fill-secondary-subdue-default: var(--ugames-surface) !important;
+  --fill-secondary-disabled: var(--ugames-surface) !important;
+  --color-text-primary: var(--ugames-text) !important;
+  --color-text-white: var(--ugames-text) !important;
+  --color-text-black: var(--ugames-text) !important;
+  --text-primary: var(--ugames-text) !important;
+  --text-inverse: var(--ugames-on-accent) !important;
+  --text-inverse-hover: var(--ugames-text) !important;
+  --color-text-inverse: var(--ugames-background) !important;
+  --color-text-secondary: var(--ugames-secondary) !important;
+  --text-secondary-default: var(--ugames-secondary) !important;
+  --text-secondary-strong-default: var(--ugames-secondary) !important;
+  --text-secondary-selected: var(--ugames-secondary) !important;
+  --text-secondary-transparent: var(--ugames-secondary) !important;
+  --color-text-ghost: var(--ugames-muted) !important;
+  --color-text-promo: var(--ugames-secondary) !important;
+  --text-primary-disabled: var(--ugames-disabled) !important;
+  --text-inverse-disabled: var(--ugames-disabled) !important;
+  --color-text-footer: var(--ugames-muted) !important;
+  --color-text-footer-copyright-temporary: var(--ugames-muted) !important;
+  --color-text-footer-link-temporary: var(--ugames-link) !important;
+  --color-text-footer-link-hover-temporary: var(--ugames-mint) !important;
+  --color-link-primary: var(--ugames-link) !important;
+  --color-link-temporary: var(--ugames-link) !important;
+  --color-link-hover: var(--ugames-mint) !important;
+  --color-link-hover-temporary: var(--ugames-mint) !important;
+  --color-link-primary-hovered: var(--ugames-mint) !important;
+  --color-link-primary-pressed: var(--ugames-mint) !important;
+  --link-cl-primary: var(--ugames-text) !important;
+  --link-cl-secondary: var(--ugames-secondary) !important;
+  --link-cl-accent: var(--ugames-link) !important;
+  --link-cl-primary-hover: var(--ugames-mint) !important;
+  --link-cl-secondary-hover: var(--ugames-mint) !important;
+  --link-cl-accent-hover: var(--ugames-mint) !important;
+  --link-cl-underline: var(--ugames-muted) !important;
+  --link-cl-underline-hover: var(--ugames-mint) !important;
+  --text-primary-hover-link: var(--ugames-mint) !important;
+  --color-project: var(--ugames-accent) !important;
+  --color-text: var(--ugames-link) !important;
+  --color-bg-brand: var(--ugames-accent) !important;
+  --fill-accent: var(--ugames-accent) !important;
+  --fill-accentBrand: var(--ugames-accent) !important;
+  --fill-accent-hover: var(--ugames-accent-hover) !important;
+  --fill-accentBrand-hover: var(--ugames-accent-hover) !important;
+  --fill-accent-disabled: var(--ugames-surface) !important;
+  --fill-accentBrand-disabled: var(--ugames-surface) !important;
+  --fill-accent-nonactive: var(--ugames-muted) !important;
+  --fill-accent-nonactive-hover: var(--ugames-secondary) !important;
+  --fill-counter: var(--ugames-mint) !important;
+  --border-selected: var(--ugames-mint) !important;
+  --icon-primary: var(--ugames-text) !important;
+  --icon-primary-fill-color: var(--ugames-text) !important;
+  --icon-secondary-default: var(--ugames-secondary) !important;
+  --icon-secondary-strong-default: var(--ugames-secondary) !important;
+  --icon-secondary-selected: var(--ugames-mint) !important;
+  --icon-accent: var(--ugames-link) !important;
+  --icon-accent-hover: var(--ugames-mint) !important;
+  --icon-accent-disabled: var(--ugames-disabled) !important;
+  --icon-inverse-disabled: var(--ugames-disabled) !important;
+  --color-control-primary: var(--ugames-accent) !important;
+  --color-control-primary-hover: var(--ugames-accent-hover) !important;
+  --color-control-primary-variant: var(--ugames-mint) !important;
+  --color-control-primary-variant-hover: var(--ugames-mint) !important;
+  --color-control-primary-on: var(--ugames-on-accent) !important;
+  --color-control-primary-on-variant: var(--ugames-background) !important;
+  --color-control-primary-shadow: none !important;
+  --color-control-secondary: var(--ugames-raised) !important;
+  --color-control-secondary-hover: var(--ugames-hover) !important;
+  --color-control-secondary-on: var(--ugames-text) !important;
+  --color-control-secondary-shadow: none !important;
+  --color-control-ghost: var(--ugames-raised) !important;
+  --color-control-ghost-hover: var(--ugames-hover) !important;
+  --color-control-ghost-on: var(--ugames-text) !important;
+  --color-control-float: var(--ugames-raised) !important;
+  --color-control-float-hover: var(--ugames-hover) !important;
+  --color-control-float-on: var(--ugames-text) !important;
+  --color-button-primary: var(--ugames-accent) !important;
+  --color-button-primary-bg-hovered: var(--ugames-accent-hover) !important;
+  --color-button-primary-bg-pressed: var(--ugames-accent-pressed) !important;
+  --color-button-primary-bg-disabled: var(--ugames-surface) !important;
+  --color-button-bg-temporary: var(--ugames-accent) !important;
+  --color-button-bg-temporary-hover: var(--ugames-accent-hover) !important;
+  --color-button-secondary: var(--ugames-raised) !important;
+  --color-button-secondary-bg-hovered: var(--ugames-hover) !important;
+  --color-button-secondary-bg-pressed: var(--ugames-selected) !important;
+  --color-button-secondary-bg-disabled: var(--ugames-surface) !important;
+  --color-button-ghost: var(--ugames-raised) !important;
+  --color-button-ghost-bg-hovered: var(--ugames-hover) !important;
+  --color-button-ghost-bg-pressed: var(--ugames-selected) !important;
+  --color-button-ghost-bg-disabled: var(--ugames-surface) !important;
+  --color-button-float: var(--ugames-raised) !important;
+  --color-button-float-bg-hovered: var(--ugames-hover) !important;
+  --color-button-float-bg-pressed: var(--ugames-selected) !important;
+  --color-button-float-bg-disabled: var(--ugames-surface) !important;
+  --button-cl-bg-primary: var(--ugames-accent) !important;
+  --button-cl-bg-primary-hover: var(--ugames-accent-hover) !important;
+  --button-cl-bg-primary-disabled: var(--ugames-surface) !important;
+  --button-cl-bg-primary-glowing: var(--ugames-accent) !important;
+  --button-cl-shadow-primary-glowing: none !important;
+  --button-cl-bg-promo: var(--ugames-accent) !important;
+  --button-cl-bg-promo-hover: var(--ugames-accent-hover) !important;
+  --button-cl-bg-promo-disabled: var(--ugames-surface) !important;
+  --button-cl-bg-secondary: var(--ugames-raised) !important;
+  --button-cl-bg-secondary-hover: var(--ugames-hover) !important;
+  --button-cl-bg-secondary-disabled: var(--ugames-surface) !important;
+  --button-cl-bg-secondary-transparent: var(--ugames-raised) !important;
+  --button-cl-bg-secondary-transparent-hover: var(--ugames-hover) !important;
+  --button-cl-bg-secondary-transparent-disabled: var(--ugames-surface) !important;
+  --button-cl-text-primary: var(--ugames-on-accent) !important;
+  --button-cl-text-primary-hover: var(--ugames-on-accent) !important;
+  --button-cl-text-promo: var(--ugames-on-accent) !important;
+  --button-cl-text-promo-hover: var(--ugames-on-accent) !important;
+  --button-cl-text-secondary: var(--ugames-text) !important;
+  --button-cl-text-secondary-hover: var(--ugames-text) !important;
+  --button-cl-text-secondary-transparent: var(--ugames-text) !important;
+  --button-cl-text-secondary-transparent-hover: var(--ugames-text) !important;
+  --button-cl-text-empty: var(--ugames-link) !important;
+  --button-cl-text-empty-hover: var(--ugames-mint) !important;
+  --button-cl-text-primary-disabled: var(--ugames-disabled) !important;
+  --button-cl-text-secondary-transparent-disabled: var(--ugames-disabled) !important;
+  --button-cl-text-promo-disabled: var(--ugames-disabled) !important;
+  --button-cl-text-empty-disabled: var(--ugames-disabled) !important;
+  --button-cl-icon-primary: var(--ugames-on-accent) !important;
+  --button-cl-icon-primary-hover: var(--ugames-on-accent) !important;
+  --button-cl-icon-secondary: var(--ugames-text) !important;
+  --button-cl-icon-secondary-hover: var(--ugames-text) !important;
+  --button-cl-icon-secondary-transparent: var(--ugames-text) !important;
+  --button-cl-icon-secondary-transparent-hover: var(--ugames-text) !important;
+  --button-cl-icon-empty: var(--ugames-link) !important;
+  --button-cl-icon-empty-hover: var(--ugames-mint) !important;
+  --button-cl-icon-primary-disabled: var(--ugames-disabled) !important;
+  --button-cl-icon-secondary-transparent-disabled: var(--ugames-disabled) !important;
+  --button-cl-icon-empty-disabled: var(--ugames-disabled) !important;
+  --button-cl-border-color-empty: var(--ugames-border-strong) !important;
+  --button-cl-border-color-empty-hover: var(--ugames-mint) !important;
+  --button-cl-border-color-empty-disabled: var(--ugames-border) !important;
+  --color-control-bg-action: var(--ugames-accent) !important;
+  --color-control-bg-default: var(--ugames-raised) !important;
+  --color-control-bg-default-hover: var(--ugames-hover) !important;
+  --color-control-bg-default-disable: var(--ugames-surface) !important;
+  --color-control-bg-blank: var(--ugames-surface) !important;
+  --color-control-bg-blank-hover: var(--ugames-raised) !important;
+  --color-control-bg-blank-disable: var(--ugames-surface) !important;
+  --color-control-bg-faint: var(--ugames-surface) !important;
+  --color-control-bg-check: var(--ugames-selected) !important;
+  --color-control-bg-check-hover: var(--ugames-hover) !important;
+  --color-control-bg-pseudo-hover: var(--ugames-hover) !important;
+  --color-control-bg-progress: var(--ugames-accent) !important;
+  --color-control-bg-progress-process: var(--ugames-accent-hover) !important;
+  --color-control-bg-border-default: var(--ugames-border) !important;
+  --color-control-bg-border-blank: var(--ugames-border) !important;
+  --color-control-bg-border-blank-hover: var(--ugames-border-strong) !important;
+  --color-control-bg-border-blank-disable: var(--ugames-border) !important;
+  --color-control-bg-border-pseudo: var(--ugames-border) !important;
+  --color-control-bg-border-prism: var(--ugames-mint) !important;
+  --color-control-bg-border-link-default: var(--ugames-border-strong) !important;
+  --color-control-bg-link-default-hover: var(--ugames-selected) !important;
+  --color-control-typo-primary: var(--ugames-text) !important;
+  --color-control-typo-secondary: var(--ugames-secondary) !important;
+  --color-control-typo-ghost: var(--ugames-muted) !important;
+  --color-control-typo-disable: var(--ugames-disabled) !important;
+  --color-control-typo-error: var(--ugames-danger) !important;
+  --panel-bg: var(--ugames-surface) !important;
+  --panel-block-bg: transparent !important;
+  --panel-area-bg: transparent !important;
+  --panel-wrapper-bg: var(--ugames-overlay) !important;
+  --panel-item-color: var(--ugames-secondary) !important;
+  --panel-item-header-color: var(--ugames-text) !important;
+  --panel-item-background-color-hover: var(--ugames-hover) !important;
+  --panel-links-color: var(--ugames-secondary) !important;
+  --panel-links-color-hover: var(--ugames-mint) !important;
+  --panel-copyright-color: var(--ugames-muted) !important;
+  --panel-fill-icon: var(--ugames-link) !important;
+  --panel-separator-color: var(--ugames-border) !important;
+  --panel-separator-right-color: var(--ugames-border) !important;
+  --popup-bg-color: var(--ugames-raised) !important;
+  --popup-view-default-fill-color: var(--ugames-raised) !important;
+  --popup-view-default-typo-color: var(--ugames-text) !important;
+  --popup-box-shadow: var(--ugames-shadow) !important;
+  --menu-view-default-fill-color-base: var(--ugames-raised) !important;
+  --menu-view-default-fill-color-hovered: var(--ugames-hover) !important;
+  --menu-view-default-typo-color-base: var(--ugames-text) !important;
+  --menu-view-default-typo-color-hovered: var(--ugames-text) !important;
+  --menu-view-default-typo-color-secondary: var(--ugames-secondary) !important;
+  --menu-view-default-typo-color-disabled: var(--ugames-disabled) !important;
+  --menu-view-default-border-color-base: var(--ugames-border) !important;
+  --header-overflow-menu-popup-bg: var(--ugames-raised) !important;
+  --desktop-header-nav-item-color: var(--ugames-secondary) !important;
+  --desktop-header-nav-item-color-hover: var(--ugames-text) !important;
+  --desktop-header-nav-item-color-active: var(--ugames-mint) !important;
+  --desktop-header-nav-item-color-active-hover: var(--ugames-mint) !important;
+  --desktop-header-nav-item-bg-hover: var(--ugames-hover) !important;
+  --desktop-header-nav-item-bg-active: var(--ugames-selected) !important;
+  --desktop-header-nav-item-bg-active-hover: var(--ugames-hover) !important;
+  --new-catalog-header-nav-item-color: var(--ugames-secondary) !important;
+  --new-catalog-header-nav-item-color-hover: var(--ugames-text) !important;
+  --new-catalog-header-nav-item-color-active: var(--ugames-mint) !important;
+  --new-catalog-header-nav-item-color-active-hover: var(--ugames-mint) !important;
+  --new-catalog-header-nav-item-bg-hover: var(--ugames-hover) !important;
+  --new-catalog-header-nav-item-bg-active: var(--ugames-selected) !important;
+  --new-catalog-header-nav-item-bg-active-hover: var(--ugames-hover) !important;
+  --desktop-header-overflow-button-text: var(--ugames-text) !important;
+  --desktop-header-overflow-button-icon: var(--ugames-link) !important;
+  --desktop-header-overflow-button-border: var(--ugames-border) !important;
+  --desktop-header-overflow-button-border-hover: var(--ugames-mint) !important;
+  --desktop-header-overflow-button-border-active: var(--ugames-mint) !important;
+  --desktop-header-overflow-button-bg-hover: var(--ugames-hover) !important;
+  --desktop-header-overflow-button-bg-active: var(--ugames-selected) !important;
+  --header-border-bottom: 1px solid var(--ugames-border) !important;
+  --burger-badge-bg: var(--ugames-mint) !important;
+  --tab-bar-selected-tab-bg: var(--ugames-selected) !important;
+  --color-bg-border: var(--ugames-border) !important;
+  --color-bg-active-temporary: var(--ugames-selected) !important;
+  --color-bg-hover-temporary: var(--ugames-hover) !important;
+  --text-color-category-active: var(--ugames-mint) !important;
+  --text-color-input-temporary: var(--ugames-secondary) !important;
+  --color-input-bg-temporary--disabled: var(--ugames-surface) !important;
+  --color-tag-bg-temporary: var(--ugames-raised) !important;
+  --color-tag-bg-hover-temporary: var(--ugames-hover) !important;
+  --tag-cl-bg-pressed: var(--ugames-selected) !important;
+  --category-type-card-bg-fill: var(--ugames-surface) !important;
+  --category-type-card-bg-fill-active: var(--ugames-selected) !important;
+  --color-feed-link-bg: var(--ugames-surface) !important;
+  --color-game-info-bg: var(--ugames-surface) !important;
+  --color-game-page-category-link: var(--ugames-link) !important;
+  --color-game-page-developer-link: var(--ugames-secondary) !important;
+  --color-text-rating: var(--ugames-mint) !important;
+  --color-text-splash-screen-guard: var(--ugames-secondary) !important;
+  --color-background-splash-screen-button: var(--ugames-accent) !important;
+  --play-guard-dialog-open-info-hovered-color: var(--ugames-mint) !important;
+  --border-color-game-page: var(--ugames-border) !important;
+  --game-features-border-color: var(--ugames-border) !important;
+  --screen-manager-rotate-banner-bg: var(--ugames-surface) !important;
+  --game-control-info-popup-icon-bg: var(--ugames-raised) !important;
+  --color-achievements-notifier-bg: var(--ugames-raised) !important;
+  --login-button-avatar-block-bg: var(--ugames-accent) !important;
+  --login-button-avatar-block-color: var(--ugames-on-accent) !important;
+  --footer-redesign-text-color-hover: var(--ugames-mint) !important;
+  --footer-redesign-support-button-border: var(--ugames-border) !important;
+  --text-error: var(--ugames-danger) !important;
+  --icon-error: var(--ugames-danger) !important;
+  --border-error: var(--ugames-danger) !important;
+  --fill-color-alert: var(--ugames-danger) !important;
+  --color-control-bg-border-default-error: var(--ugames-danger) !important;
+  --color-control-bg-border-default-error-hover: var(--ugames-danger) !important;
+  --text-warning: var(--ugames-warning) !important;
+  --icon-warning: var(--ugames-warning) !important;
+  --border-warning: var(--ugames-warning) !important;
+  --fill-color-warning: var(--ugames-warning) !important;
+  --icon-success: var(--ugames-mint) !important;
+  --border-success: var(--ugames-mint) !important;
+  --fill-color-success: var(--ugames-mint) !important;
+  --user-profile-layout-background: var(--ugames-background) !important;
+  --user-profile-content-surface: var(--ugames-surface) !important;
+  --user-profile-border-primary: var(--ugames-border) !important;
+  --user-profile-text-primary: var(--ugames-text) !important;
+  --user-profile-text-secondary: var(--ugames-secondary) !important;
+  --user-profile-text-tertiary: var(--ugames-muted) !important;
+  --user-profile-settings-surface: var(--ugames-raised) !important;
+  --user-profile-settings-text-primary: var(--ugames-text) !important;
+  --user-profile-settings-text-secondary: var(--ugames-secondary) !important;
+  --user-profile-settings-text-default: var(--ugames-secondary) !important;
+  --user-profile-settings-text-danger: var(--ugames-danger) !important;
+  --user-profile-settings-link-color: var(--ugames-link) !important;
+  --user-profile-settings-data-row-icon-color: var(--ugames-link) !important;
+  --user-profile-settings-divider-color: var(--ugames-border) !important;
+  --user-profile-settings-input-border-color: var(--ugames-border) !important;
+  --user-profile-settings-focus-color: var(--ugames-mint) !important;
+  --user-profile-profile-info-fallback-bg: var(--ugames-surface) !important;
+  --user-profile-profile-info-level-color: var(--ugames-secondary) !important;
+  --user-profile-profile-info-level-desktop-color: var(--ugames-secondary) !important;
+  --user-profile-profile-info-status-placeholder-color: var(--ugames-secondary) !important;
+  --user-profile-profile-info-settings-button-background: var(--ugames-raised) !important;
+  --user-profile-profile-info-settings-button-palette-image: url('{{controller}}') !important;
+  --user-profile-avatar-background: var(--ugames-raised) !important;
+  --user-profile-avatar-status-background: var(--ugames-raised) !important;
+  --user-profile-avatar-status-background-hover: var(--ugames-hover) !important;
+  --user-profile-content-tab-badge-active-text: var(--ugames-mint) !important;
+  --user-profile-content-tab-badge-inactive-text: var(--ugames-secondary) !important;
+  --user-profile-content-desktop-section-title-color: var(--ugames-text) !important;
+  --user-profile-content-desktop-section-count-color: var(--ugames-secondary) !important;
+  --user-profile-content-desktop-support-title-color: var(--ugames-text) !important;
+  --user-profile-content-desktop-support-button-color: var(--ugames-text) !important;
+  --user-profile-state-title-color: var(--ugames-text) !important;
+  --user-profile-state-description-color: var(--ugames-secondary) !important;
+  --user-profile-state-button-text-color: var(--ugames-on-accent) !important;
+  --user-profile-action-dialog-surface: var(--ugames-raised) !important;
+  --user-profile-delete-modal-surface: var(--ugames-raised) !important;
+  --user-profile-customization-item-active-background: var(--ugames-selected) !important;
+  --user-profile-customization-item-active-border: var(--ugames-mint) !important;
+  --user-profile-edit-button-background: var(--ugames-raised) !important;
+  --user-profile-edit-button-active-background: var(--ugames-mint) !important;
+  --user-profile-edit-button-active-text: var(--ugames-background) !important;
+  --user-profile-quests-banner-surface: var(--ugames-selected) !important;
+  --user-profile-quests-banner-action-background: var(--ugames-accent) !important;
+  --user-profile-quests-banner-title-color: var(--ugames-text) !important;
+  --user-profile-quests-banner-description-color: var(--ugames-secondary) !important;
+  --user-profile-mission-card-surface: var(--ugames-surface) !important;
+  --user-profile-mission-card-carousel-surface: var(--ugames-raised) !important;
+  --user-profile-mission-card-text: var(--ugames-text) !important;
+  --user-profile-mission-card-secondary-text: var(--ugames-secondary) !important;
+  --user-profile-mission-card-completed-text: var(--ugames-mint) !important;
+  --user-profile-mission-card-reward-surface: var(--ugames-selected) !important;
+  --user-profile-reward-badge-accent-surface: var(--ugames-accent) !important;
+  --user-profile-reward-badge-accent-text: var(--ugames-on-accent) !important;
+  --user-profile-reward-badge-muted-surface: var(--ugames-raised) !important;
+  --user-profile-reward-badge-muted-text: var(--ugames-secondary) !important;
+  --user-profile-cosmetics-shop-badge-surface: var(--ugames-surface) !important;
+  --user-profile-cosmetics-shop-badge-title-color: var(--ugames-text) !important;
+  --user-profile-cosmetics-shop-badge-action-color: var(--ugames-link) !important;
+  --user-profile-age-rating-badge-background: var(--ugames-surface) !important;
+  --user-profile-age-rating-badge-color: var(--ugames-text) !important;
+  --user-profile-progress-text: var(--ugames-secondary) !important;
+  --user-profile-achievement-title-color: var(--ugames-text) !important;
+  --user-profile-achievement-description-color: var(--ugames-secondary) !important;
+  --user-profile-timer-surface: var(--ugames-surface) !important;
+  --user-profile-timer-cell-surface: var(--ugames-raised) !important;
+  --user-profile-timer-text: var(--ugames-text) !important;
+  --user-profile-deadline-surface: var(--ugames-raised) !important;
+  --user-profile-deadline-text: var(--ugames-text) !important;
+  --user-profile-deadline-border: var(--ugames-border) !important;
+  --user-profile-tooltip-color: var(--ugames-text) !important;
+  --user-profile-tooltip-border: var(--ugames-border) !important;
+  --user-profile-friend-card-online-indicator-color: var(--ugames-mint) !important;
 }
 [data-ugames-theme] * {
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif !important;
+  font-family: var(--ugames-font) !important;
+  scrollbar-color: var(--ugames-border-strong) var(--ugames-background);
+}
+[data-ugames-theme] ::selection {
+  background: var(--ugames-mint);
+  color: var(--ugames-background);
+}
+[data-ugames-theme] ::-webkit-scrollbar-thumb {
+  background: var(--ugames-border-strong);
+  border-radius: 8px;
+}
+[data-ugames-theme] ::-webkit-scrollbar-track {
+  background: var(--ugames-background);
 }
 [data-ugames-theme] body {
+  color: var(--ugames-text) !important;
   background-color: var(--ugames-background) !important;
 }
 [data-ugames-theme] .app_with_sticky {
@@ -34,25 +408,275 @@
 [data-ugames-theme] [role='banner'] {
   background-color: var(--ugames-background) !important;
 }
+/* Components with literal colors need explicit roles in addition to token aliases. */
+[data-ugames-theme] :is(h1, h2, h3, h4, h5, h6, label, legend),
+[data-ugames-theme]
+  :is(
+    .section-header__title,
+    .section-header__text,
+    .category__title,
+    .block-header__title,
+    .profile-widget__title
+  ),
+[data-ugames-theme] :is(.game-card__title, .game-name, .play-game-header__title),
+[data-ugames-theme] [class*='section-header'][class*='title--'] {
+  color: var(--ugames-text) !important;
+}
+[data-ugames-theme] :is(.default-link, .Link, .link),
+[data-ugames-theme] :is(.game-description, .footer) a {
+  color: var(--ugames-link) !important;
+  text-underline-offset: 0.2em;
+}
+[data-ugames-theme] :is(.default-link, .Link, .link):hover,
+[data-ugames-theme] :is(.game-description, .footer) a:hover {
+  color: var(--ugames-mint) !important;
+}
+[data-ugames-theme] :is(.category, .block-header, .navigation-link, [role='tab']) {
+  color: var(--ugames-secondary) !important;
+}
+[data-ugames-theme] :is(.category, .block-header, .navigation-link, [role='tab']):hover {
+  background-color: var(--ugames-hover) !important;
+  color: var(--ugames-text) !important;
+}
+[data-ugames-theme]
+  :is(
+    .category_active,
+    .block-header_active,
+    [aria-current='page']:not([class*='logo']),
+    [role='tab'][aria-selected='true']
+  ) {
+  background-color: var(--ugames-selected) !important;
+  color: var(--ugames-mint) !important;
+}
+[data-ugames-theme]
+  :is(.category_active, .block-header_active)
+  :is(.category__title, .block-header__title) {
+  color: var(--ugames-mint) !important;
+}
+[data-ugames-theme]
+  :is(input:not([type='checkbox'], [type='radio'], [type='range']), textarea, select),
+[data-ugames-theme] :is(.Textinput-Box, .Textarea-Box),
+[data-ugames-theme] [class*='inputControl-critical-module__wrapper--'],
+[data-ugames-theme] [class*='desktop-header-icon-button'][class*='button--'],
+[data-ugames-theme] [class*='header-search'][class*='previewInput--'],
+[data-ugames-theme] [class*='header-search'][class*='iconButton--'] {
+  color: var(--ugames-text) !important;
+  background-color: var(--ugames-surface) !important;
+  border-color: var(--ugames-border) !important;
+  caret-color: var(--ugames-mint) !important;
+}
+[data-ugames-theme] [class*='inputControl-critical-module__wrapper--'] input {
+  background-color: transparent !important;
+}
+[data-ugames-theme] [class*='mobile-tab-bar'][class*='__tabBar--'] {
+  background: var(--ugames-surface) !important;
+  border-color: var(--ugames-border) !important;
+}
+[data-ugames-theme] [class*='mobile-tab-bar'][class*='__tab--'] {
+  color: var(--ugames-secondary) !important;
+}
+[data-ugames-theme] [class*='mobile-tab-bar'][class*='__tabSelected--'] {
+  color: var(--ugames-mint) !important;
+  background: transparent !important;
+}
+[data-ugames-theme] [class*='mobile-tab-bar'][class*='__pill--'] {
+  background: var(--ugames-selected) !important;
+}
+[data-ugames-theme] [class*='mobile-tab-bar'][class*='__tabLabel--'],
+[data-ugames-theme] [class*='mobile-tab-bar'] svg {
+  color: inherit !important;
+}
+[data-ugames-theme] [class*='mobile-tab-bar'][class*='__badge--'] {
+  color: var(--ugames-on-accent) !important;
+  background: var(--ugames-accent) !important;
+}
+[data-ugames-theme] .login-button {
+  color: var(--ugames-link) !important;
+}
+[data-ugames-theme] :is(.profile-widget, .user-pic-profile, .recovery-code__code) {
+  color: var(--ugames-text) !important;
+  background-color: var(--ugames-surface) !important;
+}
+[data-ugames-theme] .recovery-code__code {
+  background-color: var(--ugames-raised) !important;
+}
+[data-ugames-theme] .game-quality-score__value {
+  color: var(--ugames-background) !important;
+  background: var(--ugames-mint) !important;
+}
+[data-ugames-theme] .game-quality-score__value_medium {
+  background: var(--ugames-warning) !important;
+}
+[data-ugames-theme] .game-quality-score__value_low {
+  background: var(--ugames-danger) !important;
+}
+[data-ugames-theme] [class*='badge-critical-module__badge--'] {
+  background: var(--ugames-selected) !important;
+  color: var(--ugames-mint) !important;
+}
+[data-ugames-theme] [class*='badge-critical-module__text--'] {
+  color: inherit !important;
+}
+[data-ugames-theme] .game-card__game-info {
+  background: url('{{info}}') center / contain no-repeat !important;
+}
+[data-ugames-theme] :is(.game-card__info, .game-card__info-button, .game-info-button),
+[data-ugames-theme] [class*='age-rating-badge-critical-module__root--'] {
+  color: var(--ugames-secondary) !important;
+  background: var(--ugames-surface) !important;
+}
+[data-ugames-theme] :is(.preloading-content__text, .play-game-header__all-games-text) {
+  color: var(--ugames-text) !important;
+}
+[data-ugames-theme] :is(input, textarea)::placeholder,
+[data-ugames-theme] [class*='header-search'][class*='previewPlaceholder--'] {
+  color: var(--ugames-secondary) !important;
+  opacity: 1 !important;
+}
+[data-ugames-theme] :is(input, textarea, select):disabled {
+  color: var(--ugames-disabled) !important;
+  background-color: var(--ugames-surface) !important;
+}
+[data-ugames-theme] :is(input, textarea, select)[aria-invalid='true'] {
+  border-color: var(--ugames-danger) !important;
+}
+[data-ugames-theme] :is(input, textarea):-webkit-autofill {
+  -webkit-text-fill-color: var(--ugames-text) !important;
+  -webkit-box-shadow: 0 0 0 1000px var(--ugames-surface) inset !important;
+}
+[data-ugames-theme]
+  :is(
+    .Modal-Content,
+    .Popup2,
+    .popup__content,
+    .user-profile-popup,
+    .play-guard-dialog,
+    .play-modal__content,
+    [role='dialog'],
+    [role='menu'],
+    [role='listbox'],
+    [role='tooltip']
+  ) {
+  color: var(--ugames-text) !important;
+  background-color: var(--ugames-raised) !important;
+  border-color: var(--ugames-border) !important;
+}
+[data-ugames-theme] :is(.Modal-Overlay, .modal__overlay, .popup__overlay, .paranja) {
+  background: var(--ugames-overlay) !important;
+}
+[data-ugames-theme] :is([role='menuitem'], [role='option']) {
+  color: var(--ugames-text) !important;
+}
+[data-ugames-theme] :is([role='menuitem'], [role='option']):hover,
+[data-ugames-theme] [role='option'][aria-selected='true'] {
+  color: var(--ugames-mint) !important;
+  background-color: var(--ugames-selected) !important;
+}
+[data-ugames-theme] :is(.game-info, .play-similar-games-tile, .category_type_card),
+[data-ugames-theme] [class*='played-game-card-module__rootDesktop--'] {
+  color: var(--ugames-text) !important;
+  background-color: var(--ugames-surface) !important;
+  border-color: var(--ugames-border) !important;
+}
+[data-ugames-theme] [class*='profile-info-module__container--'] {
+  background-image:
+    linear-gradient(180deg, #211d3040, var(--ugames-background)),
+    var(--user-profile-profile-info-bg, none) !important;
+}
+[data-ugames-theme] [class*='profile-info-module__settingsButton--'] {
+  --user-profile-profile-info-settings-button-palette-image: url('{{controller}}') !important;
+  background-color: var(--ugames-raised) !important;
+  border-color: var(--ugames-border-strong) !important;
+}
+[data-ugames-theme] .play-similar-games-tile:hover,
+[data-ugames-theme] [class*='played-game-card-module__rootDesktop--']:hover {
+  background: var(--ugames-hover) !important;
+}
+/* Give covers the same light violet/mint grade without obscuring the game artwork. */
+[data-ugames-theme] :is(.game-image, .game-card__image, .game-card__cover),
+[data-ugames-theme] [class*='played-game-card-module__mediaSlot--'] {
+  background-color: var(--ugames-surface) !important;
+  outline: 1px solid #bfaeff38;
+  outline-offset: -1px;
+}
+[data-ugames-theme] .play-similar-games-tile__image {
+  position: relative;
+}
+[data-ugames-theme] .game-card__graphic::after,
+[data-ugames-theme] .play-similar-games-tile__image::after,
+[data-ugames-theme] [class*='played-game-card-module__mediaSlot--']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, #7857ff14, #57dfc214);
+  mix-blend-mode: normal;
+  pointer-events: none;
+  z-index: 1;
+}
+[data-ugames-theme] img[data-ugames-image-fallback] {
+  object-fit: contain !important;
+  background-color: var(--ugames-surface) !important;
+}
+[data-ugames-theme]
+  :is(.game-description, .game-info__description, .footer, .play-guard-dialog__description) {
+  color: var(--ugames-secondary) !important;
+}
+[data-ugames-theme] :is(.game-rating, .game-card__rating, .rating__value) {
+  color: var(--ugames-mint) !important;
+}
+[data-ugames-theme] :is(.Spin, .spin, .Spinner, [role='progressbar']) {
+  color: var(--ugames-mint) !important;
+}
+[data-ugames-theme] :is(progress, input[type='range']) {
+  accent-color: var(--ugames-mint);
+}
+[data-ugames-theme] :is(hr, [role='separator']) {
+  border-color: var(--ugames-border) !important;
+}
+[data-ugames-theme] :is([role='alert'], .error-message, .Textinput-Hint_state_error) {
+  color: var(--ugames-danger) !important;
+}
+[data-ugames-theme]
+  :is(.Icon, [class*='icon-module__']):not([class*='category-'])
+  svg
+  [fill]:not([fill='none']),
+[data-ugames-theme] button svg [fill]:not([fill='none']) {
+  fill: currentColor !important;
+}
+[data-ugames-theme] :is(.Icon, button) svg [stroke]:not([stroke='none']) {
+  stroke: currentColor !important;
+}
 [data-ugames-theme] [class*='mobile-tab-bar'][class*='__fade--'] {
   background: linear-gradient(0deg, var(--ugames-background) 4.09%, #17152000 100%) !important;
 }
 [data-ugames-theme] [class*='button-critical-module__view-primary--'],
 [data-ugames-theme] .Button_view_action {
-  background-color: #7857ff !important;
-  color: #fff !important;
+  background-color: var(--ugames-accent) !important;
+  color: var(--ugames-on-accent) !important;
 }
 [data-ugames-theme] [class*='button-critical-module__view-primary--']:hover,
 [data-ugames-theme] .Button_view_action:hover {
-  background-color: #8b6eff !important;
+  background-color: var(--ugames-accent-hover) !important;
 }
-[data-ugames-theme] :is(button, a, input, textarea, select):focus-visible {
-  outline: 2px solid #57dfc2 !important;
+[data-ugames-theme] [class*='button-critical-module__view-primary--']:active,
+[data-ugames-theme] .Button_view_action:active {
+  background-color: var(--ugames-accent-pressed) !important;
+}
+[data-ugames-theme] :is(button, .Button):is(:disabled, [aria-disabled='true']) {
+  color: var(--ugames-disabled) !important;
+  background-color: var(--ugames-surface) !important;
+}
+[data-ugames-theme]
+  :is(button, a, input, textarea, select, [tabindex], [contenteditable]):focus-visible {
+  outline: 2px solid var(--ugames-mint) !important;
   outline-offset: 3px;
 }
 [data-ugames-theme] .logo-link img,
 [data-ugames-theme] .logotype img,
-[data-ugames-theme] .domain-logo img {
+[data-ugames-theme] .domain-logo img,
+[data-ugames-theme] [class*='logo-critical-module__logoImg--'],
+[data-ugames-theme] .play-game-logo__service {
   width: auto !important;
   height: 30px !important;
   max-width: 160px !important;
@@ -93,21 +717,43 @@
   background-image: url('{{avatar}}') !important;
 }
 [data-ugames-theme] .user-pic-profile__image_default-avatar {
-  background-color: #252239 !important;
+  background: var(--ugames-raised) url('{{avatar}}') center / contain no-repeat !important;
+}
+[data-ugames-theme] [data-ugames-artwork='avatar'] {
+  background: var(--ugames-raised) url('{{avatar}}') center / contain no-repeat !important;
+}
+[data-ugames-theme]
+  img:is(
+    .footer__image,
+    [class*='authorization'][class*='image'],
+    [class*='auth-banner'][class*='image']
+  ) {
+  object-fit: contain !important;
+}
+[data-ugames-theme] [class*='Icon_type_category-'] {
+  background-image: url('{{category-common}}');
 }
 [data-ugames-theme] .footer__image {
   background: url('{{developer}}') center / contain no-repeat !important;
 }
 [data-ugames-theme] [class*='sticky-promo-banner'][class*='image'],
 [data-ugames-theme] [class*='authorization'][class*='image'],
-[data-ugames-theme] [class*='auth-banner'][class*='image'] {
+[data-ugames-theme] [class*='auth-banner'][class*='image'],
+[data-ugames-theme] [class*='stripe-'][class*='image--'],
+[data-ugames-theme] [class*='stripe-'][class*='Image--'],
+[data-ugames-theme] [class*='stripe-'][class*='blurredBackground--'] {
   background: url('{{controller}}') center / contain no-repeat !important;
 }
+[data-ugames-theme] [class*='stripe-'][class*='container--'],
+[data-ugames-theme] [class*='stripe-large-module__root--'] {
+  background-color: var(--ugames-surface) !important;
+  border-color: var(--ugames-border) !important;
+}
 [data-ugames-theme] .profile-widget__icon {
-  color: #b5a7ff !important;
+  color: var(--ugames-link) !important;
 }
 [data-ugames-theme] .profile-widget__icon svg [fill]:not([fill='none']) {
-  fill: #b5a7ff !important;
+  fill: var(--ugames-link) !important;
 }
 [data-ugames-theme] .social-links,
 [data-ugames-theme] .left-panel__social-links {
@@ -259,6 +905,7 @@
   background: linear-gradient(180deg, #17152050, #171520d9) !important;
 }
 [data-ugames-theme] .copyright,
-[data-ugames-theme] .copyright__company-info {
+[data-ugames-theme] .copyright__company-info,
+[data-ugames-theme] [class*='footer-links-view'][class*='copyright'] {
   display: none !important;
 }

@@ -100,9 +100,9 @@ final class ProtectedWebViewTests: XCTestCase {
 
         webView.underPageBackgroundColor = dark
         controller.showProtectionError()
-        XCTAssertEqual(controller.view.backgroundColor, .systemBackground)
+        XCTAssertEqual(controller.view.backgroundColor, UGamesTheme.background)
         webView.underPageBackgroundColor = .red
-        XCTAssertEqual(controller.view.backgroundColor, .systemBackground)
+        XCTAssertEqual(controller.view.backgroundColor, UGamesTheme.background)
     }
 
     func testFullscreenShellLeavesGameWithoutNativeControls() throws {

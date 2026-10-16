@@ -1,0 +1,20 @@
+<resources>
+  <style name="Theme.UGames" parent="android:style/Theme.DeviceDefault.NoActionBar">
+    <item name="android:windowBackground">@color/ugames_background</item>
+    <item name="android:colorBackground">@color/ugames_background</item>
+    <item name="android:colorAccent">@color/ugames_mint</item>
+    <item name="android:textColorPrimary">@color/ugames_text</item>
+    <item name="android:textColorSecondary">@color/ugames_secondary</item>
+    <item name="android:colorButtonNormal">@color/ugames_surface</item>
+    <item name="android:statusBarColor">@color/ugames_background</item>
+    <item name="android:navigationBarColor">@color/ugames_background</item>
+    <item name="android:windowLightStatusBar">false</item>
+    <item name="android:alertDialogTheme">@style/Theme.UGames.Dialog</item>
+  </style>
+  <style name="Theme.UGames.Dialog" parent="android:style/Theme.DeviceDefault.Dialog.Alert">
+    <item name="android:colorBackground">@color/ugames_surface</item>
+    <item name="android:colorAccent">@color/ugames_mint</item>
+    <item name="android:textColorPrimary">@color/ugames_text</item>
+    <item name="android:textColorSecondary">@color/ugames_secondary</item>
+  </style>
+</resources>

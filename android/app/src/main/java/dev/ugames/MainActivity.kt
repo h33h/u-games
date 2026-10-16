@@ -1,6 +1,6 @@
 package dev.ugames
 
-import android.content.res.Configuration
+import android.content.res.ColorStateList
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
@@ -32,16 +32,6 @@ class MainActivity : ComponentActivity() {
     private val current get() = windows.lastOrNull()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        val dark =
-            resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
-                Configuration.UI_MODE_NIGHT_YES
-        setTheme(
-            if (dark) {
-                android.R.style.Theme_DeviceDefault_NoActionBar
-            } else {
-                android.R.style.Theme_DeviceDefault_Light_NoActionBar
-            }
-        )
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         root = FrameLayout(this)
@@ -61,6 +51,7 @@ class MainActivity : ComponentActivity() {
         loading =
             ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
                 isIndeterminate = true
+                indeterminateTintList = ColorStateList.valueOf(getColor(R.color.ugames_mint))
                 visibility = View.GONE
             }
         content = FrameLayout(this)
@@ -165,10 +156,9 @@ class MainActivity : ComponentActivity() {
     fun showError(message: String) {
         hideFullscreen()
         loading.visibility = View.GONE
-        val color = android.util.TypedValue()
-        theme.resolveAttribute(android.R.attr.colorBackground, color, true)
-        root.setBackgroundColor(color.data)
-        window.setBackgroundDrawable(ColorDrawable(color.data))
+        val background = getColor(R.color.ugames_background)
+        root.setBackgroundColor(background)
+        window.setBackgroundDrawable(ColorDrawable(background))
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
@@ -179,12 +169,15 @@ class MainActivity : ComponentActivity() {
                 text = message
                 gravity = Gravity.CENTER
                 setTextAppearance(android.R.style.TextAppearance_Material_Body1)
+                setTextColor(getColor(R.color.ugames_text))
             }
         )
         panel.addView(
             Button(this).apply {
                 text = "Попробовать снова"
                 minHeight = dp(48)
+                backgroundTintList = ColorStateList.valueOf(getColor(R.color.ugames_accent))
+                setTextColor(getColor(R.color.ugames_on_accent))
                 setOnClickListener {
                     if (current == null) {
                         createAndLoad(lastUrl)
@@ -199,6 +192,8 @@ class MainActivity : ComponentActivity() {
             Button(this).apply {
                 text = "В каталог"
                 minHeight = dp(48)
+                backgroundTintList = ColorStateList.valueOf(getColor(R.color.ugames_surface))
+                setTextColor(getColor(R.color.ugames_mint))
                 setOnClickListener {
                     while (windows.size > 1) current?.let(::closeWindow)
                     if (current == null) createAndLoad(HOME) else load(HOME)

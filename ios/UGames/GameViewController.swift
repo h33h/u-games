@@ -21,7 +21,9 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
     override func viewDidLoad() {
         super.viewDidLoad()
         title = "UGames"
-        view.backgroundColor = .systemBackground
+        view.backgroundColor = UGamesTheme.background
+        view.tintColor = UGamesTheme.mint
+        spinner.color = UGamesTheme.mint
         spinner.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(spinner)
         NSLayoutConstraint.activate([
@@ -98,7 +100,7 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         errorPanel?.removeFromSuperview()
         errorPanel = nil
         webView?.isHidden = false
-        view.backgroundColor = webView?.underPageBackgroundColor ?? .systemBackground
+        view.backgroundColor = webView?.underPageBackgroundColor ?? UGamesTheme.background
         if let webView = webView {
             webView.load(URLRequest(url: retryURL))
         } else {
@@ -108,22 +110,31 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
 
     private func showError(_ message: String) {
         spinner.stopAnimating()
-        view.backgroundColor = .systemBackground
+        view.backgroundColor = UGamesTheme.background
         webView?.isHidden = true
         errorPanel?.removeFromSuperview()
         let label = UILabel()
         label.text = message
+        label.textColor = UGamesTheme.text
         label.numberOfLines = 0
         label.textAlignment = .center
         label.font = .preferredFont(forTextStyle: .body)
         label.adjustsFontForContentSizeCategory = true
         let retry = UIButton(type: .system)
+        var retryStyle = UIButton.Configuration.filled()
+        retryStyle.baseBackgroundColor = UGamesTheme.accent
+        retryStyle.baseForegroundColor = .white
+        retry.configuration = retryStyle
         retry.setTitle("Попробовать снова", for: .normal)
         retry.titleLabel?.font = .preferredFont(forTextStyle: .headline)
         retry.titleLabel?.adjustsFontForContentSizeCategory = true
         retry.addTarget(self, action: #selector(self.retry), for: .touchUpInside)
         retry.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         let catalog = UIButton(type: .system)
+        var catalogStyle = UIButton.Configuration.filled()
+        catalogStyle.baseBackgroundColor = UGamesTheme.surface
+        catalogStyle.baseForegroundColor = UGamesTheme.mint
+        catalog.configuration = catalogStyle
         catalog.setTitle("В каталог", for: .normal)
         catalog.titleLabel?.font = .preferredFont(forTextStyle: .body)
         catalog.titleLabel?.adjustsFontForContentSizeCategory = true
@@ -250,6 +261,8 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         completionHandler: @escaping () -> Void
     ) {
         let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        alert.overrideUserInterfaceStyle = .dark
+        alert.view.tintColor = UGamesTheme.mint
         alert.addAction(UIAlertAction(title: "ОК", style: .default) { _ in completionHandler() })
         present(alert, animated: true)
     }
@@ -261,6 +274,8 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         completionHandler: @escaping (Bool) -> Void
     ) {
         let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+        alert.overrideUserInterfaceStyle = .dark
+        alert.view.tintColor = UGamesTheme.mint
         alert
             .addAction(UIAlertAction(title: "Отмена", style: .cancel) { _ in
                 completionHandler(false)
@@ -278,7 +293,14 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         completionHandler: @escaping (String?) -> Void
     ) {
         let alert = UIAlertController(title: nil, message: prompt, preferredStyle: .alert)
-        alert.addTextField { $0.text = defaultText }
+        alert.overrideUserInterfaceStyle = .dark
+        alert.view.tintColor = UGamesTheme.mint
+        alert.addTextField {
+            $0.text = defaultText
+            $0.textColor = UGamesTheme.text
+            $0.backgroundColor = UGamesTheme.surface
+            $0.tintColor = UGamesTheme.mint
+        }
         alert
             .addAction(UIAlertAction(title: "Отмена", style: .cancel) { _ in
                 completionHandler(nil)

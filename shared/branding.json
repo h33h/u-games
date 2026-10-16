@@ -4,6 +4,8 @@
   "avatar": "assets/branding/avatar.svg",
   "controller": "assets/branding/controller.svg",
   "developer": "assets/branding/developer.svg",
+  "info": "assets/branding/info.svg",
+  "cover-placeholder": "assets/branding/cover-placeholder.svg",
   "background": "assets/brand-v2/ugames-arcade-background.png",
   "category-common": "assets/branding/category-common.svg",
   "category-puzzles": "assets/branding/category-puzzles.svg",

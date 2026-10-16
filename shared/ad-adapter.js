@@ -708,7 +708,7 @@
           (url.hostname === 'static.games.yandex.net' &&
             /^\/opengraph\/[^/]+\/default\.png$/.test(url.pathname)) ||
           (url.hostname === 'yastatic.net' &&
-            /^\/s3\/games-static\/(?:favicons\/yandex\/|static-data\/images\/single-logo\/(?:games|yandex)\/)/.test(
+            /^\/s3\/games-static\/(?:favicons\/yandex\/|static-data\/images\/(?:single-logo\/(?:games|yandex)\/|logo\/v\d+\/yandex\/))/.test(
               url.pathname,
             ))
         );
@@ -817,7 +817,19 @@
       }
       if (brandedGraphics.has(element)) {
         if (element.localName === 'svg') {
-          if (element.textContent !== 'UGames' || element.querySelector('path,use,image')) {
+          if (win.__UGamesBranding?.assets.logo) {
+            let image = element.querySelector('image[data-ugames-logo]');
+            if (!image || element.childNodes.length !== 1) {
+              image = doc.createElementNS('http://www.w3.org/2000/svg', 'image');
+              image.setAttribute('data-ugames-logo', '');
+              image.setAttribute('width', '140');
+              image.setAttribute('height', '32');
+              element.replaceChildren(image);
+            }
+            if (image.getAttribute('href') !== logo) {
+              image.setAttribute('href', logo);
+            }
+          } else if (element.textContent !== 'UGames' || element.querySelector('path,use,image')) {
             const text = doc.createElementNS('http://www.w3.org/2000/svg', 'text');
             text.setAttribute('x', '2');
             text.setAttribute('y', '24');
@@ -835,9 +847,18 @@
           if (element.textContent !== 'UGames') {
             element.textContent = 'UGames';
           }
-          element.style.setProperty('background-image', 'none', 'important');
-          element.style.setProperty('width', 'auto', 'important');
-          element.style.setProperty('font', '700 18px system-ui,sans-serif', 'important');
+          const mark = win.__UGamesBranding?.assets.icon;
+          element.style.setProperty(
+            'background-image',
+            mark ? 'url("' + mark + '")' : 'none',
+            'important',
+          );
+          element.style.setProperty('width', mark ? '32px' : 'auto', 'important');
+          element.style.setProperty(
+            'font',
+            mark ? '0/0 system-ui,sans-serif' : '700 18px system-ui,sans-serif',
+            'important',
+          );
           element.style.setProperty('white-space', 'nowrap', 'important');
         }
         if (element.getAttribute('aria-label') !== 'UGames') {

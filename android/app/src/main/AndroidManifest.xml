@@ -4,7 +4,7 @@
     android:label="UGames"
     android:icon="@mipmap/ic_launcher"
     android:roundIcon="@mipmap/ic_launcher"
-    android:theme="@android:style/Theme.DeviceDefault.Light.NoActionBar"
+    android:theme="@style/Theme.UGames"
     android:allowBackup="false"
     android:supportsRtl="true"
   >

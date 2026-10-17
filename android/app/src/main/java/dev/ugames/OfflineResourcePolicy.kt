@@ -47,8 +47,10 @@ object OfflineResourcePolicy {
     } ?: false
 
     fun isSdk(value: String): Boolean = normalize(value)?.let {
-        val path = URI(it).path.lowercase(Locale.ROOT)
-        path == "/sdk.js" || path == "/sdk" || path.startsWith("/sdk/")
+        val uri = URI(it)
+        val path = uri.path.lowercase(Locale.ROOT)
+        path == "/sdk.js" || path == "/sdk" || path.startsWith("/sdk/") ||
+            (uri.host in setOf("yandex.ru", "yandex.com") && path.startsWith("/games/sdk/"))
     } ?: false
 
     fun canSave(entryUrl: String, value: String): Boolean {

@@ -79,6 +79,7 @@ class OfflinePlaybackTest {
         val resources = mapOf(
             entry to """
                 <!doctype html><title>Offline fixture</title><p id="game">Игра</p>
+                <script src="https://yandex.ru/games/sdk/v2" onload="window.portalSdkLoaded=true"></script>
                 <script src="/sdk.js"></script><script type="module" src="module.js"></script>
                 <script src="main.js?v=7"></script>
             """.trimIndent(),
@@ -96,6 +97,7 @@ class OfflinePlaybackTest {
                   const late = document.createElement('script'); late.src = 'late.js';
                   late.onload = () => {
                     window.offlineResult = {progress, level:data.level, catalog, missing, external,
+                      portalSDK:window.portalSdkLoaded===true,
                       dynamic:window.dynamicResource, sdk:!!sdk.adv,
                       origin:location.origin, secure:isSecureContext, module:module.answer};
                   };
@@ -203,6 +205,10 @@ class OfflinePlaybackTest {
                 assertEquals(404, result.getInt("external"))
                 assertEquals("loaded", result.getString("dynamic"))
                 assertTrue(result.getBoolean("sdk"))
+                assertTrue(
+                    "The portal SDK script must finish loading locally",
+                    result.getBoolean("portalSDK")
+                )
                 assertTrue(result.getBoolean("secure"))
                 assertEquals("https://app-42.cdn.games.yandex.net", result.getString("origin"))
                 assertEquals("false", evaluate(view, "Boolean(window.oldWorkerRan)"))

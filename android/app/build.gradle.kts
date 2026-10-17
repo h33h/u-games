@@ -35,6 +35,10 @@ val sharedAssets by tasks.registering(Exec::class) {
     commandLine("node", "scripts/build-shared.cjs")
     inputs.files(
         "../../shared/ad-adapter.js",
+        "../../shared/offline-games.js",
+        "../../shared/ad-countdowns.js",
+        "../../shared/ad-provider-availability.js",
+        "../../shared/construct-ad-guard.js",
         "../../shared/ad-rules.json",
         "../../shared/branding.json",
         "../../shared/portal-theme.js",
@@ -48,7 +52,9 @@ tasks.named("preBuild") { dependsOn(sharedAssets) }
 dependencies {
     implementation("androidx.activity:activity:1.10.1")
     implementation("androidx.webkit:webkit:1.17.1")
+    implementation("org.brotli:dec:0.1.2")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
     androidTestImplementation("androidx.test:runner:1.6.2")
     androidTestImplementation("androidx.test:core:1.6.1")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

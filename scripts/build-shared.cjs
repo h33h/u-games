@@ -77,6 +77,13 @@ function buildBranding(rootDir) {
 
 function buildShared(rootDir) {
   const adapter = fs.readFileSync(path.join(rootDir, 'shared/ad-adapter.js'), 'utf8');
+  const offline = fs.readFileSync(path.join(rootDir, 'shared/offline-games.js'), 'utf8');
+  const providers = fs.readFileSync(
+    path.join(rootDir, 'shared/ad-provider-availability.js'),
+    'utf8',
+  );
+  const construct = fs.readFileSync(path.join(rootDir, 'shared/construct-ad-guard.js'), 'utf8');
+  const countdowns = fs.readFileSync(path.join(rootDir, 'shared/ad-countdowns.js'), 'utf8');
   if (!adapter.trim()) {
     throw new Error('Missing adapter code');
   }
@@ -94,7 +101,15 @@ function buildShared(rootDir) {
         'window.__UGamesBranding.css = window.__UGamesBranding.css.replace(/\\{\\{([^}]+)\\}\\}/g, function(_, key) { return window.__UGamesBranding.assets[key]; });\n' +
         'Object.freeze(window.__UGamesBranding);\n'
       : '') +
+    offline +
+    '\n' +
     adapter +
+    '\n' +
+    providers +
+    '\n' +
+    construct +
+    '\n' +
+    countdowns +
     (branding ? '\n' + fs.readFileSync(path.join(rootDir, 'shared/portal-theme.js'), 'utf8') : '');
   const android = path.join(rootDir, 'android/app/src/main/assets/ugames');
   const ios = path.join(rootDir, 'ios/UGames/Resources');

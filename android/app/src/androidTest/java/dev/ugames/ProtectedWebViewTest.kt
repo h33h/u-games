@@ -172,16 +172,19 @@ class ProtectedWebViewTest {
         }
     }
 
-    @Test fun fullscreenGameHasNoNativeMenuAndKeepsPopupNavigation() {
+    @Test fun offlineMenuSurvivesLoadErrorsAndKeepsPopupNavigation() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
                 val root = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
-                assertTrue(allViews(root).none { it is android.widget.ImageButton })
+                val menu = allViews(root).single { it.contentDescription == "Меню UGames" }
+                assertTrue(menu.isShown)
                 val popup = ProtectedWebViewFactory.create(activity)
                 activity.showWindow(popup)
                 assertTrue(popup.isAttachedToWindow)
                 activity.closeWindow(popup)
                 assertFalse(popup.isAttachedToWindow)
+                activity.showError("Нет подключения")
+                assertTrue(menu.isShown)
             }
         }
     }

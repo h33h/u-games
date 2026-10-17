@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.pm.ApplicationInfo
 import android.graphics.Color
-import android.net.Uri
 import android.os.Message
 import android.view.View
 import android.webkit.CookieManager
@@ -32,7 +31,8 @@ object ProtectedWebViewFactory {
         supportsDocumentStart: Boolean = WebViewFeature.isFeatureSupported(
             WebViewFeature.DOCUMENT_START_SCRIPT
         ),
-        isPopup: Boolean = false
+        isPopup: Boolean = false,
+        offlineGame: SavedOfflineGame? = null
     ): WebView {
         if (!supportsDocumentStart ||
             !WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)
@@ -44,20 +44,9 @@ object ProtectedWebViewFactory {
         val script = activity.assets.open("ugames/ad-adapter.js").bufferedReader().use {
             it.readText()
         }
-        val rules =
-            JSONObject(
-                activity.assets.open("ugames/ad-rules.json").bufferedReader().use {
-                    it.readText()
-                }
-            )
-        val filter = AdResourceFilter(
-            rules.getJSONArray("blockedHosts").let { list ->
-                (0 until list.length()).map(list::getString)
-            },
-            rules.getJSONArray("blockedUrlPatterns").let { list ->
-                (0 until list.length()).map(list::getString)
-            }
-        )
+        val filter = resourceFilter(activity)
+        val playback = offlineGame?.let { OfflineWebPlayback(it, filter) }
+        OfflineWebPlayback.configureServiceWorkers(playback, filter)
         WebView.setWebContentsDebuggingEnabled(
             activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         )
@@ -69,8 +58,26 @@ object ProtectedWebViewFactory {
             settings.javaScriptCanOpenWindowsAutomatically = true
             settings.mediaPlaybackRequiresUserGesture = false
             settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
+            settings.allowFileAccess = false
+            settings.allowContentAccess = false
+            if (offlineGame != null) {
+                settings.blockNetworkLoads = true
+                settings.cacheMode = WebSettings.LOAD_NO_CACHE
+                (activity as? MainActivity)?.registerOfflineWindow(this, offlineGame)
+            }
             addJavascriptInterface(
                 object {
+                    @JavascriptInterface
+                    fun offlinePreparationFailed() {
+                        if (offlineGame != null) {
+                            post {
+                                (activity as? MainActivity)?.showError(
+                                    "Не удалось подготовить сохранённую игру. Попробуй открыть её ещё раз."
+                                )
+                            }
+                        }
+                    }
+
                     @JavascriptInterface
                     fun unsupported() {
                         post {
@@ -100,14 +107,51 @@ object ProtectedWebViewFactory {
                     (activity as? MainActivity)?.setPageBackground(view, Color.parseColor(value))
                 }
             }
+            WebViewCompat.addWebMessageListener(
+                this,
+                "__UGamesOffline",
+                setOf("https://*.games.yandex.net", "https://*.games.s3.yandex.net")
+            ) {
+                    view,
+                    message,
+                    sourceOrigin,
+                    _,
+                    _
+                ->
+                if (message.type == WebMessageCompat.TYPE_STRING) {
+                    message.data?.let { data ->
+                        (activity as? MainActivity)?.receiveOfflineReport(
+                            view,
+                            data,
+                            sourceOrigin.toString()
+                        )
+                    }
+                }
+            }
             CookieManager.getInstance().setAcceptCookie(true)
             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+            if (offlineGame != null) {
+                WebViewCompat.addDocumentStartJavaScript(
+                    this,
+                    offlineGame.configurationScript() + requireNotNull(
+                        playback
+                    ).preparationScript(),
+                    setOf(requireNotNull(OfflineResourcePolicy.origin(offlineGame.entryUrl)))
+                )
+            }
             WebViewCompat.addDocumentStartJavaScript(this, script, setOf("*"))
             webViewClient = object : WebViewClient() {
                 override fun shouldInterceptRequest(
                     view: WebView,
                     request: WebResourceRequest
-                ): WebResourceResponse? = if (
+                ): WebResourceResponse? = if (playback != null &&
+                    request.url.scheme in setOf("data", "blob", "about")
+                ) {
+                    // Inline documents and game-generated blobs cannot make a network request.
+                    null
+                } else if (playback != null) {
+                    playback.response(request)
+                } else if (
                     filter.shouldBlock(request.url.toString()) ||
                     GameNavigationPolicy.blocksDocumentRequest(
                         request.url.toString(),
@@ -130,6 +174,7 @@ object ProtectedWebViewFactory {
                     view: WebView,
                     request: WebResourceRequest
                 ): Boolean {
+                    if (playback != null) return !playback.allowsDocument(request.url.toString())
                     if (request.isForMainFrame) {
                         val blocked = !GameNavigationPolicy.allows(request.url.toString())
                         if (blocked && isPopup && (view.url == null || view.url == "about:blank")) {
@@ -147,6 +192,7 @@ object ProtectedWebViewFactory {
                     url: String?,
                     favicon: android.graphics.Bitmap?
                 ) {
+                    (activity as? MainActivity)?.navigationStarted(view)
                     (activity as? MainActivity)?.setLoading(view, true)
                 }
                 override fun onPageFinished(view: WebView, url: String?) {
@@ -160,7 +206,13 @@ object ProtectedWebViewFactory {
                 ) {
                     if (request.isForMainFrame) {
                         (activity as? MainActivity)?.showError(
-                            "Не удалось открыть страницу. Проверь подключение и попробуй ещё раз."
+                            if (offlineGame !=
+                                null
+                            ) {
+                                "Не удалось открыть сохранённую игру. Сохрани её ещё раз из каталога."
+                            } else {
+                                "Не удалось открыть страницу. Проверь подключение или открой сохранённую игру."
+                            }
                         )
                     }
                 }
@@ -190,6 +242,7 @@ object ProtectedWebViewFactory {
                     isUserGesture: Boolean,
                     resultMsg: Message
                 ): Boolean {
+                    if (offlineGame != null) return false
                     val owner = activity as? MainActivity ?: return false
                     val child = create(activity, isPopup = true)
                     owner.showWindow(child)
@@ -208,5 +261,28 @@ object ProtectedWebViewFactory {
                 }
             }
         }
+    }
+
+    fun resourceFilter(activity: Activity): AdResourceFilter {
+        val rules =
+            JSONObject(
+                activity.assets.open("ugames/ad-rules.json").bufferedReader().use {
+                    it.readText()
+                }
+            )
+        return AdResourceFilter(
+            rules.getJSONArray("blockedHosts").let { list ->
+                (0 until list.length()).map(list::getString)
+            },
+            rules.getJSONArray("blockedUrlPatterns").let { list ->
+                (0 until list.length()).map(list::getString)
+            }
+        )
+    }
+
+    fun loadOfflineGame(view: WebView, game: SavedOfflineGame) {
+        // Native document-start injection stops any old worker's cached document before scripts run.
+        // It unregisters that worker, then loads the saved entry at its original secure origin.
+        view.loadUrl(OfflineWebPlayback.bootstrapUrl(game))
     }
 }

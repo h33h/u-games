@@ -112,19 +112,42 @@ enum OfflineNavigationPolicy {
 }
 
 final class OfflineGameSchemeHandler: NSObject, WKURLSchemeHandler {
-    private let game: SavedOfflineGame
+    let game: SavedOfflineGame
     private let store: OfflineGameStore
+    private let connectivity: OfflineConnectivity
     private let queue = DispatchQueue(label: "dev.ugames.offline-read", qos: .userInitiated)
     /// WebKit calls start/stop on the main thread. Delivery also runs there, so a stopped task
     /// never receives a late didReceive/didFinish callback (WebKit treats that as an exception).
     private var active = Set<ObjectIdentifier>()
+    private var ownsPin = true
 
-    init(game: SavedOfflineGame, store: OfflineGameStore) {
-        self.game = game
+    init(
+        game: SavedOfflineGame,
+        store: OfflineGameStore,
+        connectivity: OfflineConnectivity = .shared
+    ) throws {
+        self.game = try store.pinnedGame(id: game.id)
         self.store = store
+        self.connectivity = connectivity
     }
 
-    func webView(_: WKWebView, start task: WKURLSchemeTask) {
+    deinit {
+        if ownsPin {
+            store.unpin(game.id)
+        }
+    }
+
+    func finishReplay() {
+        guard ownsPin else { return }
+        ownsPin = false
+        active.removeAll()
+        store.unpin(game.id)
+    }
+
+    func webView(_ view: WKWebView, start task: WKURLSchemeTask) {
+        guard connectivity.status == .offline else { task.didFailWithError(URLError(.cancelled))
+            return
+        }
         let id = ObjectIdentifier(task)
         active.insert(id)
         queue.async {
@@ -136,6 +159,10 @@ final class OfflineGameSchemeHandler: NSObject, WKURLSchemeHandler {
             }
             DispatchQueue.main.async {
                 guard self.active.remove(id) != nil else { return }
+                guard self.connectivity.status == .offline
+                else { task.didFailWithError(URLError(.cancelled))
+                    return
+                }
                 switch result {
                 case let .success(resource):
                     var statusCode = 200
@@ -175,10 +202,28 @@ final class OfflineGameSchemeHandler: NSObject, WKURLSchemeHandler {
                         task.didReceive(data)
                     }
                     task.didFinish()
-                case let .failure(error): task.didFailWithError(error)
+                case let .failure(error): self.failedRead(task, in: view, error: error)
                 }
             }
         }
+    }
+
+    private func failedRead(_ task: WKURLSchemeTask, in view: WKWebView, error: Error) {
+        if ["GET", "HEAD"].contains(task.request.httpMethod ?? "GET"), contains(task.request.url) {
+            task.didFailWithError(URLError(.cancelled))
+            (view.navigationDelegate as? GameViewController)?.offlineReplayFailed(game, in: view)
+        } else {
+            task.didFailWithError(error)
+        }
+    }
+
+    private func contains(_ url: URL?) -> Bool {
+        guard let url = url, url.scheme == OfflineGameStore.scheme,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return false }
+        components.scheme = "https"
+        guard let original = components.url else { return false }
+        return game.resources[OfflineResourcePolicy.canonical(original).absoluteString] != nil
     }
 
     func webView(_: WKWebView, stop task: WKURLSchemeTask) {

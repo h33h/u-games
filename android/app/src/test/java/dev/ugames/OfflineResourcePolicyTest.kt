@@ -102,4 +102,76 @@ class OfflineResourcePolicyTest {
             )!!.title
         )
     }
+
+    @Test fun catalogueMetadataRequiresTrustedMainFrameAndMatchingNumericGameId() {
+        val packet = JSONObject().put("version", 1).put("type", "catalog").put("gameId", "42")
+            .put("url", "https://yandex.ru/games/app/42").put("title", "Космос")
+            .put("cover", "https://avatars.mds.yandex.net/get-games/123/cover/medium")
+        assertNotNull(
+            OfflineCatalogMetadata.parse(
+                packet.toString(),
+                "https://yandex.ru",
+                HOME,
+                true
+            )
+        )
+        assertNull(
+            OfflineCatalogMetadata.parse(
+                packet.toString(),
+                "https://yandex.ru",
+                HOME,
+                false
+            )
+        )
+        assertNull(
+            OfflineCatalogMetadata.parse(
+                packet.toString(),
+                "https://evil.test",
+                HOME,
+                true
+            )
+        )
+        assertNull(
+            OfflineCatalogMetadata.parse(
+                packet.toString(),
+                "https://yandex.ru",
+                "https://yandex.ru/search",
+                true
+            )
+        )
+        packet.put("gameId", "43")
+        assertNull(
+            OfflineCatalogMetadata.parse(
+                packet.toString(),
+                "https://yandex.ru",
+                HOME,
+                true
+            )
+        )
+    }
+
+    @Test fun coverPolicyRejectsServiceUrlsAndNonArtworkHosts() {
+        assertTrue(
+            OfflineCatalogMetadata.isCoverUrl(
+                "https://avatars.mds.yandex.ru/get-games/123/cover/medium"
+            )
+        )
+        assertFalse(
+            OfflineCatalogMetadata.isCoverUrl(
+                "https://avatars.mds.yandex.net.evil.test/get-games/123/a.png"
+            )
+        )
+        assertFalse(
+            OfflineCatalogMetadata.isCoverUrl(
+                "https://avatars.mds.yandex.net/get-user/123/avatar.png"
+            )
+        )
+        assertFalse(
+            OfflineCatalogMetadata.isCoverUrl("http://avatars.mds.yandex.net/get-games/123/a.png")
+        )
+    }
+
+    companion object {
+        private const val HOME = "https://yandex.ru/games/"
+    }
 }

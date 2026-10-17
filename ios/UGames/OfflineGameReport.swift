@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import UIKit
 import WebKit
 
 enum OfflineGameError: LocalizedError {
@@ -10,9 +11,9 @@ enum OfflineGameError: LocalizedError {
         case .invalidReport: return "Не удалось получить данные игры. Открой игру ещё раз."
         case .unsupportedGame: return "Эту игру пока нельзя сохранить для игры без интернета."
         case .gameNotReady: return "Дождись загрузки игры и попробуй снова."
-        case .tooLarge: return "Игра превышает лимит сохранения: 512 МБ или 4096 файлов."
+        case .tooLarge: return "Игра превышает доступное место в кэше."
         case .invalidResponse: return "Не удалось загрузить все файлы. Предыдущая копия сохранена."
-        case .missingResource: return "Этот файл ещё не сохранён. Открой игру с интернетом и сохрани её снова."
+        case .missingResource: return "Этот файл ещё не загружен. Открой игру с интернетом."
         }
     }
 }
@@ -191,12 +192,22 @@ struct OfflineResourcePolicy {
 private final class OfflineReportState: NSObject {
     var report: OfflineGameReport?
     let game: SavedOfflineGame?
-    let store: OfflineGameStore?
+    let store: OfflineGameStore
+    let connectivity: OfflineConnectivity
+    var visitID = UUID()
+    var scheduled: DispatchWorkItem?
+    var saving = false
+    var active = true
+    var attemptedResources: Set<String>?
+    var lastAttempt = Date.distantPast
 
-    init(game: SavedOfflineGame? = nil, store: OfflineGameStore? = nil) {
+    init(game: SavedOfflineGame?, store: OfflineGameStore, connectivity: OfflineConnectivity) {
         self.game = game
         self.store = store
+        self.connectivity = connectivity
     }
+
+    deinit { scheduled?.cancel() }
 }
 
 final class OfflineGameReportReceiver: NSObject, WKScriptMessageHandler {
@@ -207,9 +218,13 @@ final class OfflineGameReportReceiver: NSObject, WKScriptMessageHandler {
     func register(
         _ view: WKWebView,
         game: SavedOfflineGame? = nil,
-        store: OfflineGameStore? = nil
+        store: OfflineGameStore = .shared,
+        connectivity: OfflineConnectivity = .shared
     ) {
-        states.setObject(OfflineReportState(game: game, store: store), forKey: view)
+        states.setObject(
+            OfflineReportState(game: game, store: store, connectivity: connectivity),
+            forKey: view
+        )
     }
 
     func report(for view: WKWebView) -> OfflineGameReport? {
@@ -217,34 +232,166 @@ final class OfflineGameReportReceiver: NSObject, WKScriptMessageHandler {
     }
 
     func unregister(_ view: WKWebView) {
+        states.object(forKey: view)?.scheduled?.cancel()
         states.removeObject(forKey: view)
+    }
+
+    func setActive(_ active: Bool, in view: WKWebView) {
+        guard let state = states.object(forKey: view) else { return }
+        state.active = active
+        if !active {
+            state.scheduled?.cancel()
+        }
     }
 
     func noteNavigation(to url: URL, in view: WKWebView, mainFrame: Bool) {
         guard let state = states.object(forKey: view), state.game == nil,
               let old = state.report else { return }
-        if mainFrame ||
-            (OfflineResourcePolicy.isGameURL(url) && OfflineResourcePolicy
-                .canonical(url) != OfflineResourcePolicy.canonical(old.url))
+        if mainFrame || (OfflineResourcePolicy.isGameURL(url) &&
+            OfflineResourcePolicy.canonical(url) != OfflineResourcePolicy.canonical(old.url))
         {
+            state.scheduled?.cancel()
             state.report = nil
+            state.visitID = UUID()
+            state.attemptedResources = nil
             NotificationCenter.default.post(name: Self.updated, object: view)
         }
     }
 
+    /// Wait for a final storage read before replacing an offline WebView's context.
+    func captureProgress(in view: WKWebView, completion: @escaping () -> Void) {
+        guard let state = states.object(forKey: view), let game = state.game else {
+            view
+                .evaluateJavaScript(
+                    "window.__UGamesOfflineCapture && window.__UGamesOfflineCapture()"
+                ) { _, _ in
+                    completion()
+                }
+            return
+        }
+        view.evaluateJavaScript("""
+        (()=>{try{if(window.__UGamesOfflineCapture)window.__UGamesOfflineCapture();const values={};for(let i=0;i<localStorage.length;i++){const key=localStorage.key(i);values[key]=localStorage.getItem(key);}return JSON.stringify(values);}catch(_){return null;}})()
+        """) { [view] value, _ in
+            withExtendedLifetime(view) {}
+            guard let string = value as? String, string.utf8.count <= 2 * 1024 * 1024,
+                  let data = string.data(using: .utf8),
+                  let storage = try? JSONDecoder().decode([String: String].self, from: data)
+            else { completion()
+                return
+            }
+            state.store.updateStorage(storage, for: game.id, offline: true) { _ in completion() }
+        }
+    }
+
     func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard let view = message.webView, let state = states.object(forKey: view),
-              state.game == nil || message.frameInfo.isMainFrame,
+        guard let view = message.webView, let state = states.object(forKey: view) else { return }
+        let origin = OfflineReportOrigin(message.frameInfo.securityOrigin)
+        if state.game == nil, let restored = state.store.acknowledgeProgress(
+            message.body,
+            origin: origin
+        ) {
+            ProtectedWebViewFactory.finishPendingProgress(
+                restored.0,
+                revision: restored.1,
+                in: view
+            )
+            return
+        }
+        if receiveVisit(message.body, origin: origin, state: state) {
+            return
+        }
+        if state.game == nil, let metadata = try? OfflineCatalogMetadata.parse(
+            message.body, origin: origin, frameURL: message.frameInfo.request.url,
+            mainFrame: message.frameInfo.isMainFrame
+        ) {
+            let store = state.store
+            store.recordCatalog(metadata) { [weak self] changed in
+                guard changed, let self = self else { return }
+                for key in self.states.keyEnumerator().allObjects {
+                    guard let target = key as? WKWebView,
+                          let candidate = self.states.object(forKey: target),
+                          candidate.store === store, candidate.game == nil,
+                          let report = candidate.report,
+                          OfflineCatalogMetadata.gameID(for: report.url) == metadata.gameId
+                    else { continue }
+                    candidate.attemptedResources = nil
+                    self.scheduleCache(in: target, state: candidate)
+                }
+            }
+            return
+        }
+        guard state.game == nil || message.frameInfo.isMainFrame,
               let report = try? OfflineGameReport.parse(
                   message.body,
-                  origin: OfflineReportOrigin(message.frameInfo.securityOrigin),
+                  origin: origin,
                   offlineGame: state.game
-              )
-        else { return }
+              ) else { return }
         state.report = report
-        if let game = state.game {
-            state.store?.updateStorage(report.storage, for: game.id)
+        if let game = state.game, state.active {
+            state.store.updateStorage(report.storage, for: game.id, offline: true)
+        } else if report.ready, state.active, state.connectivity.status != .offline,
+                  UIApplication.shared.applicationState != .background
+        {
+            state.store.touch(OfflineResourcePolicy.key(report.url))
+            state.store.updateStorage(report.storage, for: OfflineResourcePolicy.key(report.url))
+            scheduleCache(in: view, state: state)
         }
         NotificationCenter.default.post(name: Self.updated, object: view)
+    }
+
+    private func receiveVisit(
+        _ body: Any,
+        origin: OfflineReportOrigin,
+        state: OfflineReportState
+    ) -> Bool {
+        if state.game == nil, let body = body as? String, body.utf8.count <= 8192,
+           let data = body.data(using: .utf8),
+           let visit = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           visit["version"] as? Int == 1, visit["type"] as? String == "visit",
+           let value = visit["url"] as? String, let url = URL(string: value),
+           OfflineResourcePolicy.isGameURL(url), origin.scheme == "https",
+           origin.host == url.host?.lowercased(), origin.port == 0 || origin.port == 443
+        {
+            state.scheduled?.cancel()
+            state.report = nil
+            state.visitID = UUID()
+            state.attemptedResources = nil
+            return true
+        }
+        return false
+    }
+
+    private func scheduleCache(in view: WKWebView, state: OfflineReportState) {
+        guard state.active, !state.saving, let report = state.report, report.ready,
+              !state.store.hasPendingProgress(for: report.url) else { return }
+        let resources = Set(([report.url] + report.resources)
+            .map { OfflineResourcePolicy.canonical($0).absoluteString })
+        guard state.attemptedResources != resources || Date()
+            .timeIntervalSince(state.lastAttempt) >= 30 else { return }
+        state.scheduled?.cancel()
+        let visitID = state.visitID
+        let work = DispatchWorkItem { [weak self, weak view, weak state] in
+            guard let self = self, let view = view, let state = state,
+                  self.states.object(forKey: view) === state, state.visitID == visitID,
+                  state.active,
+                  state.connectivity.status != .offline,
+                  UIApplication.shared.applicationState != .background,
+                  let report = state.report, report.ready else { return }
+            state.saving = true
+            state.attemptedResources = resources
+            state.lastAttempt = Date()
+            typealias Completion = (Result<SavedOfflineGame, Error>) -> Void
+            let finished: Completion = { [weak self, weak view, weak state] result in
+                guard let self = self, let view = view, let state = state else { return }
+                state.saving = false
+                if case .success = result {
+                    state.lastAttempt = .distantFuture
+                }
+                self.scheduleCache(in: view, state: state)
+            }
+            state.store.save(report, visitID: visitID, playedAt: Date(), completion: finished)
+        }
+        state.scheduled = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
     }
 }

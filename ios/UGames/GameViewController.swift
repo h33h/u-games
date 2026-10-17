@@ -5,22 +5,32 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
     var webView: WKWebView?
     private var backgroundObservation: NSKeyValueObservation?
     private let preparedView: WKWebView?
-    let offlineGame: SavedOfflineGame?
+    var offlineGame: SavedOfflineGame?
+    var isOfflineCatalog = false
+    let connectivity: OfflineConnectivity
+    var contextGeneration = 0
+    private var attachedGeneration = 0
+    var observers: [NSObjectProtocol] = []
+    private var controllerIsActive = true
     let offlineStore: OfflineGameStore
-    let menuButton = UIButton(type: .system)
-    var saving = false
     private let spinner = UIActivityIndicatorView(style: .medium)
-    private var errorPanel: UIStackView?
-    private(set) var retryURL = URL(string: "https://yandex.ru/games/")!
+    var errorPanel: UIStackView?
+    var retryURL = URL(string: "https://yandex.ru/games/")!
 
     init(
         preparedView: WKWebView? = nil,
         offlineGame: SavedOfflineGame? = nil,
-        offlineStore: OfflineGameStore = .shared
+        offlineStore: OfflineGameStore = .shared,
+        connectivity: OfflineConnectivity? = nil
     ) {
         self.preparedView = preparedView
         self.offlineGame = offlineGame
         self.offlineStore = offlineStore
+        self.connectivity = connectivity ?? (offlineGame == nil ? .shared : OfflineConnectivity(
+            status: .offline,
+            monitoring: false
+        ))
+        isOfflineCatalog = offlineGame == nil && self.connectivity.status == .offline
         super.init(nibName: nil, bundle: nil)
         if let game = offlineGame {
             retryURL = game.offlineURL
@@ -43,10 +53,13 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
             spinner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             spinner.centerYAnchor.constraint(equalTo: view.centerYAnchor),
         ])
-        configureMenu()
+        observeConnectionAndLifecycle()
         if let preparedView = preparedView {
             attach(preparedView)
         } else {
+            if isOfflineCatalog {
+                retryURL = OfflineCatalog.url
+            }
             prepareAndLoad(retryURL)
         }
     }
@@ -58,18 +71,71 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         navigationController?.setNavigationBarHidden(true, animated: false)
+        controllerIsActive = true
+        if let view = webView {
+            OfflineGameReportReceiver.shared.setActive(true, in: view)
+        }
+        connectionDidChange()
+        if isOfflineCatalog, let view = webView,
+           let source = try? OfflineCatalog.configuration(store: offlineStore)
+        {
+            view.evaluateJavaScript(source + "window.__UGamesOfflineCatalog?.render();")
+        }
     }
 
-    private func prepareAndLoad(_ url: URL) {
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        let canGoBack = (navigationController?.viewControllers.count ?? 0) > 1
+        navigationController?.interactivePopGestureRecognizer?.delegate = nil
+        navigationController?.interactivePopGestureRecognizer?.isEnabled = canGoBack
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        controllerIsActive = false
+        if let view = webView {
+            captureBeforeLeaving(view)
+            OfflineGameReportReceiver.shared.setActive(false, in: view)
+        }
+    }
+
+    func prepareAndLoad(_ url: URL) {
         spinner.startAnimating()
+        let generation = contextGeneration
         ProtectedWebViewFactory
-            .make(offlineGame: offlineGame, offlineStore: offlineStore) { [weak self] result in
-                guard let self = self else { return }
+            .make(
+                offlineGame: offlineGame,
+                offlineCatalog: isOfflineCatalog,
+                offlineStore: offlineStore,
+                connectivity: connectivity
+            ) { [weak self] result in
+                guard let self = self, self.contextGeneration == generation else { return }
                 switch result {
                 case let .success(view):
+                    if self.offlineGame != nil || self.isOfflineCatalog,
+                       self.connectivity.status != .offline
+                    {
+                        let game = self.offlineGame
+                        self.switchContext(
+                            to: game?.url ?? OfflineCatalog.onlineURL,
+                            game: nil,
+                            catalog: false
+                        )
+                        return
+                    }
+                    if self.offlineGame == nil, !self.isOfflineCatalog,
+                       self.connectivity.status == .offline
+                    {
+                        self.openWithoutNetwork(url)
+                        return
+                    }
                     self.attach(view)
                     view.load(URLRequest(url: url))
-                case .failure:
+                case let .failure(error):
+                    if error is OfflineGameError, let game = self.offlineGame {
+                        self.offlineReplayFailed(game)
+                        return
+                    }
                     self
                         .showError(
                             "Не удалось подготовить приложение. Попробуй перезапустить UGames."
@@ -82,11 +148,12 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         if let previous = self.webView {
             previous.navigationDelegate = nil
             previous.uiDelegate = nil
-            previous.stopLoading()
-            OfflineGameReportReceiver.shared.unregister(previous)
+            stopReplayTracking(previous)
             previous.removeFromSuperview()
         }
         self.webView = webView
+        attachedGeneration = contextGeneration
+        OfflineGameReportReceiver.shared.setActive(controllerIsActive, in: webView)
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.translatesAutoresizingMaskIntoConstraints = false
@@ -105,26 +172,27 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
             guard let self = self, self.errorPanel == nil else { return }
             self.view.backgroundColor = page.underPageBackgroundColor
         }
-        updateMenu()
+    }
+
+    deinit {
+        observers.forEach(NotificationCenter.default.removeObserver)
+        if let webView = webView {
+            stopReplayTracking(webView)
+        }
     }
 
     @objc func openCatalog() {
         if let navigation = navigationController, navigation.viewControllers.first !== self {
             navigation.popToRootViewController(animated: true)
-            if let root = navigationController?.viewControllers
-                .first as? GameViewController
-            {
-                root.openCatalog()
-            }
+            (navigation.viewControllers.first as? GameViewController)?.openCatalog()
             return
         }
-        if offlineGame != nil {
-            let catalog = GameViewController(offlineStore: offlineStore)
-            navigationController?.setViewControllers([catalog], animated: true)
-            return
-        }
-        retryURL = URL(string: "https://yandex.ru/games/")!
-        retry()
+        let local = connectivity.status == .offline
+        switchContext(
+            to: local ? OfflineCatalog.url : OfflineCatalog.onlineURL,
+            game: nil,
+            catalog: local
+        )
     }
 
     @objc private func retry() {
@@ -132,16 +200,9 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         errorPanel = nil
         webView?.isHidden = false
         view.backgroundColor = webView?.underPageBackgroundColor ?? UGamesTheme.background
-        if offlineGame != nil {
-            webView?.stopLoading()
-            webView?.isHidden = true
-            if let webView = webView {
-                OfflineGameReportReceiver.shared.unregister(webView)
-            }
-            prepareAndLoad(retryURL)
-            return
-        }
-        if let webView = webView {
+        if offlineGame != nil || isOfflineCatalog {
+            switchContext(to: retryURL, game: offlineGame, catalog: isOfflineCatalog)
+        } else if let webView = webView {
             webView.load(URLRequest(url: retryURL))
         } else {
             prepareAndLoad(retryURL)
@@ -185,7 +246,6 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         panel.spacing = 16
         panel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(panel)
-        view.bringSubviewToFront(menuButton)
         NSLayoutConstraint.activate([
             panel.leadingAnchor.constraint(
                 equalTo: view.safeAreaLayoutGuide.leadingAnchor,
@@ -204,6 +264,10 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         showError("Эта игра пока не работает без рекламы. Выбери другую в каталоге.")
     }
 
+    func acceptsFailure(from view: WKWebView) -> Bool {
+        webView === view && attachedGeneration == contextGeneration
+    }
+
     func webView(_ webView: WKWebView, didStartProvisionalNavigation _: WKNavigation!) {
         errorPanel?.removeFromSuperview()
         errorPanel = nil
@@ -220,26 +284,46 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
     }
 
     func webView(
-        _: WKWebView,
+        _ webView: WKWebView,
         didFailProvisionalNavigation _: WKNavigation!,
         withError error: Error
     ) {
-        if (error as NSError)
-            .code !=
-            NSURLErrorCancelled
+        guard acceptsFailure(from: webView),
+              (error as NSError).code != NSURLErrorCancelled else { return }
+        if let game = offlineGame {
+            offlineReplayFailed(game, in: webView)
+            return
+        }
+        if offlineGame == nil, !isOfflineCatalog,
+           connectivity.noteConnectionFailure(error)
         {
-            showError(offlineGame == nil ?
-                "Не удалось открыть страницу. Проверь подключение и попробуй ещё раз." :
-                "Не удалось открыть сохранённую игру. Открой её с интернетом и сохрани снова.")
+            return
+        }
+        if connectivity.status == .offline, offlineGame == nil, !isOfflineCatalog {
+            openWithoutNetwork(retryURL)
+            return
+        }
+        if (error as NSError).code != NSURLErrorCancelled {
+            showError("Не удалось открыть страницу. Проверь подключение и попробуй ещё раз.")
         }
     }
 
-    func webView(_: WKWebView, didFail _: WKNavigation!, withError error: Error) {
+    func webView(_ webView: WKWebView, didFail _: WKNavigation!, withError error: Error) {
+        guard acceptsFailure(from: webView),
+              (error as NSError).code != NSURLErrorCancelled else { return }
+        if let game = offlineGame {
+            offlineReplayFailed(game, in: webView)
+            return
+        }
+        if offlineGame == nil, !isOfflineCatalog,
+           connectivity.noteConnectionFailure(error)
+        {
+            return
+        }
         if (error as NSError)
             .code != NSURLErrorCancelled
         {
-            showError(offlineGame == nil ? "Игра не загрузилась. Попробуй ещё раз." :
-                "Не удалось прочитать файлы сохранённой игры. Открой её с интернетом и сохрани снова.")
+            showError("Игра не загрузилась. Попробуй ещё раз.")
         }
     }
 
@@ -253,11 +337,29 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
             return
         }
         let mainWindow = action.targetFrame?.isMainFrame != false
+        if connectivity.status == .offline, mainWindow, url.scheme == "https",
+           OfflineResourcePolicy.isGameURL(url) || GameNavigationPolicy.allows(url)
+        {
+            decisionHandler(.cancel)
+            openWithoutNetwork(url)
+            return
+        }
+        if connectivity.status == .offline, mainWindow, OfflineCatalog.isDocument(url),
+           !isOfflineCatalog
+        {
+            decisionHandler(.cancel)
+            openWithoutNetwork(OfflineCatalog.onlineURL)
+            return
+        }
         let allowed: Bool
-        if let game = offlineGame {
+        if isOfflineCatalog {
+            allowed = mainWindow && OfflineCatalog.isDocument(url)
+        } else if let game = offlineGame {
             allowed = OfflineNavigationPolicy.allows(url, in: game, isMainFrame: mainWindow)
         } else {
-            allowed = mainWindow ? GameNavigationPolicy.allows(url) : GameNavigationPolicy
+            allowed = mainWindow ?
+                (GameNavigationPolicy.allows(url) || OfflineResourcePolicy.isGameURL(url)) :
+                GameNavigationPolicy
                 .allowsFrame(
                     url,
                     source: action.sourceFrame.request.url
@@ -292,81 +394,5 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
     func webViewWebContentProcessDidTerminate(_: WKWebView) {
         // Offer a reload; never replay an already completed reward from native state.
         showError("Игра закрылась. Можно открыть её снова.")
-    }
-
-    func webView(
-        _ parent: WKWebView,
-        createWebViewWith configuration: WKWebViewConfiguration,
-        for action: WKNavigationAction,
-        windowFeatures _: WKWindowFeatures
-    ) -> WKWebView? {
-        guard offlineGame == nil else { return nil }
-        guard let url = action.request.url, GameNavigationPolicy.allows(url) else { return nil }
-        let child = ProtectedWebViewFactory.makePopup(configuration: configuration, parent: parent)
-        let controller = GameViewController(preparedView: child)
-        navigationController?.pushViewController(controller, animated: true)
-        return child
-    }
-
-    func webViewDidClose(_: WKWebView) {
-        navigationController?.popViewController(animated: true)
-    }
-
-    func webView(
-        _: WKWebView,
-        runJavaScriptAlertPanelWithMessage message: String,
-        initiatedByFrame _: WKFrameInfo,
-        completionHandler: @escaping () -> Void
-    ) {
-        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
-        alert.overrideUserInterfaceStyle = .dark
-        alert.view.tintColor = UGamesTheme.mint
-        alert.addAction(UIAlertAction(title: "ОК", style: .default) { _ in completionHandler() })
-        present(alert, animated: true)
-    }
-
-    func webView(
-        _: WKWebView,
-        runJavaScriptConfirmPanelWithMessage message: String,
-        initiatedByFrame _: WKFrameInfo,
-        completionHandler: @escaping (Bool) -> Void
-    ) {
-        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
-        alert.overrideUserInterfaceStyle = .dark
-        alert.view.tintColor = UGamesTheme.mint
-        alert
-            .addAction(UIAlertAction(title: "Отмена", style: .cancel) { _ in
-                completionHandler(false)
-            })
-        alert
-            .addAction(UIAlertAction(title: "ОК", style: .default) { _ in completionHandler(true) })
-        present(alert, animated: true)
-    }
-
-    func webView(
-        _: WKWebView,
-        runJavaScriptTextInputPanelWithPrompt prompt: String,
-        defaultText: String?,
-        initiatedByFrame _: WKFrameInfo,
-        completionHandler: @escaping (String?) -> Void
-    ) {
-        let alert = UIAlertController(title: nil, message: prompt, preferredStyle: .alert)
-        alert.overrideUserInterfaceStyle = .dark
-        alert.view.tintColor = UGamesTheme.mint
-        alert.addTextField {
-            $0.text = defaultText
-            $0.textColor = UGamesTheme.text
-            $0.backgroundColor = UGamesTheme.surface
-            $0.tintColor = UGamesTheme.mint
-        }
-        alert
-            .addAction(UIAlertAction(title: "Отмена", style: .cancel) { _ in
-                completionHandler(nil)
-            })
-        alert
-            .addAction(UIAlertAction(title: "ОК", style: .default) { _ in
-                completionHandler(alert.textFields?.first?.text)
-            })
-        present(alert, animated: true)
     }
 }

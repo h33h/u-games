@@ -6,7 +6,7 @@ const path = require('node:path');
 const { JSDOM } = require('jsdom');
 const source = fs.readFileSync(path.join(__dirname, '../ad-adapter.js'), 'utf8');
 
-function page(t, url = 'https://yandex.ru/games/') {
+function page(t, url = 'https://yandex.ru/games/', prepare = () => {}) {
   const dom = new JSDOM('<div id="host"></div>', { runScripts: 'outside-only', url });
   t.after(() => dom.window.close());
   const opened = [];
@@ -15,9 +15,38 @@ function page(t, url = 'https://yandex.ru/games/') {
     return {};
   };
   dom.window.navigation = new dom.window.EventTarget();
+  prepare(dom.window);
   dom.window.eval(source);
   return { win: dom.window, opened };
 }
+
+test('native offline catalogue can open only its cached games through main-frame Navigation API', (t) => {
+  const cached = 'https://app-42.games.s3.yandex.net/42/build/index.html';
+  for (const origin of ['https://yandex.ru/games/', 'ugames-offline://yandex.ru/games/']) {
+    const { win } = page(t, origin, (w) => {
+      w.__UGamesCachedCatalog = { version: 1, games: [{ url: cached, title: 'Game' }] };
+    });
+    for (const [url, allowed] of [
+      [cached, true],
+      [cached + '#level', true],
+      ['https://app-43.games.yandex.net/index.html', false],
+    ]) {
+      const event = new win.Event('navigate', { cancelable: true });
+      event.destination = { url };
+      assert.equal(win.navigation.dispatchEvent(event), allowed, url);
+    }
+    assert.equal(win.open(cached), null);
+  }
+});
+
+test('a page cannot enable cached-catalogue navigation privileges after protection starts', (t) => {
+  const { win } = page(t);
+  const url = 'https://app-42.games.s3.yandex.net/42/build/index.html';
+  win.__UGamesCachedCatalog = { version: 1, games: [{ url }] };
+  const event = new win.Event('navigate', { cancelable: true });
+  event.destination = { url };
+  assert.equal(win.navigation.dispatchEvent(event), false);
+});
 
 test('cancels scripted navigation events before an external document replaces the game', (t) => {
   const { win } = page(t);

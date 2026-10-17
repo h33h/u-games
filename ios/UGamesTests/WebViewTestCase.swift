@@ -57,6 +57,16 @@ class WebViewTestCase: XCTestCase {
         }
     }
 
+    func loadHTMLFixture(_ html: String, baseURL: URL?, in webView: WKWebView) throws {
+        let marker = "ugames-fixture-" + UUID().uuidString
+        webView.loadHTMLString("<meta id='\(marker)'>" + html, baseURL: baseURL)
+        // A previous document can also be complete. Wait for this specific fixture.
+        try waitForJavaScript(
+            "document.readyState==='complete' && document.getElementById('\(marker)')!==null",
+            in: webView
+        )
+    }
+
     @discardableResult
     func evaluateJavaScript(_ script: String, in webView: WKWebView) throws -> Any? {
         let evaluated = XCTestExpectation(description: "JavaScript completed: \(script)")

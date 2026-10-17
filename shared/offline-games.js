@@ -437,6 +437,124 @@
       }
     } catch (_) {}
   }
+  const catalogPage =
+    !config &&
+    !win.__UGamesCachedCatalog &&
+    win.top === win &&
+    entry.protocol === 'https:' &&
+    ['yandex.ru', 'yandex.com'].includes(entry.hostname) &&
+    /^\/games(?:\/|$)/.test(entry.pathname);
+  const catalogReports = new Map();
+  function catalogURL(raw) {
+    try {
+      const url = new win.URL(raw, win.location.href);
+      const match = url.pathname.match(/^\/games\/app\/(?:[^/]*-)?(\d{1,12})\/?$/);
+      if (
+        url.protocol !== 'https:' ||
+        url.username ||
+        url.password ||
+        url.port ||
+        !['yandex.ru', 'yandex.com'].includes(url.hostname) ||
+        !match
+      ) {
+        return null;
+      }
+      url.search = '';
+      url.hash = '';
+      url.pathname = '/games/app/' + match[1];
+      return { url: url.href, gameId: match[1] };
+    } catch (_) {
+      return null;
+    }
+  }
+  function catalogCover(raw) {
+    try {
+      const url = new win.URL(raw, win.location.href);
+      if (
+        url.protocol === 'https:' &&
+        !url.username &&
+        !url.password &&
+        !url.port &&
+        /^avatars\.mds\.yandex\.(?:net|ru|com)$/.test(url.hostname) &&
+        /^\/get-games(?:-avatars)?\//.test(url.pathname)
+      ) {
+        return url.href;
+      }
+    } catch (_) {}
+    return undefined;
+  }
+  function rememberCatalogGame(raw, title, cover) {
+    const game = catalogURL(raw);
+    title = typeof title === 'string' ? title.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+    if (!game || !title) {
+      return;
+    }
+    const report = { version: 1, type: 'catalog', ...game, title, cover: catalogCover(cover) };
+    const key = JSON.stringify(report);
+    if (catalogReports.get(game.gameId) !== key) {
+      catalogReports.set(game.gameId, key);
+      if (catalogReports.size > 512) {
+        catalogReports.delete(catalogReports.keys().next().value);
+      }
+      nativeReport(report);
+    }
+  }
+  function captureCatalogPage() {
+    if (!catalogPage) {
+      return;
+    }
+    const title = doc.querySelector('meta[property="og:title"]')?.content || doc.title;
+    const cover = doc.querySelector('meta[property="og:image"]')?.content;
+    rememberCatalogGame(win.location.href, title, cover);
+  }
+  if (catalogPage) {
+    const captureLink = (event) => {
+      if (event.type === 'keydown' && event.key !== 'Enter') {
+        return;
+      }
+      const link = event.target?.closest?.('a[href]');
+      if (!link || !catalogURL(link.href)) {
+        return;
+      }
+      const card =
+        link.closest(
+          '.game-card,.game-info,[class*="game-card-module__root"],[class*="played-game-card-module__root"]',
+        ) || link;
+      const picture = card.querySelector('img');
+      const title =
+        card.querySelector(
+          '.game-card__title,.game-card__description,.game-name,[class*="gameName"],[class*="gameTitle"],[class*="played-game-card-module__name--"],h2,h3',
+        )?.textContent ||
+        link.getAttribute('aria-label') ||
+        link.title ||
+        picture?.alt ||
+        link.textContent;
+      rememberCatalogGame(link.href, title, picture?.currentSrc || picture?.src);
+    };
+    for (const event of ['pointerdown', 'click', 'keydown']) {
+      doc.addEventListener(event, captureLink, true);
+    }
+    win.addEventListener('load', captureCatalogPage);
+    win.addEventListener('popstate', captureCatalogPage);
+    doc.addEventListener('DOMContentLoaded', captureCatalogPage);
+    const observer = new win.MutationObserver(captureCatalogPage);
+    const observe = () => {
+      const target = doc.head || doc.documentElement;
+      if (target) {
+        observer.observe(target, {
+          childList: true,
+          subtree: true,
+          attributes: true,
+          attributeFilter: ['content'],
+        });
+      }
+    };
+    observe();
+    doc.addEventListener('DOMContentLoaded', observe);
+    win.addEventListener('pagehide', () => observer.disconnect());
+    win.addEventListener('pageshow', observe);
+    captureCatalogPage();
+  }
   function discoverPackage() {
     if (
       packageState !== 'unknown' ||
@@ -467,6 +585,7 @@
   }
   function capture() {
     if (!isGame) {
+      captureCatalogPage();
       for (const frame of doc.querySelectorAll('iframe')) {
         try {
           frame.contentWindow?.postMessage({ type: 'ugames-offline-capture' }, '*');

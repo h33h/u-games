@@ -7,7 +7,19 @@ import android.webkit.WebResourceResponse
 import java.io.ByteArrayInputStream
 import org.json.JSONObject
 
-class OfflineWebPlayback(private val game: SavedOfflineGame, private val filter: AdResourceFilter) {
+class OfflineWebPlayback(
+    private val game: SavedOfflineGame,
+    private val filter: AdResourceFilter,
+    private val unavailable: () -> Unit
+) {
+    private val reportedFailure = java.util.concurrent.atomic.AtomicBoolean(false)
+    private fun reportFailure() {
+        if (reportedFailure.compareAndSet(false, true)) unavailable()
+    }
+    private fun failedResource(): WebResourceResponse {
+        reportFailure()
+        return denied(404, "Downloaded file missing")
+    }
     private val bootstrap = bootstrapUrl(game)
 
     fun allowsDocument(url: String): Boolean = OfflineResourcePolicy.normalize(url) == bootstrap ||
@@ -63,6 +75,11 @@ class OfflineWebPlayback(private val game: SavedOfflineGame, private val filter:
             )
         }
         val resource = game.resource(url) ?: return denied(404, "Not downloaded")
+        if (!resource.file.isFile ||
+            resource.file.length() != resource.size
+        ) {
+            return failedResource()
+        }
         return try {
             WebResourceResponse(
                 resource.mimeType,
@@ -70,10 +87,14 @@ class OfflineWebPlayback(private val game: SavedOfflineGame, private val filter:
                 200,
                 "OK",
                 OfflineResponseBody.headers(resource.headers),
-                OfflineResponseBody.open(resource.file.inputStream(), resource.headers)
+                OfflineResponseBody.open(
+                    resource.file.inputStream(),
+                    resource.headers,
+                    ::reportFailure
+                )
             )
         } catch (_: Exception) {
-            denied(404, "Downloaded file missing")
+            failedResource()
         }
     }
 
@@ -90,19 +111,24 @@ class OfflineWebPlayback(private val game: SavedOfflineGame, private val filter:
             ByteArrayInputStream(ByteArray(0))
         )
 
-        fun configureServiceWorkers(playback: OfflineWebPlayback?, filter: AdResourceFilter) {
+        fun configureServiceWorkers(
+            playback: OfflineWebPlayback?,
+            filter: AdResourceFilter,
+            catalog: OfflineCatalogPlayback? = null
+        ) {
             // Service-worker fetches have a separate network switch from WebView settings.
             ServiceWorkerController.getInstance().apply {
-                serviceWorkerWebSettings.blockNetworkLoads = playback != null
+                serviceWorkerWebSettings.blockNetworkLoads = playback != null || catalog != null
                 setServiceWorkerClient(object : ServiceWorkerClient() {
                     override fun shouldInterceptRequest(
                         request: WebResourceRequest
-                    ): WebResourceResponse? = playback?.response(request)
-                        ?: if (filter.shouldBlock(request.url.toString())) {
-                            denied(403, "Blocked advertising")
-                        } else {
-                            null
-                        }
+                    ): WebResourceResponse? =
+                        playback?.response(request) ?: catalog?.response(request)
+                            ?: if (filter.shouldBlock(request.url.toString())) {
+                                denied(403, "Blocked advertising")
+                            } else {
+                                null
+                            }
                 })
             }
         }

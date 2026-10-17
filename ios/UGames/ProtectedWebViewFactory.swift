@@ -36,7 +36,9 @@ enum ProtectedWebViewFactory {
     static func make(
         configuration: WKWebViewConfiguration? = nil,
         offlineGame: SavedOfflineGame? = nil,
+        offlineCatalog: Bool = false,
         offlineStore: OfflineGameStore = .shared,
+        connectivity: OfflineConnectivity = .shared,
         completion: @escaping (Result<WKWebView, Error>) -> Void
     ) {
         guard let scriptURL = Bundle.main.url(forResource: "ad-adapter", withExtension: "js"),
@@ -48,18 +50,38 @@ enum ProtectedWebViewFactory {
             return
         }
         let config = configuration ?? WKWebViewConfiguration()
-        let currentOfflineGame = offlineGame.map { (try? offlineStore.game(id: $0.id)) ?? $0 }
-        if let game = currentOfflineGame {
-            do { rules = try prepareOffline(
+        var currentOfflineGame: SavedOfflineGame?
+        let currentOfflineCatalog = offlineCatalog && connectivity.status == .offline
+        if connectivity.status == .offline, let game = offlineGame {
+            do { (currentOfflineGame, rules) = try prepareOffline(
                 config: config,
                 game: game,
                 store: offlineStore,
+                connectivity: connectivity,
                 rules: rules
             ) } catch { completion(.failure(error))
                 return
             }
+        } else if currentOfflineCatalog {
+            do {
+                config.websiteDataStore = .nonPersistent()
+                config.setURLSchemeHandler(
+                    OfflineCatalogSchemeHandler(store: offlineStore, connectivity: connectivity),
+                    forURLScheme: OfflineGameStore.scheme
+                )
+                try config.userContentController.addUserScript(WKUserScript(
+                    source: OfflineCatalog.configuration(store: offlineStore),
+                    injectionTime: .atDocumentStart, forMainFrameOnly: true, in: .page
+                ))
+                rules = try blockingNetwork(in: rules)
+            } catch { completion(.failure(error))
+                return
+            }
         } else if configuration == nil {
             config.websiteDataStore = .default()
+        }
+        if currentOfflineGame == nil, !currentOfflineCatalog {
+            installPendingProgress(offlineStore.pendingProgress(), in: config.userContentController)
         }
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
@@ -68,6 +90,11 @@ enum ProtectedWebViewFactory {
             controller.add(GameProtectionReceiver(), name: "ugamesProtection")
             controller.add(PageAppearanceReceiver(), name: "ugamesAppearance")
             controller.add(OfflineGameReportReceiver.shared, name: "ugamesOffline")
+            if currentOfflineGame == nil, !currentOfflineCatalog {
+                controller.addUserScript(WKUserScript(source: """
+                if(location.protocol==='https:'&&/(\\.games\\.yandex\\.net|\\.games\\.s3\\.yandex\\.net)$/.test(location.hostname)){try{webkit.messageHandlers.ugamesOffline.postMessage(JSON.stringify({version:1,type:'visit',url:location.href}));}catch(_){}}
+                """, injectionTime: .atDocumentStart, forMainFrameOnly: false, in: .page))
+            }
             controller.addUserScript(WKUserScript(
                 source: script,
                 injectionTime: .atDocumentStart,
@@ -86,7 +113,8 @@ enum ProtectedWebViewFactory {
                     OfflineGameReportReceiver.shared.register(
                         view,
                         game: currentOfflineGame,
-                        store: offlineStore
+                        store: offlineStore,
+                        connectivity: connectivity
                     )
                     completion(.success(view))
                 } else {
@@ -111,11 +139,18 @@ enum ProtectedWebViewFactory {
         config: WKWebViewConfiguration,
         game: SavedOfflineGame,
         store: OfflineGameStore,
+        connectivity: OfflineConnectivity,
         rules: String
-    ) throws -> String {
+    ) throws -> (SavedOfflineGame, String) {
+        let handler = try OfflineGameSchemeHandler(
+            game: game,
+            store: store,
+            connectivity: connectivity
+        )
+        let game = handler.game
         config.websiteDataStore = .nonPersistent()
         config.setURLSchemeHandler(
-            OfflineGameSchemeHandler(game: game, store: store),
+            handler,
             forURLScheme: OfflineGameStore.scheme
         )
         struct RuntimeConfig: Encodable {
@@ -133,9 +168,7 @@ enum ProtectedWebViewFactory {
             environment: game.environment
         )
         let json = try JSONEncoder().encode(runtime)
-        guard let source = String(data: json, encoding: .utf8),
-              var contentRules = try JSONSerialization
-              .jsonObject(with: Data(rules.utf8)) as? [[String: Any]]
+        guard let source = String(data: json, encoding: .utf8)
         else { throw ProtectionSetupError.missingResources }
         config.userContentController.addUserScript(WKUserScript(
             source: "window.__UGamesOfflineConfig=" + source + ";",
@@ -143,6 +176,13 @@ enum ProtectedWebViewFactory {
             forMainFrameOnly: false,
             in: .page
         ))
+        return try (game, blockingNetwork(in: rules))
+    }
+
+    private static func blockingNetwork(in rules: String) throws -> String {
+        guard var contentRules = try JSONSerialization
+            .jsonObject(with: Data(rules.utf8)) as? [[String: Any]]
+        else { throw ProtectionSetupError.missingResources }
         for pattern in ["^https?://", "^wss?://"] {
             contentRules.append([
                 "trigger": ["url-filter": pattern, "url-filter-is-case-sensitive": false],

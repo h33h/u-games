@@ -84,6 +84,8 @@ function buildShared(rootDir) {
   );
   const construct = fs.readFileSync(path.join(rootDir, 'shared/construct-ad-guard.js'), 'utf8');
   const countdowns = fs.readFileSync(path.join(rootDir, 'shared/ad-countdowns.js'), 'utf8');
+  const catalog = fs.readFileSync(path.join(rootDir, 'shared/offline-catalog.js'), 'utf8');
+  const catalogHTML = fs.readFileSync(path.join(rootDir, 'shared/offline-catalog.html'), 'utf8');
   if (!adapter.trim()) {
     throw new Error('Missing adapter code');
   }
@@ -110,6 +112,8 @@ function buildShared(rootDir) {
     construct +
     '\n' +
     countdowns +
+    '\n' +
+    catalog +
     (branding ? '\n' + fs.readFileSync(path.join(rootDir, 'shared/portal-theme.js'), 'utf8') : '');
   const android = path.join(rootDir, 'android/app/src/main/assets/ugames');
   const ios = path.join(rootDir, 'ios/UGames/Resources');
@@ -118,6 +122,8 @@ function buildShared(rootDir) {
   fs.writeFileSync(path.join(android, 'ad-adapter.js'), script);
   fs.writeFileSync(path.join(android, 'ad-rules.json'), JSON.stringify(rules, null, 2) + '\n');
   fs.writeFileSync(path.join(ios, 'ad-adapter.js'), script);
+  fs.writeFileSync(path.join(android, 'offline-catalog.html'), catalogHTML);
+  fs.writeFileSync(path.join(ios, 'offline-catalog.html'), catalogHTML);
   fs.writeFileSync(
     path.join(ios, 'content-rules.json'),
     JSON.stringify(contentRules, null, 2) + '\n',

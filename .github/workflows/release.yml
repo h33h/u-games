@@ -98,8 +98,8 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/ugames-release.jks"
 
-  ios:
-    name: iOS
+  ios-tests:
+    name: iOS Tests
     runs-on: xcode-27
     timeout-minutes: 40
     env:
@@ -224,9 +224,24 @@ jobs:
           path: dist/UGames-unsigned.ipa
           if-no-files-found: error
 
+  ios:
+    name: iOS
+    if: ${{ !cancelled() }}
+    needs: [ios-tests, ios-release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require iOS tests and Release build
+        env:
+          TEST_RESULT: ${{ needs.ios-tests.result }}
+          RELEASE_RESULT: ${{ needs.ios-release.result }}
+        run: |
+          test "$TEST_RESULT" = success
+          test "$RELEASE_RESULT" = success
+
   release:
     name: Publish release
-    needs: [quality, android, ios, ios-release]
+    needs: [quality, android, ios]
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 10

@@ -121,6 +121,11 @@ jobs:
           key: xcode-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('ios/**', 'shared/**', 'scripts/build*') }}
           restore-keys: |
             xcode-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-
+      - run: brew install xcodegen
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+      - run: npm run build:shared
+      - run: xcodegen generate --spec ios/project.yml
       - name: Start iPhone simulator
         id: simulator
         run: |
@@ -128,11 +133,6 @@ jobs:
           simulator=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]["com.apple.CoreSimulator.SimRuntime.iOS-"+sys.argv[1].replace(".", "-")]; print(next(d["udid"] for d in devices if d["name"].startswith("iPhone")))' "$sdk_version")
           echo "udid=$simulator" >> "$GITHUB_OUTPUT"
           nohup xcrun simctl bootstatus "$simulator" -b > "$RUNNER_TEMP/simulator-boot.log" 2>&1 < /dev/null &
-      - run: brew install xcodegen
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: '1'
-      - run: npm run build:shared
-      - run: xcodegen generate --spec ios/project.yml
       - name: Build iOS tests while simulator boots
         run: |
           xcodebuild build-for-testing -project ios/UGames.xcodeproj -scheme UGames \
@@ -156,7 +156,7 @@ jobs:
             -resultBundlePath "$RUNNER_TEMP/UGamesTests.xcresult" \
             CODE_SIGNING_ALLOWED=NO
       - name: Upload iOS test results
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ios-test-results

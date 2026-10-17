@@ -172,7 +172,8 @@ class OfflineGameTestCase: WebViewTestCase {
             result = value
             done.fulfill()
         }
-        wait(for: [done], timeout: 10)
+        // Hosted simulators can delay filesystem and URLSession work during cold startup.
+        wait(for: [done], timeout: 60)
         return try XCTUnwrap(result).get()
     }
 

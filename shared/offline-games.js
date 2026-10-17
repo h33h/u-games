@@ -22,6 +22,24 @@
   let packageOverflow = false;
   let packageURL;
 
+  function cleanTitle(value) {
+    if (typeof value !== 'string') {
+      return '';
+    }
+    return value
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(
+        /\s+[-–—]\s*играть(?:\s+онлайн)?\s+бесплатно(?:\s+онлайн)?(?:\s+без\s+регистрации)?(?:\s+на\s+(?:сервисе\s+)?(?:яндекс\s*игры|ugames))?[.!…]*$/iu,
+        '',
+      )
+      .replace(
+        /\s+[-–—]\s*play(?:\s+online)?\s+(?:for\s+)?free(?:\s+online)?(?:\s+(?:on|at)\s+(?:yandex\s+games|ugames))?[.!…]*$/iu,
+        '',
+      )
+      .trim();
+  }
+
   function memoryStorage() {
     const values = new Map();
     const methods = {
@@ -178,7 +196,7 @@
       capture();
     });
   }
-  Object.defineProperty(win, '__UGamesOfflineRuntime', { value: { trackSDK } });
+  Object.defineProperty(win, '__UGamesOfflineRuntime', { value: { trackSDK, cleanTitle } });
 
   if (config && isGame) {
     const marker = prefix + 'restored.' + config.gameId;
@@ -490,7 +508,7 @@
   }
   function rememberCatalogGame(raw, title, cover) {
     const game = catalogURL(raw);
-    title = typeof title === 'string' ? title.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+    title = cleanTitle(title).slice(0, 200);
     if (!game || !title) {
       return;
     }
@@ -692,7 +710,7 @@
     nativeReport({
       version: 1,
       url: entry.href,
-      title: doc.title,
+      title: cleanTitle(doc.title),
       resources: Array.from(urls),
       storage: saved,
       environment,

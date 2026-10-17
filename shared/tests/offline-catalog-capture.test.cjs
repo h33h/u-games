@@ -74,10 +74,7 @@ test('unrelated and malformed structured metadata cannot become the current game
     ],
   });
   win.__UGamesOfflineCapture();
-  assert.equal(
-    reports.at(-1).title,
-    "Gamer's Mod - играть онлайн бесплатно на сервисе Яндекс Игры",
-  );
+  assert.equal(reports.at(-1).title, "Gamer's Mod");
   assert.equal(reports.at(-1).cover, undefined);
 });
 

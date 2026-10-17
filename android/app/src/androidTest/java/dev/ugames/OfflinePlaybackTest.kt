@@ -349,7 +349,12 @@ class OfflinePlaybackTest {
                 }
             )
         store.rememberCatalog(
-            OfflineCatalogMetadata("42", "https://yandex.ru/games/app/42", "Космос", coverUrl)
+            OfflineCatalogMetadata(
+                "42",
+                "https://yandex.ru/games/app/42",
+                "Космос - играть онлайн бесплатно на сервисе Яндекс Игры",
+                coverUrl
+            )
         )
         val saved = store.save(
             OfflineCaptureReport(entry, "New project", emptyList(), emptyMap(), "{}", true)

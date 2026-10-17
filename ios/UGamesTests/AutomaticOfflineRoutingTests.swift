@@ -82,8 +82,7 @@ final class AutomaticOfflineRoutingTests: OfflineGameTestCase {
         let view = try XCTUnwrap(result).get()
         let restore = try XCTUnwrap(view.configuration.userContentController.userScripts
             .first { $0.source.hasPrefix("/* UGames pending progress ") })
-        view.loadHTMLString("<p>Normal game</p>", baseURL: URL(string: entry))
-        try waitForJavaScript("document.readyState==='complete'", in: view)
+        try loadHTMLFixture("<p>Normal game</p>", baseURL: URL(string: entry), in: view)
         try evaluateJavaScript(
             "window.restored={coins:'old-online-coins',auth:'unrelated-auth',other:'keep'};Object.defineProperty(window,'localStorage',{value:{getItem:k=>window.restored[k]??null,setItem:(k,v)=>window.restored[k]=v,removeItem:k=>delete window.restored[k]}});" +
                 restore.source,
@@ -222,8 +221,11 @@ final class AutomaticOfflineRoutingTests: OfflineGameTestCase {
         let online = try XCTUnwrap(result).get()
         XCTAssertTrue(online.configuration.websiteDataStore.isPersistent)
         XCTAssertNil(online.configuration.urlSchemeHandler(forURLScheme: OfflineGameStore.scheme))
-        online.loadHTMLString("<p>Normal online document</p>", baseURL: OfflineCatalog.onlineURL)
-        try waitForJavaScript("document.readyState==='complete'", in: online)
+        try loadHTMLFixture(
+            "<p>Normal online document</p>",
+            baseURL: OfflineCatalog.onlineURL,
+            in: online
+        )
         XCTAssertEqual(
             try evaluateJavaScript(
                 "window.__UGamesOfflineConfig===undefined && window.__UGamesCachedCatalog===undefined",
@@ -269,7 +271,7 @@ final class AutomaticOfflineRoutingTests: OfflineGameTestCase {
         }
     }
 
-    func testReconnectCapturesFinalOfflineProgressBeforeCreatingANormalContext() throws {
+    func testReconnectPersistsFinalProgressAndInstallsTheCurrentRestoreRevision() throws {
         let storage = try store()
         respond(entry, mime: "text/html", Data("<script>window.cachedLoaded=true</script>".utf8))
         let game = try save(report(), to: storage)
@@ -288,32 +290,20 @@ final class AutomaticOfflineRoutingTests: OfflineGameTestCase {
         try waitUntil("Reconnect replaces the offline context") {
             controller.webView !== offline && controller.offlineGame == nil
         }
-        XCTAssertEqual(try storage.game(id: game.id).storage["level"], "final-offline-level")
+        let saved = try storage.game(id: game.id)
+        XCTAssertEqual(saved.storage["level"], "final-offline-level")
+        XCTAssertNotNil(saved.offlineEditedAt)
         let online = try XCTUnwrap(controller.webView)
         XCTAssertTrue(online.configuration.websiteDataStore.isPersistent)
-        let restore = try XCTUnwrap(online.configuration.userContentController.userScripts
-            .first { $0.source.hasPrefix("/* UGames pending progress ") })
-        online.stopLoading()
-        online.loadHTMLString("<p>Normal online game</p>", baseURL: URL(string: entry))
-        try waitForJavaScript("document.readyState==='complete'", in: online)
-        // loadHTMLString has an opaque storage origin; execute the real restoration script
-        // against controlled storage without relaxing native bridge origin validation.
-        try evaluateJavaScript(
-            "window.restored={};Object.defineProperty(window,'localStorage',{value:{getItem:key=>window.restored[key]??null,setItem:(key,value)=>window.restored[key]=value,removeItem:key=>delete window.restored[key]}});" +
-                restore.source,
-            in: online
-        )
-        XCTAssertEqual(
-            try evaluateJavaScript("window.restored.level", in: online) as? String,
-            "final-offline-level"
-        )
-        XCTAssertEqual(
-            try evaluateJavaScript(
-                "window.__UGamesOfflineConfig === undefined",
-                in: online
-            ) as? Bool,
-            true
-        )
+        XCTAssertNil(online.configuration.urlSchemeHandler(forURLScheme: OfflineGameStore.scheme))
+        // A real document may already have acknowledged its restore. Otherwise the
+        // produced configuration must carry the revision from the final capture.
+        if storage.hasPendingProgress(saved) {
+            let revision = try XCTUnwrap(saved.pendingProgressRevision)
+            let prefix = "/* UGames pending progress " + game.id + " " + revision + " */"
+            XCTAssertTrue(online.configuration.userContentController.userScripts
+                .contains { $0.source.hasPrefix(prefix) })
+        }
         online.stopLoading()
     }
 

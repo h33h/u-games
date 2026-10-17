@@ -47,15 +47,13 @@ final class PendingOfflineProgressTests: OfflineGameTestCase {
         controller.webView?.stopLoading()
     }
 
-    func testDirectReconnectBeforeTopLevelFinishCannotRestoreTwice() throws {
+    func testNormalRestoreBeforeControllerFinishCannotRestoreTwice() throws {
         let storage = try store()
         respond(entry, mime: "text/html", Data("<script>window.gameLoaded=true</script>".utf8))
         let game = try save(report(storage: ["level": "7", "coins": "100"]), to: storage)
-        let network = OfflineConnectivity(status: .offline, monitoring: false)
         let controller = GameViewController(
             offlineGame: game,
-            offlineStore: storage,
-            connectivity: network
+            offlineStore: storage
         )
         controller.loadViewIfNeeded()
         try waitUntil("Offline game attaches") { controller.webView?.url == game.offlineURL }
@@ -65,35 +63,41 @@ final class PendingOfflineProgressTests: OfflineGameTestCase {
             "localStorage.setItem('level','9');localStorage.removeItem('coins')",
             in: old
         )
-        network.update(.online)
-        try waitUntil("Direct reconnect attaches a normal context") { controller.webView !== old }
-        let view = try XCTUnwrap(controller.webView)
-        view.stopLoading()
-        view.navigationDelegate = nil
+        try capture(old)
+        // The same production factory serves normal startup and reconnect. Use a
+        // fresh context so a real HTTPS navigation cannot replace this fixture.
+        let view = try normalView(store: storage)
         let initial = restoreScripts(in: view).joined(separator: ";")
-        view.loadHTMLString(
-            "<p>A document before the navigation delegate finishes</p>",
-            baseURL: URL(string: entry)
+        XCTAssertFalse(initial.isEmpty)
+        try loadHTMLFixture(
+            "<p>A document before the controller finishes</p>",
+            baseURL: URL(string: entry),
+            in: view
         )
-        try waitForJavaScript("document.readyState==='complete'", in: view)
         try evaluateJavaScript(
             "window.values={level:'old',coins:'100',auth:'keep'};Object.defineProperty(window,'localStorage',{value:{getItem:k=>window.values[k]??null,setItem:(k,v)=>window.values[k]=v,removeItem:k=>delete window.values[k]}});" +
                 initial + ";true",
             in: view
         )
+        XCTAssertEqual(try evaluateJavaScript("window.values.level", in: view) as? String, "9")
+        XCTAssertEqual(
+            try evaluateJavaScript("window.values.coins===undefined", in: view) as? Bool,
+            true
+        )
+        XCTAssertEqual(try evaluateJavaScript("window.values.auth", in: view) as? String, "keep")
         try waitUntil("Pending one-shot restoration acknowledges") {
             !view.configuration.userContentController.userScripts
                 .contains { $0.source.hasPrefix("/* UGames pending progress ") }
         }
         try evaluateJavaScript(
-            "window.values.level='10';window.values.coins='200';" + restoreScripts(in: view)
-                .joined(separator: ";") + ";true",
+            "window.values.level='10';window.values.coins='200';" + initial + ";true",
             in: view
         )
         XCTAssertEqual(try evaluateJavaScript("window.values.level", in: view) as? String, "10")
         XCTAssertEqual(try evaluateJavaScript("window.values.coins", in: view) as? String, "200")
         XCTAssertTrue(restoreScripts(in: view).isEmpty)
         view.stopLoading()
+        old.stopLoading()
     }
 
     func testQuietRecoveryAndRelaunchRestorePendingDeletesWithoutRollingBackLaterOnlinePlay(
@@ -103,11 +107,11 @@ final class PendingOfflineProgressTests: OfflineGameTestCase {
         let reopened = try store()
         let view = try normalView(store: reopened)
         let source = try pendingScript(in: view)
-        view.loadHTMLString(
+        try loadHTMLFixture(
             "<p>Normal game after catalog navigation</p>",
-            baseURL: URL(string: entry)
+            baseURL: URL(string: entry),
+            in: view
         )
-        try waitForJavaScript("document.readyState==='complete'", in: view)
         try evaluateJavaScript(
             "window.values={level:'old-online',coins:'100',auth:'keep'};Object.defineProperty(window,'localStorage',{value:{getItem:k=>window.values[k]??null,setItem:(k,v)=>window.values[k]=v,removeItem:k=>delete window.values[k]}});" +
                 source + ";true",
@@ -164,8 +168,7 @@ final class PendingOfflineProgressTests: OfflineGameTestCase {
             1
         )
         let newest = try pendingScript(in: view)
-        view.loadHTMLString("<p>Normal game</p>", baseURL: URL(string: entry))
-        try waitForJavaScript("document.readyState==='complete'", in: view)
+        try loadHTMLFixture("<p>Normal game</p>", baseURL: URL(string: entry), in: view)
         try evaluateJavaScript(
             "window.values={auth:'keep'};Object.defineProperty(window,'localStorage',{value:{getItem:k=>window.values[k]??null,setItem:(k,v)=>window.values[k]=v,removeItem:k=>delete window.values[k]}});" +
                 newest + ";true",

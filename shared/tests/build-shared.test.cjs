@@ -7,11 +7,27 @@ const path = require('node:path');
 const vm = require('node:vm');
 const { spawnSync } = require('node:child_process');
 const script = path.join(__dirname, '../../scripts/build-shared.cjs');
+function addGameScripts(root) {
+  fs.writeFileSync(path.join(root, 'shared/offline-games.js'), 'window.offlineReady = true;');
+  fs.writeFileSync(
+    path.join(root, 'shared/ad-provider-availability.js'),
+    'window.providersReady = window.executedRules;',
+  );
+  fs.writeFileSync(
+    path.join(root, 'shared/construct-ad-guard.js'),
+    'window.constructReady = window.providersReady;',
+  );
+  fs.writeFileSync(
+    path.join(root, 'shared/ad-countdowns.js'),
+    'window.countdownsReady = window.constructReady;',
+  );
+}
 
 test('build produces identical executable scripts and valid native content rules', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ugames-build-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, 'shared'));
+  addGameScripts(root);
   fs.writeFileSync(
     path.join(root, 'shared/ad-adapter.js'),
     'window.executedRules = window.__UGamesRules.version;',
@@ -36,6 +52,10 @@ test('build produces identical executable scripts and valid native content rules
   const ctx = vm.createContext({ window: {} });
   vm.runInContext(ios, ctx);
   assert.equal(ctx.window.executedRules, 1);
+  assert.equal(ctx.window.offlineReady, true);
+  assert.equal(ctx.window.providersReady, 1);
+  assert.equal(ctx.window.constructReady, 1);
+  assert.equal(ctx.window.countdownsReady, 1);
   const content = JSON.parse(
     fs.readFileSync(path.join(root, 'ios/UGames/Resources/content-rules.json'), 'utf8'),
   );
@@ -60,6 +80,7 @@ test('packaging embeds artwork and CSS as local data URLs and rejects missing ar
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ugames-brand-build-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
   fs.mkdirSync(path.join(root, 'shared'));
+  addGameScripts(root);
   fs.writeFileSync(
     path.join(root, 'shared/ad-adapter.js'),
     'window.logo = window.__UGamesBranding?.assets.logo;',

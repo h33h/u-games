@@ -366,6 +366,7 @@
     if (!sdk) {
       return sdk;
     }
+    win.__UGamesOfflineRuntime?.trackSDK(sdk);
     try {
       protectPayments(sdk, signed);
     } catch (_) {
@@ -538,6 +539,18 @@
       const url = new win.URL(value, doc.baseURI);
       if (url.href === 'about:blank') {
         return true;
+      }
+      const offline = win.__UGamesOfflineConfig;
+      if (offline) {
+        const entry = new win.URL(offline.url);
+        return (
+          url.protocol === (offline.scheme || entry.protocol) &&
+          url.hostname === entry.hostname &&
+          !url.username &&
+          !url.password &&
+          !url.port &&
+          (!target || ['_self', '_top', '_parent'].includes(target.toLowerCase()))
+        );
       }
       if (url.protocol !== 'https:' || url.username || url.password || url.port) {
         return false;

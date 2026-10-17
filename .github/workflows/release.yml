@@ -136,7 +136,7 @@ jobs:
       - name: Build iOS tests while simulator boots
         run: |
           xcodebuild build-for-testing -project ios/UGames.xcodeproj -scheme UGames \
-            -destination 'generic/platform=iOS Simulator' \
+            -destination 'generic/platform=iOS Simulator' -arch "$(uname -m)" \
             -derivedDataPath "$RUNNER_TEMP/UGamesDerivedData" \
             CODE_SIGNING_ALLOWED=NO
       - name: Wait for iPhone simulator

@@ -20,6 +20,7 @@ import androidx.webkit.WebMessageCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import java.io.ByteArrayInputStream
+import java.lang.ref.WeakReference
 import org.json.JSONObject
 
 object ProtectedWebViewFactory {
@@ -51,10 +52,20 @@ object ProtectedWebViewFactory {
         val replayLease = offlineLease?.takeIf { owner?.isInternetAvailable == false }
         if (replayLease == null) offlineLease?.close()
         val savedGame = replayLease?.game
-        val playback = savedGame?.let { OfflineWebPlayback(it, filter) }
         val catalog = cachedCatalog?.takeIf {
             owner?.isInternetAvailable == false
         }?.let { OfflineCatalogPlayback(activity, it) }
+        val protectedView = WebView(activity)
+        val weakView = WeakReference(protectedView)
+        val playback = savedGame?.let {
+            OfflineWebPlayback(it, filter) {
+                weakView.get()?.post {
+                    weakView.get()?.let { liveView ->
+                        (liveView.context as? MainActivity)?.offlineCacheFailed(liveView)
+                    }
+                }
+            }
+        }
         val offline = playback != null || catalog != null
         fun allowsOnlineGame(url: String) =
             onlineGameEntry != null && OfflineResourcePolicy.isGameUrl(onlineGameEntry) &&
@@ -66,7 +77,7 @@ object ProtectedWebViewFactory {
         WebView.setWebContentsDebuggingEnabled(
             activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
         )
-        return WebView(activity).apply {
+        return protectedView.apply {
             setBackgroundColor(defaultBackground)
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
@@ -87,11 +98,7 @@ object ProtectedWebViewFactory {
                     @JavascriptInterface
                     fun offlinePreparationFailed() {
                         if (offline) {
-                            post {
-                                (activity as? MainActivity)?.showError(
-                                    "Не удалось подготовить страницу. Попробуй открыть её ещё раз."
-                                )
-                            }
+                            post { owner?.offlinePreparationFailed(this@apply) }
                         }
                     }
 
@@ -332,6 +339,16 @@ object ProtectedWebViewFactory {
 
     fun loadOfflineCatalog(view: WebView) {
         view.loadUrl(OfflineCatalogPlayback.BOOTSTRAP)
+    }
+
+    fun loadOfflineCatalogDirect(view: WebView) {
+        view.stopLoading()
+        val html = view.context.assets.open("ugames/offline-catalog.html").bufferedReader().use {
+            it.readText()
+        }
+        // A local document bypasses a broken old worker's navigation response.
+        // This WebView keeps its document-start protection, CSP and network blocking.
+        view.loadDataWithBaseURL(OfflineRoutingPolicy.HOME, html, "text/html", "utf-8", null)
     }
 
     fun loadOfflineGame(view: WebView, game: SavedOfflineGame) {

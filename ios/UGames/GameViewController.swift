@@ -9,6 +9,7 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
     var isOfflineCatalog = false
     let connectivity: OfflineConnectivity
     var contextGeneration = 0
+    private var attachedGeneration = 0
     var observers: [NSObjectProtocol] = []
     private var controllerIsActive = true
     let offlineStore: OfflineGameStore
@@ -93,12 +94,12 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         super.viewWillDisappear(animated)
         controllerIsActive = false
         if let view = webView {
-            OfflineGameReportReceiver.shared.captureProgress(in: view) {}
+            captureBeforeLeaving(view)
             OfflineGameReportReceiver.shared.setActive(false, in: view)
         }
     }
 
-    func prepareAndLoad(_ url: URL, restoringProgressFrom game: SavedOfflineGame? = nil) {
+    func prepareAndLoad(_ url: URL) {
         spinner.startAnimating()
         let generation = contextGeneration
         ProtectedWebViewFactory
@@ -106,8 +107,7 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
                 offlineGame: offlineGame,
                 offlineCatalog: isOfflineCatalog,
                 offlineStore: offlineStore,
-                connectivity: connectivity,
-                restoringProgressFrom: game
+                connectivity: connectivity
             ) { [weak self] result in
                 guard let self = self, self.contextGeneration == generation else { return }
                 switch result {
@@ -119,8 +119,7 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
                         self.switchContext(
                             to: game?.url ?? OfflineCatalog.onlineURL,
                             game: nil,
-                            catalog: false,
-                            restore: game
+                            catalog: false
                         )
                         return
                     }
@@ -132,7 +131,11 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
                     }
                     self.attach(view)
                     view.load(URLRequest(url: url))
-                case .failure:
+                case let .failure(error):
+                    if error is OfflineGameError, let game = self.offlineGame {
+                        self.offlineReplayFailed(game)
+                        return
+                    }
                     self
                         .showError(
                             "Не удалось подготовить приложение. Попробуй перезапустить UGames."
@@ -145,11 +148,11 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         if let previous = self.webView {
             previous.navigationDelegate = nil
             previous.uiDelegate = nil
-            previous.stopLoading()
-            OfflineGameReportReceiver.shared.unregister(previous)
+            stopReplayTracking(previous)
             previous.removeFromSuperview()
         }
         self.webView = webView
+        attachedGeneration = contextGeneration
         OfflineGameReportReceiver.shared.setActive(controllerIsActive, in: webView)
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -174,7 +177,7 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
     deinit {
         observers.forEach(NotificationCenter.default.removeObserver)
         if let webView = webView {
-            OfflineGameReportReceiver.shared.unregister(webView)
+            stopReplayTracking(webView)
         }
     }
 
@@ -261,6 +264,10 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         showError("Эта игра пока не работает без рекламы. Выбери другую в каталоге.")
     }
 
+    func acceptsFailure(from view: WKWebView) -> Bool {
+        webView === view && attachedGeneration == contextGeneration
+    }
+
     func webView(_ webView: WKWebView, didStartProvisionalNavigation _: WKNavigation!) {
         errorPanel?.removeFromSuperview()
         errorPanel = nil
@@ -271,18 +278,20 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
 
     func webView(_ webView: WKWebView, didFinish _: WKNavigation!) {
         spinner.stopAnimating()
-        ProtectedWebViewFactory.finishProgressRestoration(in: webView)
         if let url = webView.url, url.scheme == "https" {
             retryURL = url
         }
     }
 
     func webView(
-        _: WKWebView,
+        _ webView: WKWebView,
         didFailProvisionalNavigation _: WKNavigation!,
         withError error: Error
     ) {
-        if (error as NSError).code == NSURLErrorCancelled {
+        guard acceptsFailure(from: webView),
+              (error as NSError).code != NSURLErrorCancelled else { return }
+        if let game = offlineGame {
+            offlineReplayFailed(game, in: webView)
             return
         }
         if offlineGame == nil, !isOfflineCatalog,
@@ -295,13 +304,17 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
             return
         }
         if (error as NSError).code != NSURLErrorCancelled {
-            showError(offlineGame == nil ?
-                "Не удалось открыть страницу. Проверь подключение и попробуй ещё раз." :
-                "Не удалось открыть сохранённую игру. Открой её с интернетом.")
+            showError("Не удалось открыть страницу. Проверь подключение и попробуй ещё раз.")
         }
     }
 
-    func webView(_: WKWebView, didFail _: WKNavigation!, withError error: Error) {
+    func webView(_ webView: WKWebView, didFail _: WKNavigation!, withError error: Error) {
+        guard acceptsFailure(from: webView),
+              (error as NSError).code != NSURLErrorCancelled else { return }
+        if let game = offlineGame {
+            offlineReplayFailed(game, in: webView)
+            return
+        }
         if offlineGame == nil, !isOfflineCatalog,
            connectivity.noteConnectionFailure(error)
         {
@@ -310,8 +323,7 @@ final class GameViewController: UIViewController, WKNavigationDelegate, WKUIDele
         if (error as NSError)
             .code != NSURLErrorCancelled
         {
-            showError(offlineGame == nil ? "Игра не загрузилась. Попробуй ещё раз." :
-                "Не удалось прочитать файлы сохранённой игры. Открой её с интернетом.")
+            showError("Игра не загрузилась. Попробуй ещё раз.")
         }
     }
 

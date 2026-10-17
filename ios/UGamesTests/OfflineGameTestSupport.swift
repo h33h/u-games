@@ -168,7 +168,8 @@ class OfflineGameTestCase: WebViewTestCase {
     ) throws -> SavedOfflineGame {
         let done = expectation(description: "Offline game snapshot completes")
         var result: Result<SavedOfflineGame, Error>?
-        store.save(report, visitID: visitID, playedAt: playedAt) { value in result = value
+        store.save(report, visitID: visitID, playedAt: playedAt) { value in
+            result = value
             done.fulfill()
         }
         wait(for: [done], timeout: 10)

@@ -39,7 +39,6 @@ enum ProtectedWebViewFactory {
         offlineCatalog: Bool = false,
         offlineStore: OfflineGameStore = .shared,
         connectivity: OfflineConnectivity = .shared,
-        restoringProgressFrom: SavedOfflineGame? = nil,
         completion: @escaping (Result<WKWebView, Error>) -> Void
     ) {
         guard let scriptURL = Bundle.main.url(forResource: "ad-adapter", withExtension: "js"),
@@ -82,7 +81,7 @@ enum ProtectedWebViewFactory {
             config.websiteDataStore = .default()
         }
         if currentOfflineGame == nil, !currentOfflineCatalog {
-            addProgressRestoration(restoringProgressFrom, to: config)
+            installPendingProgress(offlineStore.pendingProgress(), in: config.userContentController)
         }
         config.allowsInlineMediaPlayback = true
         config.mediaTypesRequiringUserActionForPlayback = []
@@ -133,33 +132,6 @@ enum ProtectedWebViewFactory {
                     completionHandler: finish
                 )
             }
-        }
-    }
-
-    private static func addProgressRestoration(
-        _ game: SavedOfflineGame?,
-        to config: WKWebViewConfiguration
-    ) {
-        if let game = game,
-           let data = try? JSONEncoder().encode(game.storage),
-           let storage = String(data: data, encoding: .utf8),
-           let removedData = try? JSONEncoder().encode(game.removedStorageKeys ?? []),
-           let removed = String(data: removedData, encoding: .utf8),
-           let host = game.url.host,
-           let hostData = try? JSONEncoder().encode(host),
-           let hostSource = String(data: hostData, encoding: .utf8)
-        {
-            // The default data store and normal SDK remain intact when connectivity returns.
-            let source =
-                "/* UGames progress restore */if(location.protocol==='https:'&&(!location.port||location.port==='443')&&location.hostname===" +
-                hostSource +
-                "){try{const values=" + storage + ";const removed=" + removed + ";removed.forEach(key=>localStorage.removeItem(key));Object.keys(values).forEach(key=>localStorage.setItem(key,values[key]));}catch(_){}}"
-            config.userContentController.addUserScript(WKUserScript(
-                source: source,
-                injectionTime: .atDocumentStart,
-                forMainFrameOnly: false,
-                in: .page
-            ))
         }
     }
 
@@ -221,16 +193,6 @@ enum ProtectedWebViewFactory {
         guard let result = String(data: encoded, encoding: .utf8)
         else { throw ProtectionSetupError.missingResources }
         return result
-    }
-
-    static func finishProgressRestoration(in view: WKWebView) {
-        let controller = view.configuration.userContentController
-        let scripts = controller.userScripts
-        guard scripts.contains(where: { $0.source.hasPrefix("/* UGames progress restore */") })
-        else { return }
-        controller.removeAllUserScripts()
-        scripts.filter { !$0.source.hasPrefix("/* UGames progress restore */") }
-            .forEach(controller.addUserScript)
     }
 
     static func makePopup(configuration: WKWebViewConfiguration, parent: WKWebView) -> WKWebView {

@@ -47,6 +47,7 @@ data class SavedOfflineGame(
     val resourceCount get() = resources.size
     internal val resourceUrls get() = resources.keys
     internal val directory get() = resources.values.firstOrNull()?.file?.parentFile
+    internal val snapshotKey get() = "$id:${directory?.name}:$savedAt"
     val coverLocalUrl get() = cover?.let { "https://yandex.ru/games/.ugames-cache-cover/$id" }
 
     fun resource(url: String): SavedOfflineResource? =

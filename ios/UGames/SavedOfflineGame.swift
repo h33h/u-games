@@ -26,6 +26,9 @@ struct SavedOfflineGame: Codable {
     var cover: SavedOfflineCover?
     var coverSourceURL: URL?
     var removedStorageKeys: [String]?
+    var requiresRefresh: Bool?
+    var pendingProgressRevision: String?
+    var offlineEditedAt: Date?
 
     mutating func replaceStorage(_ values: [String: String]) throws {
         let removed = Set(removedStorageKeys ?? []).union(storage.keys.filter { values[$0] == nil })

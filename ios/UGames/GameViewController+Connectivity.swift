@@ -2,6 +2,45 @@ import UIKit
 import WebKit
 
 extension GameViewController {
+    func stopReplayTracking(_ view: WKWebView) {
+        view.stopLoading()
+        OfflineGameReportReceiver.shared.unregister(view)
+        (view.configuration
+            .urlSchemeHandler(forURLScheme: OfflineGameStore.scheme) as? OfflineGameSchemeHandler)?
+                    .finishReplay()
+    }
+
+    func offlineReplayFailed(_ game: SavedOfflineGame, in view: WKWebView? = nil) {
+        guard offlineGame != nil, errorPanel == nil else { return }
+        if let view = view, !acceptsFailure(from: view) {
+            return
+        }
+        offlineStore.suppressReplay(game)
+        view?.isHidden = true
+        contextGeneration += 1
+        let generation = contextGeneration
+        let finish: () -> Void = { [weak self] in
+            guard let self = self, self.contextGeneration == generation else { return }
+            self.openCatalog()
+        }
+        if let view = view {
+            OfflineGameReportReceiver.shared.captureProgress(
+                in: view,
+                completion: finish
+            )
+        } else {
+            finish()
+        }
+    }
+
+    func captureBeforeLeaving(_ view: WKWebView) {
+        let root = navigationController?.viewControllers.first as? GameViewController
+        OfflineGameReportReceiver.shared.captureProgress(in: view) { [weak root] in
+            guard let root = root, let view = root.webView else { return }
+            ProtectedWebViewFactory.refreshPendingProgress(in: view, store: root.offlineStore)
+        }
+    }
+
     func observeConnectionAndLifecycle() {
         let center = NotificationCenter.default
         observers.append(center.addObserver(
@@ -50,8 +89,13 @@ extension GameViewController {
             switchContext(
                 to: game?.url ?? OfflineCatalog.onlineURL,
                 game: nil,
-                catalog: false,
-                restore: game
+                catalog: false
+            )
+        }
+        if let view = webView {
+            ProtectedWebViewFactory.refreshPendingProgress(
+                in: view,
+                store: offlineStore
             )
         }
     }
@@ -78,10 +122,13 @@ extension GameViewController {
     func switchContext(
         to url: URL,
         game: SavedOfflineGame?,
-        catalog: Bool,
-        restore: SavedOfflineGame? = nil
+        catalog: Bool
     ) {
         contextGeneration += 1
+        if let view = webView {
+            view.isHidden = true
+            OfflineGameReportReceiver.shared.setActive(false, in: view)
+        }
         let generation = contextGeneration
         let finish: () -> Void = { [weak self] in
             guard let self = self, self.contextGeneration == generation else { return }
@@ -90,8 +137,7 @@ extension GameViewController {
             self.retryURL = url
             self.errorPanel?.removeFromSuperview()
             self.errorPanel = nil
-            let latest = restore.flatMap { try? self.offlineStore.game(id: $0.id) } ?? restore
-            self.prepareAndLoad(url, restoringProgressFrom: latest)
+            self.prepareAndLoad(url)
         }
         if let view = webView, offlineGame != nil {
             view.stopLoading()

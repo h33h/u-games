@@ -119,6 +119,7 @@ final class OfflineGameSchemeHandler: NSObject, WKURLSchemeHandler {
     /// WebKit calls start/stop on the main thread. Delivery also runs there, so a stopped task
     /// never receives a late didReceive/didFinish callback (WebKit treats that as an exception).
     private var active = Set<ObjectIdentifier>()
+    private var ownsPin = true
 
     init(
         game: SavedOfflineGame,
@@ -130,9 +131,20 @@ final class OfflineGameSchemeHandler: NSObject, WKURLSchemeHandler {
         self.connectivity = connectivity
     }
 
-    deinit { store.unpin(game.id) }
+    deinit {
+        if ownsPin {
+            store.unpin(game.id)
+        }
+    }
 
-    func webView(_: WKWebView, start task: WKURLSchemeTask) {
+    func finishReplay() {
+        guard ownsPin else { return }
+        ownsPin = false
+        active.removeAll()
+        store.unpin(game.id)
+    }
+
+    func webView(_ view: WKWebView, start task: WKURLSchemeTask) {
         guard connectivity.status == .offline else { task.didFailWithError(URLError(.cancelled))
             return
         }
@@ -190,10 +202,28 @@ final class OfflineGameSchemeHandler: NSObject, WKURLSchemeHandler {
                         task.didReceive(data)
                     }
                     task.didFinish()
-                case let .failure(error): task.didFailWithError(error)
+                case let .failure(error): self.failedRead(task, in: view, error: error)
                 }
             }
         }
+    }
+
+    private func failedRead(_ task: WKURLSchemeTask, in view: WKWebView, error: Error) {
+        if ["GET", "HEAD"].contains(task.request.httpMethod ?? "GET"), contains(task.request.url) {
+            task.didFailWithError(URLError(.cancelled))
+            (view.navigationDelegate as? GameViewController)?.offlineReplayFailed(game, in: view)
+        } else {
+            task.didFailWithError(error)
+        }
+    }
+
+    private func contains(_ url: URL?) -> Bool {
+        guard let url = url, url.scheme == OfflineGameStore.scheme,
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return false }
+        components.scheme = "https"
+        guard let original = components.url else { return false }
+        return game.resources[OfflineResourcePolicy.canonical(original).absoluteString] != nil
     }
 
     func webView(_: WKWebView, stop task: WKURLSchemeTask) {

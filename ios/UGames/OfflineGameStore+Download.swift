@@ -12,19 +12,28 @@ extension OfflineGameStore {
         let time = playedAt ?? now()
         let tokenID = UUID()
         let token = OfflineDownloadCancellation()
-        locked {
-            latestStorage[id] = report.storage
+        let previousProgress = locked { () -> SavedOfflineGame? in
+            let current = try? game(id: id)
+            latestStorage[id] = current
+                .flatMap { hasPendingProgress($0) ? $0.storage : nil } ?? report.storage
             played[id] = max(
                 played[id] ?? .distantPast,
                 (try? game(id: id).playedAt) ?? .distantPast,
                 time
             )
             downloads[tokenID] = token
+            return current
         }
         queue.async {
             let result: Result<SavedOfflineGame, Error> = Result {
                 guard report.ready else { throw OfflineGameError.gameNotReady }
-                return try self.download(report, visitID: visitID, token: token, progress: progress)
+                return try self.download(
+                    report,
+                    visitID: visitID,
+                    token: token,
+                    progress: progress,
+                    previousProgress: previousProgress
+                )
             }
             _ = self.locked { self.downloads.removeValue(forKey: tokenID) }
             DispatchQueue.main.async { completion(result) }
@@ -35,7 +44,8 @@ extension OfflineGameStore {
         _ report: OfflineGameReport,
         visitID: UUID?,
         token: OfflineDownloadCancellation,
-        progress: ((Int, Int) -> Void)?
+        progress: ((Int, Int) -> Void)?,
+        previousProgress: SavedOfflineGame?
     ) throws -> SavedOfflineGame {
         let entry = OfflineResourcePolicy.canonical(report.url)
         guard OfflineResourcePolicy.isGameURL(entry),
@@ -51,14 +61,14 @@ extension OfflineGameStore {
         let prior: SavedOfflineGame? = try locked {
             try token.check()
             try prepareRoot()
-            let previous = try? game(id: id)
-            if let visitID = visitID, visits[id] == visitID, let previous = previous,
+            let previous = reusableSnapshot(id: id, visitID: visitID)
+            if let previous = previous,
                Set(previous.resources.keys) == Set(urls.map(\.absoluteString))
             {
                 return previous
             }
             try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: false)
-            return visitID != nil && visits[id] == visitID ? previous : nil
+            return previous
         }
         if !FileManager.default.fileExists(atPath: staging.path), let prior = prior {
             let metadata = catalogMetadata(for: entry)
@@ -103,7 +113,7 @@ extension OfflineGameStore {
                 savedAt: now(), bytes: totalBytes, storage: latestStorage[id] ?? report.storage,
                 environment: report.environment, resources: resources
             )
-            game.lastPlayedAt = played[id] ?? now()
+            prepareProgressMetadata(previousProgress, in: &game)
             game.catalogURL = metadata?.url
             game.cover = cover
             game.coverSourceURL = cover == nil ? nil : metadata?.cover
@@ -129,6 +139,7 @@ extension OfflineGameStore {
                 try FileManager.default.moveItem(at: staging, to: destination)
             }
             occupiedBytes = max(0, (occupiedBytes ?? 0) - oldBytes)
+            failedRevisions.removeValue(forKey: id)
             if let visitID = visitID {
                 visits[id] = visitID
             } else {
@@ -136,6 +147,13 @@ extension OfflineGameStore {
             }
             return game
         }
+    }
+
+    private func reusableSnapshot(id: String, visitID: UUID?) -> SavedOfflineGame? {
+        guard let visitID = visitID, visits[id] == visitID, let previous = try? game(id: id),
+              previous.requiresRefresh != true,
+              failedRevisions[id] != previous.savedAt else { return nil }
+        return previous
     }
 
     private func downloadResources(

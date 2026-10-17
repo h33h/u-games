@@ -428,4 +428,18 @@ class OfflineGameStoreTest {
         store.delete(refreshed.id)
         assertTrue(store.listGames().isEmpty())
     }
+
+    @Test fun acquireRejectsAMissingSnapshotOrEntryAndATruncatedReferencedResource() {
+        for (damage in listOf("snapshot", "entry", "resource")) {
+            val store = OfflineGameStore(temporary.newFolder(), filter, fixtureDownloader())
+            val saved = store.save(snapshot())
+            when (damage) {
+                "snapshot" -> saved.resource(entry)!!.file.parentFile!!.deleteRecursively()
+                "entry" -> saved.resource(entry)!!.file.delete()
+                else -> saved.resource(script)!!.file.writeBytes(byteArrayOf(1))
+            }
+            assertNull(damage, store.acquire(saved.id))
+            assertTrue(damage, store.listGames().isEmpty())
+        }
+    }
 }

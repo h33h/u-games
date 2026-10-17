@@ -34,6 +34,8 @@ class MainActivity : ComponentActivity() {
     private val visits = mutableMapOf<WebView, CaptureVisit>()
     private val offlineWindows = mutableMapOf<WebView, OfflineReplayLease>()
     private val offlineCatalogs = mutableSetOf<WebView>()
+    private val directCatalogs = mutableSetOf<WebView>()
+    private val failedSnapshots = mutableSetOf<String>()
     private val downloads = Executors.newSingleThreadExecutor()
     private val indexIO = Executors.newSingleThreadExecutor()
     private val offlineStore by lazy {
@@ -182,6 +184,7 @@ class MainActivity : ComponentActivity() {
         visits.remove(view)
         val replayLease = offlineWindows.remove(view)
         offlineCatalogs.remove(view)
+        directCatalogs.remove(view)
         content.removeView(view)
         view.stopLoading()
         view.destroy()
@@ -278,17 +281,53 @@ class MainActivity : ComponentActivity() {
 
     fun pageLoadFailed(view: WebView, message: String) {
         if (view !== current) return
-        if (!isInternetAvailable && view !in offlineWindows &&
-            view !in offlineCatalogs
-        ) {
-            openOfflineCatalog()
-        } else {
-            showError(message)
-        }
+        if (recoverOfflineSurface(view)) return
+        if (!isInternetAvailable) openOfflineCatalog() else showError(message)
     }
 
     fun pageHttpFailed(view: WebView, message: String) {
-        if (view === current) showError(message)
+        if (view !== current || recoverOfflineSurface(view)) return
+        showError(message)
+    }
+
+    fun offlineCacheFailed(view: WebView) {
+        if (view === current) recoverOfflineSurface(view)
+    }
+
+    fun offlinePreparationFailed(view: WebView) {
+        if (view === current) recoverOfflineSurface(view)
+    }
+
+    private fun recoverOfflineSurface(view: WebView): Boolean {
+        offlineWindows[view]?.let { lease ->
+            failedSnapshots.add(lease.game.snapshotKey)
+            cachedGames = cachedGames.filterNot { it.snapshotKey in failedSnapshots }
+            openOfflineCatalog()
+            return true
+        }
+        if (view in offlineCatalogs) {
+            if (directCatalogs.add(view)) {
+                try {
+                    ProtectedWebViewFactory.loadOfflineCatalogDirect(view)
+                } catch (
+                    error: Exception
+                ) {
+                    showSetupError(error)
+                }
+            }
+            return true
+        }
+        return false
+    }
+
+    private fun showSetupError(error: Exception) {
+        showError(
+            if (error is UnsupportedOperationException) {
+                "Обнови Android System WebView и перезапусти UGames, чтобы открыть игры без рекламы."
+            } else {
+                "Не удалось подготовить приложение. Попробуй перезапустить UGames."
+            }
+        )
     }
 
     fun rendererGone(view: WebView) {
@@ -310,6 +349,7 @@ class MainActivity : ComponentActivity() {
         offlineWindows.values.forEach(OfflineReplayLease::close)
         offlineWindows.clear()
         offlineCatalogs.clear()
+        directCatalogs.clear()
         showError("Игра закрылась. Можно открыть её снова.")
     }
 
@@ -398,6 +438,7 @@ class MainActivity : ComponentActivity() {
         offlineWindows.values.forEach(OfflineReplayLease::close)
         offlineWindows.clear()
         offlineCatalogs.clear()
+        directCatalogs.clear()
         super.onDestroy()
     }
 
@@ -511,7 +552,7 @@ class MainActivity : ComponentActivity() {
             val games = runCatching { offlineStore.listGames() }.getOrDefault(emptyList())
             runOnUiThread {
                 if (!isDestroyed) {
-                    cachedGames = games
+                    cachedGames = games.filterNot { it.snapshotKey in failedSnapshots }
                     completed()
                 }
             }
@@ -538,6 +579,11 @@ class MainActivity : ComponentActivity() {
                     lease?.close()
                     return@runOnUiThread
                 }
+                if (lease != null && lease.game.snapshotKey in failedSnapshots) {
+                    lease.close()
+                    openOfflineCatalog()
+                    return@runOnUiThread
+                }
                 if (lease == null) {
                     cachedGames = cachedGames.filterNot { it.id == game.id }
                     openOfflineCatalog()
@@ -545,13 +591,17 @@ class MainActivity : ComponentActivity() {
                 }
                 closeAllWindows()
                 lastUrl = lease.game.entryUrl
+                val view = try {
+                    ProtectedWebViewFactory.create(this, offlineLease = lease).also(::showWindow)
+                } catch (error: Exception) {
+                    lease.close()
+                    showSetupError(error)
+                    return@runOnUiThread
+                }
                 try {
-                    val view = ProtectedWebViewFactory.create(this, offlineLease = lease)
-                    showWindow(view)
                     ProtectedWebViewFactory.loadOfflineGame(view, lease.game)
                 } catch (_: Exception) {
-                    lease.close()
-                    showError("Не удалось открыть игру. Попробуй открыть её ещё раз из каталога.")
+                    offlineCacheFailed(view)
                 }
             }
         }
@@ -569,8 +619,8 @@ class MainActivity : ComponentActivity() {
             val view = ProtectedWebViewFactory.create(this, cachedCatalog = cachedGames)
             showWindow(view)
             ProtectedWebViewFactory.loadOfflineCatalog(view)
-        } catch (_: Exception) {
-            showError("Не удалось открыть каталог. Попробуй ещё раз.")
+        } catch (error: Exception) {
+            showSetupError(error)
         }
     }
 

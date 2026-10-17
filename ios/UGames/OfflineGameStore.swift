@@ -30,6 +30,8 @@ final class OfflineGameStore {
     var pins: [String: Int] = [:]
     var downloads: [UUID: OfflineDownloadCancellation] = [:]
     var catalog: [String: OfflineCatalogMetadata]?
+    var failedRevisions: [String: Date] = [:]
+    var restoredProgressRevisions = Set<String>()
 
     init(
         rootURL: URL,
@@ -95,7 +97,7 @@ final class OfflineGameStore {
 
     func game(matching url: URL) -> SavedOfflineGame? {
         guard OfflineResourcePolicy.isHTTPS(url) else { return nil }
-        return (try? games())?.first {
+        return (try? replayableGames())?.first {
             OfflineResourcePolicy.canonical($0.url) == OfflineResourcePolicy.canonical(url) ||
                 ($0.catalogURL.map(OfflineResourcePolicy.canonical) == OfflineResourcePolicy
                     .canonical(url))
@@ -108,9 +110,50 @@ final class OfflineGameStore {
 
     func pinnedGame(id: String) throws -> SavedOfflineGame {
         try locked {
-            let current = try game(id: id)
-            pins[id, default: 0] += 1
-            return current
+            do {
+                let current = try game(id: id)
+                try validateReplay(current)
+                pins[id, default: 0] += 1
+                return current
+            } catch { throw OfflineGameError.missingResource }
+        }
+    }
+
+    func replayableGames() throws -> [SavedOfflineGame] {
+        try locked { try games().filter { (try? validateReplay($0)) != nil } }
+    }
+
+    private func validateReplay(_ game: SavedOfflineGame) throws {
+        guard game.requiresRefresh != true, failedRevisions[game.id] != game.savedAt else {
+            throw OfflineGameError.missingResource
+        }
+        for (url, resource) in game.resources {
+            guard let url = URL(string: url),
+                  let attributes = try? FileManager.default
+                  .attributesOfItem(atPath: directory(game.id)
+                      .appendingPathComponent(OfflineResourcePolicy.key(url)).path),
+                  attributes[.type] as? FileAttributeType == .typeRegular,
+                  (attributes[.size] as? NSNumber)?.int64Value == resource.bytes
+            else { throw OfflineGameError.missingResource }
+        }
+    }
+
+    func suppressReplay(_ failed: SavedOfflineGame) {
+        locked {
+            if let current = try? game(id: failed.id), current.savedAt != failed.savedAt {
+                return
+            }
+            failedRevisions[failed.id] = failed.savedAt
+        }
+        metadataQueue.async {
+            try? self.locked {
+                var current = try self.game(id: failed.id)
+                guard current.savedAt == failed.savedAt,
+                      self.failedRevisions[failed.id] == failed.savedAt,
+                      current.requiresRefresh != true else { return }
+                current.requiresRefresh = true
+                try self.writeManifest(current)
+            }
         }
     }
 
@@ -138,19 +181,45 @@ final class OfflineGameStore {
     func updateStorage(
         _ storage: [String: String],
         for id: String,
+        offline: Bool = false,
         completion: ((Error?) -> Void)? = nil
     ) {
         guard let data = try? JSONEncoder().encode(storage), data.count <= 2 * 1024 * 1024 else {
             DispatchQueue.main.async { completion?(OfflineGameError.invalidReport) }
             return
         }
-        locked { latestStorage[id] = storage }
+        let accepted = locked { () -> Bool in
+            if !offline, let current = try? game(id: id),
+               hasPendingProgress(current)
+            {
+                return false
+            }
+            latestStorage[id] = storage
+            return true
+        }
+        guard accepted else { DispatchQueue.main.async { completion?(nil) }
+            return
+        }
         metadataQueue.async {
             do {
                 try self.locked {
                     var game = try self.game(id: id)
+                    if !offline, self.hasPendingProgress(game) {
+                        return
+                    }
                     guard game.storage != storage else { return }
-                    try game.replaceStorage(self.latestStorage[id] ?? storage)
+                    let values = self.latestStorage[id] ?? storage
+                    let changedOffline = offline && self.progressValues(game.storage) != self
+                        .progressValues(values)
+                    try game.replaceStorage(values)
+                    if changedOffline {
+                        game.pendingProgressRevision = UUID().uuidString
+                        game.offlineEditedAt = self.now()
+                    } else if game.pendingProgressRevision
+                        .map(self.restoredProgressRevisions.contains) == true
+                    {
+                        game.pendingProgressRevision = nil
+                    }
                     try self.writeManifest(game)
                 }
                 DispatchQueue.main.async { completion?(nil) }

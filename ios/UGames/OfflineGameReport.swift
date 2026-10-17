@@ -279,25 +279,25 @@ final class OfflineGameReportReceiver: NSObject, WKScriptMessageHandler {
             else { completion()
                 return
             }
-            state.store.updateStorage(storage, for: game.id) { _ in completion() }
+            state.store.updateStorage(storage, for: game.id, offline: true) { _ in completion() }
         }
     }
 
     func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let view = message.webView, let state = states.object(forKey: view) else { return }
         let origin = OfflineReportOrigin(message.frameInfo.securityOrigin)
-        if state.game == nil, let body = message.body as? String, body.utf8.count <= 8192,
-           let data = body.data(using: .utf8),
-           let visit = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           visit["version"] as? Int == 1, visit["type"] as? String == "visit",
-           let value = visit["url"] as? String, let url = URL(string: value),
-           OfflineResourcePolicy.isGameURL(url), origin.scheme == "https",
-           origin.host == url.host?.lowercased(), origin.port == 0 || origin.port == 443
-        {
-            state.scheduled?.cancel()
-            state.report = nil
-            state.visitID = UUID()
-            state.attemptedResources = nil
+        if state.game == nil, let restored = state.store.acknowledgeProgress(
+            message.body,
+            origin: origin
+        ) {
+            ProtectedWebViewFactory.finishPendingProgress(
+                restored.0,
+                revision: restored.1,
+                in: view
+            )
+            return
+        }
+        if receiveVisit(message.body, origin: origin, state: state) {
             return
         }
         if state.game == nil, let metadata = try? OfflineCatalogMetadata.parse(
@@ -327,8 +327,8 @@ final class OfflineGameReportReceiver: NSObject, WKScriptMessageHandler {
                   offlineGame: state.game
               ) else { return }
         state.report = report
-        if let game = state.game {
-            state.store.updateStorage(report.storage, for: game.id)
+        if let game = state.game, state.active {
+            state.store.updateStorage(report.storage, for: game.id, offline: true)
         } else if report.ready, state.active, state.connectivity.status != .offline,
                   UIApplication.shared.applicationState != .background
         {
@@ -339,8 +339,31 @@ final class OfflineGameReportReceiver: NSObject, WKScriptMessageHandler {
         NotificationCenter.default.post(name: Self.updated, object: view)
     }
 
+    private func receiveVisit(
+        _ body: Any,
+        origin: OfflineReportOrigin,
+        state: OfflineReportState
+    ) -> Bool {
+        if state.game == nil, let body = body as? String, body.utf8.count <= 8192,
+           let data = body.data(using: .utf8),
+           let visit = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           visit["version"] as? Int == 1, visit["type"] as? String == "visit",
+           let value = visit["url"] as? String, let url = URL(string: value),
+           OfflineResourcePolicy.isGameURL(url), origin.scheme == "https",
+           origin.host == url.host?.lowercased(), origin.port == 0 || origin.port == 443
+        {
+            state.scheduled?.cancel()
+            state.report = nil
+            state.visitID = UUID()
+            state.attemptedResources = nil
+            return true
+        }
+        return false
+    }
+
     private func scheduleCache(in view: WKWebView, state: OfflineReportState) {
-        guard state.active, !state.saving, let report = state.report, report.ready else { return }
+        guard state.active, !state.saving, let report = state.report, report.ready,
+              !state.store.hasPendingProgress(for: report.url) else { return }
         let resources = Set(([report.url] + report.resources)
             .map { OfflineResourcePolicy.canonical($0).absoluteString })
         guard state.attemptedResources != resources || Date()

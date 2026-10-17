@@ -83,7 +83,7 @@ enum OfflineCatalog {
         struct Catalog: Encodable { let version = 1
             let games: [Entry]
         }
-        let entries = ((try? store.games()) ?? []).map { game in
+        let entries = ((try? store.replayableGames()) ?? []).map { game in
             Entry(
                 url: game.url,
                 title: game.title,

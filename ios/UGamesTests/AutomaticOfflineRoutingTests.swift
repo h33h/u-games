@@ -56,34 +56,36 @@ final class AutomaticOfflineRoutingTests: OfflineGameTestCase {
         respond(entry, mime: "text/html", Data("<p>Game</p>".utf8))
         let game = try save(report(storage: ["level": "7", "coins": "100"]), to: storage)
         let first = expectation(description: "Offline reset persists")
-        storage.updateStorage(["level": "8"], for: game.id) { error in XCTAssertNil(error)
-            first.fulfill()
-        }
+        storage
+            .updateStorage(["level": "8"], for: game.id, offline: true) { error in
+                XCTAssertNil(error)
+                first.fulfill()
+            }
         wait(for: [first], timeout: 5)
         let reopened = try store()
         let second = expectation(description: "Further offline progress after restart persists")
-        reopened.updateStorage(["level": "9"], for: game.id) { error in XCTAssertNil(error)
-            second.fulfill()
-        }
+        reopened
+            .updateStorage(["level": "9"], for: game.id, offline: true) { error in
+                XCTAssertNil(error)
+                second.fulfill()
+            }
         wait(for: [second], timeout: 5)
-        let latest = try reopened.game(id: game.id)
         let ready = expectation(description: "Normal restoration context prepares")
         var result: Result<WKWebView, Error>?
         ProtectedWebViewFactory.make(
             offlineStore: reopened,
-            connectivity: OfflineConnectivity(status: .online, monitoring: false),
-            restoringProgressFrom: latest
+            connectivity: OfflineConnectivity(status: .online, monitoring: false)
         ) { result = $0
             ready.fulfill()
         }
         try waitForWebView(ready)
         let view = try XCTUnwrap(result).get()
         let restore = try XCTUnwrap(view.configuration.userContentController.userScripts
-            .first { $0.source.hasPrefix("/* UGames progress restore */") })
+            .first { $0.source.hasPrefix("/* UGames pending progress ") })
         view.loadHTMLString("<p>Normal game</p>", baseURL: URL(string: entry))
         try waitForJavaScript("document.readyState==='complete'", in: view)
         try evaluateJavaScript(
-            "window.restored={coins:'old-online-coins',auth:'unrelated-auth',other:'keep'};Object.defineProperty(window,'localStorage',{value:{setItem:(k,v)=>window.restored[k]=v,removeItem:k=>delete window.restored[k]}});" +
+            "window.restored={coins:'old-online-coins',auth:'unrelated-auth',other:'keep'};Object.defineProperty(window,'localStorage',{value:{getItem:k=>window.restored[k]??null,setItem:(k,v)=>window.restored[k]=v,removeItem:k=>delete window.restored[k]}});" +
                 restore.source,
             in: view
         )
@@ -290,14 +292,14 @@ final class AutomaticOfflineRoutingTests: OfflineGameTestCase {
         let online = try XCTUnwrap(controller.webView)
         XCTAssertTrue(online.configuration.websiteDataStore.isPersistent)
         let restore = try XCTUnwrap(online.configuration.userContentController.userScripts
-            .first { $0.source.hasPrefix("/* UGames progress restore */") })
+            .first { $0.source.hasPrefix("/* UGames pending progress ") })
         online.stopLoading()
         online.loadHTMLString("<p>Normal online game</p>", baseURL: URL(string: entry))
         try waitForJavaScript("document.readyState==='complete'", in: online)
         // loadHTMLString has an opaque storage origin; execute the real restoration script
         // against controlled storage without relaxing native bridge origin validation.
         try evaluateJavaScript(
-            "window.restored={};Object.defineProperty(window,'localStorage',{value:{setItem:(key,value)=>window.restored[key]=value}});" +
+            "window.restored={};Object.defineProperty(window,'localStorage',{value:{getItem:key=>window.restored[key]??null,setItem:(key,value)=>window.restored[key]=value,removeItem:key=>delete window.restored[key]}});" +
                 restore.source,
             in: online
         )

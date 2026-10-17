@@ -111,16 +111,6 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
-      - name: Identify Xcode cache
-        id: xcode
-        run: echo "version=$(xcodebuild -version | shasum -a 256 | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
-      - name: Restore Xcode build cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: ${{ runner.temp }}/UGamesDerivedData
-          key: xcode-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('ios/**', 'shared/**', 'scripts/build*') }}
-          restore-keys: |
-            xcode-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-
       - run: brew install xcodegen
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'

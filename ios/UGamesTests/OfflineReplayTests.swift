@@ -5,6 +5,52 @@ import XCTest
 
 @MainActor
 final class OfflineReplayTests: OfflineGameTestCase {
+    func testReplayFetchesExternalAddressablesFromBinaryCatalogueWithoutNetwork() throws {
+        let storageURL = "https://storage.yandexcloud.net/itsjasonstudiobasebacket/GamersMod/Adressables/1.4/"
+        let hash = storageURL + "catalog.hash"
+        let catalogue = storageURL + "catalog.bin"
+        let bundle = storageURL + "level.bundle"
+        respond(entry, mime: "text/html", Data("""
+        <!doctype html><html><head></head><body><script>
+        window.fixtureResult = {pending:true};
+        const storage = ['https:', '', 'storage.yandexcloud.net', 'itsjasonstudiobasebacket/GamersMod/Adressables/1.4/'].join('/');
+        Promise.all([
+          fetch(new Request(storage + 'catalog.hash')).then(response => response.text()),
+          fetch(storage + 'catalog.bin').then(response => response.arrayBuffer())
+        ]).then(async ([hash, catalogue]) => {
+          const bundleURL = new TextDecoder().decode(new Uint8Array(catalogue).subarray(4));
+          const bytes = await new Promise((resolve, reject) => {
+            const request = new XMLHttpRequest();
+            request.open('GET', bundleURL);
+            request.responseType = 'arraybuffer';
+            request.onload = () => request.status === 200 ? resolve(Array.from(new Uint8Array(request.response))) : reject(new Error('Bundle HTTP ' + request.status));
+            request.onerror = () => reject(new Error('Bundle request failed'));
+            request.send();
+          });
+          window.fixtureResult = {pending:false, hash, bundleURL, bytes};
+        }).catch(error => { window.fixtureResult = {error:String(error)}; });
+        </script></body></html>
+        """.utf8))
+        respond(hash, mime: "text/plain", Data("catalogue-revision".utf8))
+        respond(
+            catalogue,
+            mime: "application/octet-stream",
+            Data([0, 255, 1, 0]) + Data(bundle.utf8)
+        )
+        respond(bundle, mime: "application/octet-stream", Data([0, 1, 127, 128, 254, 255]))
+        let storage = try store()
+        let saved = try save(report(resources: [hash, catalogue, bundle]), to: storage)
+        let downloadCount = OfflineFixtureProtocol.requests.count
+        let (view, controller) = try openOfflineView(saved, storage: storage)
+        let value = try fixtureResult(in: view)
+        _ = controller
+        XCTAssertNil(value["error"], String(describing: value))
+        XCTAssertEqual(value["hash"] as? String, "catalogue-revision")
+        XCTAssertEqual(value["bundleURL"] as? String, bundle)
+        XCTAssertEqual(value["bytes"] as? [Int], [0, 1, 127, 128, 254, 255])
+        XCTAssertEqual(OfflineFixtureProtocol.requests.count, downloadCount)
+    }
+
     private func saveReplayFixture(to storage: OfflineGameStore) throws -> SavedOfflineGame {
         let origin = "https://app-123.games.s3.yandex.net/game/"
         let integrityScript = Data(

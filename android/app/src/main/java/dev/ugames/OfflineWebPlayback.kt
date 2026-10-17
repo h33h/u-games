@@ -86,7 +86,7 @@ class OfflineWebPlayback(
                 resource.encoding,
                 200,
                 "OK",
-                OfflineResponseBody.headers(resource.headers),
+                responseHeaders(url, resource),
                 OfflineResponseBody.open(
                     resource.file.inputStream(),
                     resource.headers,
@@ -96,6 +96,21 @@ class OfflineWebPlayback(
         } catch (_: Exception) {
             failedResource()
         }
+    }
+
+    private fun responseHeaders(url: String, resource: SavedOfflineResource): Map<String, String> {
+        val headers = OfflineResponseBody.headers(resource.headers)
+        val origin = requireNotNull(OfflineResourcePolicy.origin(game.entryUrl))
+        if (OfflineResourcePolicy.origin(url) == origin) return headers
+        // Downloads outside WebView can omit origin-dependent CORS headers.
+        // Only this game's origin may read saved public files from another host.
+        return headers.filterKeys {
+            !it.equals("Access-Control-Allow-Origin", true) &&
+                !it.equals("Access-Control-Allow-Credentials", true)
+        } + mapOf(
+            "Access-Control-Allow-Origin" to origin,
+            "Access-Control-Allow-Credentials" to "true"
+        )
     }
 
     companion object {

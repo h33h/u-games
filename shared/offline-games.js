@@ -6,6 +6,10 @@
   const doc = win.document;
   const config = win.__UGamesOfflineConfig;
   const gameHost = /\.(?:games\.yandex\.net|games\.s3\.yandex\.net)$/;
+  const staticAsset =
+    /\.(?:js|mjs|cjs|css|json|wasm|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|mp3|wav|ogg|m4a|mp4|webm|bin|data|pck|bundle|unityweb|gz|br|txt|xml|atlas|ktx2?|basis|mem|dat|fnt|glb|gltf|hash)$/i;
+  const servicePath =
+    /\/(?:api|auth|oauth|login|logout|passport|account|payments?|billing|analytics|telemetry|metrics)(?:\/|$)/i;
   const entry = new win.URL(config?.url || win.location.href);
   const isGame = gameHost.test(entry.hostname);
   const prefix = 'ugames.offline.';
@@ -220,6 +224,7 @@
         return Promise.resolve();
       },
       getMode: () => 'lite',
+      isAuthorized: () => false,
       getUniqueID: () => 'ugames-offline-' + config.gameId,
       getName: () => 'Игрок',
       getPhoto: () => '',
@@ -503,8 +508,35 @@
     if (!catalogPage) {
       return;
     }
-    const title = doc.querySelector('meta[property="og:title"]')?.content || doc.title;
-    const cover = doc.querySelector('meta[property="og:image"]')?.content;
+    const current = catalogURL(win.location.href);
+    let details;
+    if (current) {
+      for (const script of doc.querySelectorAll('script[type="application/ld+json"]')) {
+        try {
+          const data = JSON.parse(script.textContent);
+          const game = (Array.isArray(data?.['@graph']) ? data['@graph'] : [data]).find(
+            (item) =>
+              item?.['@type'] === 'VideoGame' && catalogURL(item.url)?.gameId === current.gameId,
+          );
+          if (game) {
+            let cover = catalogCover(game.image);
+            if (cover) {
+              const image = new win.URL(cover);
+              // Use the same small raster rendition as real catalogue cards.
+              if (/^\/get-games\/[^/]+\/[^/]+\/orig$/.test(image.pathname)) {
+                image.pathname = image.pathname.replace(/\/orig$/, '/pjpg464x261');
+                cover = image.href;
+              }
+            }
+            details = { title: typeof game.name === 'string' ? game.name.trim() : '', cover };
+            break;
+          }
+        } catch (_) {}
+      }
+    }
+    const title =
+      details?.title || doc.querySelector('meta[property="og:title"]')?.content || doc.title;
+    const cover = details?.cover || doc.querySelector('meta[property="og:image"]')?.content;
     rememberCatalogGame(win.location.href, title, cover);
   }
   if (catalogPage) {
@@ -604,12 +636,23 @@
         if (config?.scheme && url.protocol === config.scheme) {
           url = new win.URL(url.href.replace(config.scheme, 'https:'));
         }
+        const externalAsset =
+          (url.hostname === 'storage.yandexcloud.net' ||
+            url.hostname === 'yastatic.net' ||
+            url.hostname.endsWith('.yastatic.net')) &&
+          staticAsset.test(url.pathname) &&
+          !servicePath.test(url.pathname) &&
+          !Array.from(url.searchParams.keys()).some((key) =>
+            /^(?:token|access_token|auth|authorization|session|sessionid|password|x-amz-credential|x-amz-signature|x-amz-security-token|awsaccesskeyid|signature)$/i.test(
+              key,
+            ),
+          );
         if (
           url.protocol !== 'https:' ||
           url.username ||
           url.password ||
           url.port ||
-          !gameHost.test(url.hostname) ||
+          (!gameHost.test(url.hostname) && !externalAsset) ||
           /\/(?:sdk(?:\.js|\/)|api\/)/i.test(url.pathname)
         ) {
           return;

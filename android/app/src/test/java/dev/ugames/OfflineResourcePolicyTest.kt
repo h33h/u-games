@@ -11,6 +11,13 @@ import org.junit.Test
 class OfflineResourcePolicyTest {
     private val entry = "https://app-42.cdn.games.yandex.net/game/index.html?lang=ru"
 
+    @Test fun addressableCatalogHashesAreSavedAlongsideTheCatalogAndBundles() {
+        val root = "https://storage.yandexcloud.net/game-assets/Addressables/1.4/"
+        for (name in listOf("catalog.hash", "catalog.bin", "scene.bundle")) {
+            assertTrue(name, OfflineResourcePolicy.canSave(entry, root + name))
+        }
+    }
+
     @Test fun normalizationPreservesQueryAndRejectsInsecureOrCredentialedUrls() {
         assertEquals(
             "https://app-42.cdn.games.yandex.net/game/a.js?v=1",

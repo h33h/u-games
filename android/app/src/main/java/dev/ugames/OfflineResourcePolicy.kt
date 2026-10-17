@@ -12,7 +12,7 @@ object OfflineResourcePolicy {
         "js", "mjs", "cjs", "css", "json", "wasm", "png", "jpg", "jpeg", "gif", "webp",
         "avif", "svg", "ico", "woff", "woff2", "ttf", "otf", "mp3", "wav", "ogg", "m4a",
         "mp4", "webm", "bin", "data", "pck", "bundle", "unityweb", "gz", "br", "txt",
-        "xml", "atlas", "ktx", "ktx2", "basis", "mem", "dat", "fnt", "glb", "gltf"
+        "xml", "atlas", "ktx", "ktx2", "basis", "mem", "dat", "fnt", "glb", "gltf", "hash"
     )
     private val servicePath =
         Regex(

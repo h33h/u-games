@@ -4,6 +4,77 @@ import XCTest
 
 @MainActor
 final class OfflineGameTests: OfflineGameTestCase {
+    func testPublicObjectStorageAllowsStaticGameFilesAndRejectsServicesAndCredentials() throws {
+        let policy = OfflineResourcePolicy()
+        let storage = "https://storage.yandexcloud.net/itsjasonstudiobasebacket/GamersMod/Adressables/1.4/"
+        for file in [
+            "catalog.hash",
+            "catalog.bin",
+            "level.bundle",
+            "catalog.json",
+            "build.wasm.br",
+        ] {
+            XCTAssertTrue(try policy.allows(XCTUnwrap(URL(string: storage + file))), file)
+        }
+        for url in [
+            storage + "catalog",
+            storage + "player.php",
+            storage + "api/player.json",
+            storage + "account/player.json",
+            storage + "sdk.js",
+            storage + "level.bundle?token=private",
+            storage + "level.bundle?sessionid=private",
+            storage + "level.bundle?X-Amz-Credential=private",
+            storage + "level.bundle?X-Amz-Signature=private",
+            storage + "level.bundle?X-Amz-Security-Token=private",
+            storage + "level.bundle?AWSAccessKeyId=private&Signature=private",
+            "https://storage.yandexcloud.net.evil.test/game/level.bundle",
+            "https://user:password@storage.yandexcloud.net/game/level.bundle",
+            "https://storage.yandexcloud.net:444/game/level.bundle",
+            "http://storage.yandexcloud.net/game/level.bundle",
+            "https://evil.test/game/level.bundle",
+        ] {
+            XCTAssertFalse(try policy.allows(XCTUnwrap(URL(string: url))), url)
+        }
+    }
+
+    func testPublicAddressablesSurviveSavingAndReloadingWithBinaryCatalogueIntact() throws {
+        let storageURL = "https://storage.yandexcloud.net/itsjasonstudiobasebacket/GamersMod/Adressables/1.4/"
+        let hash = storageURL + "catalog.hash"
+        let catalogue = storageURL + "catalog.bin"
+        let bundle = storageURL + "level.bundle"
+        let catalogueBytes = Data([0, 255, 1, 0]) + Data(bundle.utf8)
+        let bundleBytes = Data([0, 1, 127, 128, 254, 255])
+        respond(entry, mime: "text/html", Data("<p>Game</p>".utf8))
+        respond(hash, mime: "text/plain", Data("catalogue-revision".utf8))
+        respond(catalogue, mime: "application/octet-stream", catalogueBytes)
+        respond(bundle, mime: "application/octet-stream", bundleBytes)
+        let saved = try save(report(resources: [hash, catalogue, bundle]), to: store())
+        let reopened = try store()
+        let game = try XCTUnwrap(reopened.games().first)
+        XCTAssertEqual(game.id, saved.id)
+        XCTAssertEqual(game.resources.count, 4)
+        for (original, expected) in [
+            (hash, Data("catalogue-revision".utf8)),
+            (catalogue, catalogueBytes),
+            (bundle, bundleBytes),
+        ] {
+            let url = try XCTUnwrap(URL(string: original.replacingOccurrences(
+                of: "https:",
+                with: "ugames-offline:"
+            )))
+            XCTAssertEqual(try reopened.response(for: url, in: game).data, expected, original)
+        }
+        XCTAssertEqual(
+            Set(OfflineFixtureProtocol.requests.compactMap { $0.url?.absoluteString }),
+            Set([entry, hash, catalogue, bundle])
+        )
+        XCTAssertTrue(OfflineFixtureProtocol.requests.allSatisfy {
+            $0.value(forHTTPHeaderField: "Cookie") == nil &&
+                $0.value(forHTTPHeaderField: "Authorization") == nil
+        })
+    }
+
     func testEmptyOrPartialHTTPResponsesCannotReplaceAnExistingGame() throws {
         respond(entry, mime: "text/html", Data("<p>Original game</p>".utf8))
         let storage = try store()

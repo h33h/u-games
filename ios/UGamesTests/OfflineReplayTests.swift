@@ -237,7 +237,11 @@ final class OfflineReplayTests: OfflineGameTestCase {
         let ready = expectation(description: "Offline WebView configured")
         var result: Result<WKWebView, Error>?
         ProtectedWebViewFactory
-            .make(offlineGame: saved, offlineStore: storage) { value in result = value
+            .make(
+                offlineGame: saved,
+                offlineStore: storage,
+                connectivity: OfflineConnectivity(status: .offline, monitoring: false)
+            ) { value in result = value
                 ready.fulfill()
             }
         try waitForWebView(ready)

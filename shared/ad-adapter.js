@@ -531,6 +531,12 @@
     });
   }
   const rules = win.__UGamesRules;
+  const cachedCatalogContext =
+    win.__UGamesCachedCatalog?.version === 1 &&
+    win.top === win &&
+    ['https:', 'ugames-offline:'].includes(win.location?.protocol) &&
+    ['yandex.ru', 'yandex.com'].includes(win.location.hostname) &&
+    /^\/games\/?$/.test(win.location.pathname);
   function allowedDestination(value, target, source) {
     if (value === 'about:blank') {
       return true;
@@ -554,6 +560,28 @@
       }
       if (url.protocol !== 'https:' || url.username || url.password || url.port) {
         return false;
+      }
+      if (
+        cachedCatalogContext &&
+        /\.(?:games\.yandex\.net|games\.s3\.yandex\.net)$/.test(url.hostname)
+      ) {
+        const games = win.__UGamesCachedCatalog?.games;
+        if (
+          (target && !['_self', '_top', '_parent'].includes(target.toLowerCase())) ||
+          !Array.isArray(games)
+        ) {
+          return false;
+        }
+        url.hash = '';
+        return games.some((game) => {
+          try {
+            const entry = new win.URL(game?.url);
+            entry.hash = '';
+            return entry.href === url.href;
+          } catch (_) {
+            return false;
+          }
+        });
       }
       if (
         (/^(?:www\.)?yandex\.(?:ru|com)$/.test(url.hostname) &&

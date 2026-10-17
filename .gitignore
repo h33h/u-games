@@ -10,6 +10,7 @@ android/app/src/main/assets/ugames/
 ios/UGames.xcodeproj/
 ios/UGames/Resources/ad-adapter.js
 ios/UGames/Resources/content-rules.json
+ios/UGames/Resources/offline-catalog.html
 ios/build/
 ios/build-device/
 .impeccable/review/

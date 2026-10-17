@@ -8,10 +8,14 @@ final class OfflineFixtureProtocol: URLProtocol {
         let mime: String
         let data: Data
         let status: Int
+        var held = false
     }
 
     static var responses: [String: Response] = [:]
     static var requests: [URLRequest] = []
+    static var pending: [String: [() -> Void]] = [:]
+    private let deliveryLock = NSLock()
+    private var stopped = false
 
     override static func canInit(with _: URLRequest) -> Bool {
         true
@@ -30,18 +34,42 @@ final class OfflineFixtureProtocol: URLProtocol {
             client?.urlProtocol(self, didFailWithError: URLError(.resourceUnavailable))
             return
         }
-        let response = HTTPURLResponse(
-            url: request.url!,
-            statusCode: fixture.status,
-            httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Type": fixture.mime]
-        )!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: fixture.data)
-        client?.urlProtocolDidFinishLoading(self)
+        let deliver = {
+            self.deliveryLock.lock()
+            let stopped = self.stopped
+            self.deliveryLock.unlock()
+            guard !stopped else { return }
+            let response = HTTPURLResponse(
+                url: self.request.url!,
+                statusCode: fixture.status,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Content-Type": fixture.mime]
+            )!
+            self.client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            self.client?.urlProtocol(self, didLoad: fixture.data)
+            self.client?.urlProtocolDidFinishLoading(self)
+        }
+        if fixture.held {
+            Self.lock.lock()
+            Self.pending[request.url!.absoluteString, default: []].append(deliver)
+            Self.lock.unlock()
+        } else {
+            deliver()
+        }
     }
 
-    override func stopLoading() {}
+    override func stopLoading() {
+        deliveryLock.lock()
+        stopped = true
+        deliveryLock.unlock()
+    }
+
+    static func resume(_ url: String) {
+        lock.lock()
+        let deliveries = pending.removeValue(forKey: url) ?? []
+        lock.unlock()
+        deliveries.forEach { $0() }
+    }
 }
 
 final class OfflineTaskProbe: NSObject, WKURLSchemeTask {
@@ -89,6 +117,7 @@ class OfflineGameTestCase: WebViewTestCase {
         OfflineFixtureProtocol.lock.lock()
         OfflineFixtureProtocol.responses = [:]
         OfflineFixtureProtocol.requests = []
+        OfflineFixtureProtocol.pending = [:]
         OfflineFixtureProtocol.lock.unlock()
     }
 
@@ -117,32 +146,43 @@ class OfflineGameTestCase: WebViewTestCase {
         )
     }
 
-    func store(maximumBytes: Int64 = 512 * 1024 * 1024) throws -> OfflineGameStore {
+    func store(
+        maximumBytes: Int64 = OfflineGameStore.maximumCacheBytes,
+        now: @escaping () -> Date = Date.init
+    ) throws -> OfflineGameStore {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [OfflineFixtureProtocol.self]
         return OfflineGameStore(
             rootURL: directory,
-            maximumGameBytes: maximumBytes,
-            sessionConfiguration: configuration
+            maximumCacheBytes: maximumBytes,
+            sessionConfiguration: configuration,
+            now: now
         )
     }
 
     func save(
         _ report: OfflineGameReport,
-        to store: OfflineGameStore
+        to store: OfflineGameStore,
+        visitID: UUID? = nil,
+        playedAt: Date? = nil
     ) throws -> SavedOfflineGame {
         let done = expectation(description: "Offline game snapshot completes")
         var result: Result<SavedOfflineGame, Error>?
-        store.save(report) { value in result = value
+        store.save(report, visitID: visitID, playedAt: playedAt) { value in result = value
             done.fulfill()
         }
         wait(for: [done], timeout: 10)
         return try XCTUnwrap(result).get()
     }
 
-    func respond(_ url: String, mime: String, _ data: Data, status: Int = 200) {
+    func respond(_ url: String, mime: String, _ data: Data, status: Int = 200, held: Bool = false) {
         OfflineFixtureProtocol.lock.lock()
-        OfflineFixtureProtocol.responses[url] = .init(mime: mime, data: data, status: status)
+        OfflineFixtureProtocol.responses[url] = .init(
+            mime: mime,
+            data: data,
+            status: status,
+            held: held
+        )
         OfflineFixtureProtocol.lock.unlock()
     }
 

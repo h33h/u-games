@@ -21,6 +21,14 @@ function addGameScripts(root) {
     path.join(root, 'shared/ad-countdowns.js'),
     'window.countdownsReady = window.constructReady;',
   );
+  fs.writeFileSync(
+    path.join(root, 'shared/offline-catalog.js'),
+    'window.catalogReady = window.countdownsReady;',
+  );
+  fs.writeFileSync(
+    path.join(root, 'shared/offline-catalog.html'),
+    '<!doctype html><title>UGames</title>',
+  );
 }
 
 test('build produces identical executable scripts and valid native content rules', (t) => {
@@ -56,6 +64,16 @@ test('build produces identical executable scripts and valid native content rules
   assert.equal(ctx.window.providersReady, 1);
   assert.equal(ctx.window.constructReady, 1);
   assert.equal(ctx.window.countdownsReady, 1);
+  assert.equal(ctx.window.catalogReady, 1);
+  const androidCatalog = fs.readFileSync(
+    path.join(root, 'android/app/src/main/assets/ugames/offline-catalog.html'),
+    'utf8',
+  );
+  assert.equal(
+    androidCatalog,
+    fs.readFileSync(path.join(root, 'ios/UGames/Resources/offline-catalog.html'), 'utf8'),
+  );
+  assert.match(androidCatalog, /<!doctype html>/);
   const content = JSON.parse(
     fs.readFileSync(path.join(root, 'ios/UGames/Resources/content-rules.json'), 'utf8'),
   );

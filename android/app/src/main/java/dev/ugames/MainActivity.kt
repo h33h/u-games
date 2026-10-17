@@ -1,58 +1,65 @@
 package dev.ugames
 
-import android.app.AlertDialog
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
-import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
-import android.text.format.Formatter
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebView
 import android.widget.Button
 import android.widget.FrameLayout
-import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import java.io.File
+import java.util.UUID
 import java.util.concurrent.Executors
-import java.util.concurrent.Future
+import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
+    private data class CaptureVisit(val entry: String, val token: String)
     private val windows = mutableListOf<WebView>()
     private val backgrounds = mutableMapOf<WebView, Int>()
     private val captures = mutableMapOf<WebView, OfflineCaptureReport>()
-    private val offlineWindows = mutableMapOf<WebView, SavedOfflineGame>()
+    private val visits = mutableMapOf<WebView, CaptureVisit>()
+    private val offlineWindows = mutableMapOf<WebView, OfflineReplayLease>()
+    private val offlineCatalogs = mutableSetOf<WebView>()
     private val downloads = Executors.newSingleThreadExecutor()
+    private val indexIO = Executors.newSingleThreadExecutor()
     private val offlineStore by lazy {
         OfflineGameStore(
             File(filesDir, "offline-games"),
             ProtectedWebViewFactory.resourceFilter(this)
         )
     }
-    private var saveJob: Future<*>? = null
-    private var saving = false
-    private var menuSave: Button? = null
-    private var menuStatus: TextView? = null
-    private var progressDialog: AlertDialog? = null
-    private var lastOfflineId: String? = null
+    private val autoCache by lazy {
+        AutomaticOfflineCache(offlineStore, downloads, onSaved = {
+            if (!isDestroyed && !indexIO.isShutdown) refreshIndex()
+        })
+    }
+    private lateinit var connectivity: ValidatedInternetMonitor
+
+    @Volatile var isInternetAvailable = true
+        private set
+    private var foreground = false
+    private var cachedGames = emptyList<SavedOfflineGame>()
     private lateinit var root: FrameLayout
     private lateinit var content: FrameLayout
     private lateinit var loading: ProgressBar
     private var fullscreen: View? = null
     private var fullscreenCallback: WebChromeClient.CustomViewCallback? = null
     private var lastUrl = HOME
+    private var selectionGeneration = 0L
     private val current get() = windows.lastOrNull()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -63,7 +70,6 @@ class MainActivity : ComponentActivity() {
         window.setBackgroundDrawable(ColorDrawable(ProtectedWebViewFactory.defaultBackground))
         root.setOnApplyWindowInsetsListener { view, insets ->
             val compatible = WindowInsetsCompat.toWindowInsetsCompat(insets, view)
-            // Keep game controls clear of cutouts, the keyboard and reserved system gestures.
             val safe = compatible.getInsets(
                 WindowInsetsCompat.Type.displayCutout() or WindowInsetsCompat.Type.ime() or
                     WindowInsetsCompat.Type.systemBars() or
@@ -72,38 +78,34 @@ class MainActivity : ComponentActivity() {
             view.setPadding(safe.left, safe.top, safe.right, safe.bottom)
             insets
         }
-        loading =
-            ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
-                isIndeterminate = true
-                indeterminateTintList = ColorStateList.valueOf(getColor(R.color.ugames_mint))
-                visibility = View.GONE
-            }
+        loading = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            isIndeterminate = true
+            indeterminateTintList = ColorStateList.valueOf(getColor(R.color.ugames_mint))
+            visibility = View.GONE
+        }
         content = FrameLayout(this)
         root.addView(content, FrameLayout.LayoutParams(-1, -1))
         root.addView(loading, FrameLayout.LayoutParams(-1, dp(2), Gravity.TOP))
-        root.addView(
-            ImageButton(this).apply {
-                contentDescription = "Меню UGames"
-                setImageResource(R.drawable.ic_more_vert)
-                imageTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
-                background = GradientDrawable().apply {
-                    shape = GradientDrawable.OVAL
-                    setColor(Color.argb(225, 35, 32, 48))
-                }
-                setPadding(dp(12), dp(12), dp(12), dp(12))
-                setOnClickListener { showGameMenu() }
-            },
-            FrameLayout.LayoutParams(dp(48), dp(48), Gravity.TOP or Gravity.END).apply {
-                topMargin = dp(8)
-                marginEnd = dp(8)
-            }
-        )
         setContentView(root)
         enterImmersiveMode()
         root.requestApplyInsets()
-        lastUrl = savedInstanceState?.getString("lastUrl") ?: HOME
-        lastOfflineId = savedInstanceState?.getString("offlineGameId")
-        createAndLoad(lastUrl)
+        connectivity = ValidatedInternetMonitor(this, ::connectivityChanged)
+        isInternetAvailable = connectivity.available
+        connectivity.start()
+        lastUrl =
+            OfflineRoutingPolicy.startupUrl(
+                isInternetAvailable,
+                savedInstanceState?.getString("lastUrl") ?: HOME
+            )
+        if (isInternetAvailable) createAndLoad(lastUrl)
+        refreshIndex {
+            // An offline launch always starts at the ordinary catalogue, even after process death.
+            if (current ==
+                null
+            ) {
+                createAndLoad(OfflineRoutingPolicy.startupUrl(isInternetAvailable, lastUrl))
+            }
+        }
         onBackPressedDispatcher.addCallback(
             this,
             object : OnBackPressedCallback(true) {
@@ -121,8 +123,7 @@ class MainActivity : ComponentActivity() {
         }
         if (Build.VERSION.SDK_INT >= 28) {
             window.attributes = window.attributes.apply {
-                layoutInDisplayCutoutMode =
-                    LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
         }
     }
@@ -133,19 +134,22 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun createAndLoad(url: String) {
+        if (!isInternetAvailable) {
+            openOfflineCatalog()
+            return
+        }
         try {
-            val saved = lastOfflineId?.let { id ->
-                offlineStore.listGames().firstOrNull {
-                    it.id ==
-                        id
-                }
-            }
-            if (lastOfflineId != null && saved == null) lastOfflineId = null
-            showWindow(ProtectedWebViewFactory.create(this, offlineGame = saved))
-            load(saved?.entryUrl ?: url)
+            showWindow(
+                ProtectedWebViewFactory.create(
+                    this,
+                    onlineGameEntry = url.takeIf(OfflineResourcePolicy::isGameUrl)
+                )
+            )
+            load(url)
         } catch (_: UnsupportedOperationException) {
             showError(
-                "Обнови Android System WebView и перезапусти UGames, чтобы открыть игры без рекламы."
+                "Обнови Android System WebView и перезапусти UGames, " +
+                    "чтобы открыть игры без рекламы."
             )
         } catch (_: Exception) {
             showError("Не удалось подготовить приложение. Попробуй перезапустить UGames.")
@@ -175,10 +179,13 @@ class MainActivity : ComponentActivity() {
         if (!windows.remove(view)) return
         backgrounds.remove(view)
         captures.remove(view)
-        offlineWindows.remove(view)
+        visits.remove(view)
+        val replayLease = offlineWindows.remove(view)
+        offlineCatalogs.remove(view)
         content.removeView(view)
         view.stopLoading()
         view.destroy()
+        replayLease?.close()
         current?.let {
             content.removeAllViews()
             content.addView(it, FrameLayout.LayoutParams(-1, -1))
@@ -190,30 +197,36 @@ class MainActivity : ComponentActivity() {
     private fun load(url: String) {
         lastUrl = url
         hideFullscreen()
+        if (!isInternetAvailable) {
+            val saved = OfflineRoutingPolicy.cachedGame(url, false, cachedGames)
+            if (saved == null) openOfflineCatalog() else openOfflineGame(saved)
+            return
+        }
+        if (current in offlineWindows || current in offlineCatalogs) {
+            openOnline(url)
+            return
+        }
         current?.let {
-            content.removeAllViews()
-            content.addView(it, FrameLayout.LayoutParams(-1, -1))
-            setPageBackground(it, backgrounds[it] ?: ProtectedWebViewFactory.defaultBackground)
-            val saved = offlineWindows[it]
-            if (saved !=
-                null
-            ) {
-                ProtectedWebViewFactory.loadOfflineGame(it, saved)
-            } else {
-                it.loadUrl(url)
-            }
+            loadCurrentSurface()
+            it.loadUrl(url)
         }
     }
 
     fun setLoading(view: WebView, value: Boolean) {
         if (view !== current) return
         loading.visibility = if (value) View.VISIBLE else View.GONE
-        view.url?.takeIf { it.startsWith("https://") }?.let { lastUrl = it }
+        if (view !in offlineWindows &&
+            view !in offlineCatalogs
+        ) {
+            view.url?.takeIf { it.startsWith("https://") }?.let {
+                lastUrl =
+                    it
+            }
+        }
     }
 
     fun showError(message: String) {
         current?.let { captures.remove(it) }
-        updateMenuStatus()
         hideFullscreen()
         loading.visibility = View.GONE
         val background = getColor(R.color.ugames_background)
@@ -239,7 +252,9 @@ class MainActivity : ComponentActivity() {
                 backgroundTintList = ColorStateList.valueOf(getColor(R.color.ugames_accent))
                 setTextColor(getColor(R.color.ugames_on_accent))
                 setOnClickListener {
-                    if (current == null) {
+                    if (current ==
+                        null
+                    ) {
                         createAndLoad(lastUrl)
                     } else {
                         load(lastUrl)
@@ -250,37 +265,51 @@ class MainActivity : ComponentActivity() {
         )
         panel.addView(
             Button(this).apply {
-                text = "Сохранённые игры"
-                minHeight = dp(48)
-                setOnClickListener { showSavedGames() }
-            }
-        )
-        panel.addView(
-            Button(this).apply {
                 text = "В каталог"
                 minHeight = dp(48)
                 backgroundTintList = ColorStateList.valueOf(getColor(R.color.ugames_surface))
                 setTextColor(getColor(R.color.ugames_mint))
-                setOnClickListener {
-                    openCatalog()
-                }
+                setOnClickListener { openCatalog() }
             }
         )
         content.removeAllViews()
         content.addView(panel, FrameLayout.LayoutParams(-1, -1))
     }
 
-    fun rendererGone(view: WebView) {
-        if (view === current) view.url?.takeIf { it.startsWith("https://") }?.let { lastUrl = it }
-        // WebViews sharing the crashed renderer cannot be reused.
-        content.removeAllViews()
-        for (window in windows.toList()) {
-            window.destroy()
+    fun pageLoadFailed(view: WebView, message: String) {
+        if (view !== current) return
+        if (!isInternetAvailable && view !in offlineWindows &&
+            view !in offlineCatalogs
+        ) {
+            openOfflineCatalog()
+        } else {
+            showError(message)
         }
+    }
+
+    fun pageHttpFailed(view: WebView, message: String) {
+        if (view === current) showError(message)
+    }
+
+    fun rendererGone(view: WebView) {
+        selectionGeneration++
+        if (view === current && view !in offlineWindows &&
+            view !in offlineCatalogs
+        ) {
+            view.url?.takeIf { it.startsWith("https://") }?.let {
+                lastUrl =
+                    it
+            }
+        }
+        content.removeAllViews()
+        windows.forEach { it.destroy() }
         windows.clear()
         backgrounds.clear()
         captures.clear()
+        visits.clear()
+        offlineWindows.values.forEach(OfflineReplayLease::close)
         offlineWindows.clear()
+        offlineCatalogs.clear()
         showError("Игра закрылась. Можно открыть её снова.")
     }
 
@@ -307,7 +336,9 @@ class MainActivity : ComponentActivity() {
 
             windows.size > 1 -> current?.let(::closeWindow)
 
-            current in offlineWindows -> showSavedGames()
+            current in offlineWindows -> openCatalog()
+
+            current in offlineCatalogs -> finish()
 
             current?.canGoBack() == true -> {
                 loadCurrentSurface()
@@ -329,6 +360,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        selectionGeneration++
+        foreground = false
+        autoCache.setEnabled(false)
         current?.onPause()
         current?.pauseTimers()
         super.onPause()
@@ -336,20 +370,23 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        foreground = true
+        autoCache.setEnabled(isInternetAvailable)
         current?.resumeTimers()
         current?.onResume()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString("lastUrl", lastUrl)
-        outState.putString("offlineGameId", lastOfflineId)
         super.onSaveInstanceState(outState)
     }
 
     override fun onDestroy() {
-        saveJob?.cancel(true)
+        selectionGeneration++
+        connectivity.stop()
+        autoCache.setEnabled(false)
         downloads.shutdownNow()
-        progressDialog?.dismiss()
+        indexIO.shutdownNow()
         windows.forEach {
             it.stopLoading()
             it.destroy()
@@ -357,252 +394,197 @@ class MainActivity : ComponentActivity() {
         windows.clear()
         backgrounds.clear()
         captures.clear()
+        visits.clear()
+        offlineWindows.values.forEach(OfflineReplayLease::close)
         offlineWindows.clear()
+        offlineCatalogs.clear()
         super.onDestroy()
     }
 
     fun navigationStarted(view: WebView) {
         captures.remove(view)
-        updateMenuStatus()
+        visits.remove(view)
     }
 
-    fun registerOfflineWindow(view: WebView, game: SavedOfflineGame) {
-        offlineWindows[view] = game
+    fun registerOfflineWindow(view: WebView, lease: OfflineReplayLease) {
+        offlineWindows.put(view, lease)?.close()
     }
 
-    fun receiveOfflineReport(view: WebView, data: String, origin: String) {
-        if (view !in windows || view in offlineWindows) return
-        val report = OfflineCaptureReport.parse(data, origin, view.title)
-        if (report == null) captures.remove(view) else captures[view] = report
-        updateMenuStatus()
+    fun registerOfflineCatalog(view: WebView) {
+        offlineCatalogs.add(view)
     }
 
-    private fun showGameMenu() {
-        current?.evaluateJavascript(
-            "if(window.__UGamesOfflineCapture)window.__UGamesOfflineCapture();",
-            null
-        )
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(8), dp(24), dp(8))
-        }
-        menuStatus = TextView(this).apply {
-            setTextAppearance(android.R.style.TextAppearance_Material_Body1)
-            panel.addView(this, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
-        }
-        val dialog = AlertDialog.Builder(this).setTitle("UGames").setView(panel)
-            .setNegativeButton("Закрыть", null).create()
-        menuSave = Button(this).apply {
-            text = "Сохранить для игры без сети"
-            minHeight = dp(48)
-            setOnClickListener {
-                dialog.dismiss()
-                saveCurrentGame()
+    fun receiveOfflineReport(
+        view: WebView,
+        data: String,
+        origin: String,
+        mainFrame: Boolean = false
+    ) {
+        if (view !in windows || view in offlineWindows || view in offlineCatalogs) return
+        val metadata = OfflineCatalogMetadata.parse(data, origin, view.url, mainFrame)
+        if (metadata != null) {
+            if (foreground &&
+                isInternetAvailable
+            ) {
+                indexIO.execute {
+                    runCatching {
+                        if (offlineStore.rememberCatalog(
+                                metadata
+                            )
+                        ) {
+                            autoCache.catalogChanged(metadata.gameId)
+                        }
+                    }
+                }
             }
-            panel.addView(this, LinearLayout.LayoutParams(-1, -2))
+            return
         }
-        panel.addView(
-            Button(this).apply {
-                text = "Сохранённые игры"
-                minHeight = dp(48)
-                setOnClickListener {
-                    dialog.dismiss()
-                    showSavedGames()
+        if (data.length <= 16384) {
+            runCatching {
+                val packet = JSONObject(data)
+                val entry = OfflineResourcePolicy.normalize(packet.optString("url"))
+                if (packet.optInt("version") == 1 && packet.optString("type") == "visit" &&
+                    entry != null &&
+                    OfflineResourcePolicy.isGameUrl(entry) &&
+                    OfflineResourcePolicy.origin(entry) == OfflineResourcePolicy.origin(origin)
+                ) {
+                    visits[view] =
+                        CaptureVisit(entry.substringBefore('?'), UUID.randomUUID().toString())
+                    captures.remove(view)
+                    return
                 }
-            },
-            LinearLayout.LayoutParams(-1, -2)
-        )
-        panel.addView(
-            Button(this).apply {
-                text = "В каталог"
-                minHeight = dp(48)
-                setOnClickListener {
-                    dialog.dismiss()
-                    openCatalog()
-                }
-            },
-            LinearLayout.LayoutParams(-1, -2)
-        )
-        dialog.setOnDismissListener {
-            menuSave = null
-            menuStatus = null
+            }
         }
-        updateMenuStatus()
-        dialog.show()
-    }
-
-    private fun updateMenuStatus() {
-        val report = captures[current]
-        menuSave?.isEnabled = !saving && report?.ready == true && current !in offlineWindows
-        menuStatus?.text = when {
-            saving -> "Сохраняем файлы игры…"
-
-            current in offlineWindows ->
-                "Игра открыта без сети. Прогресс сохраняется на этом устройстве."
-
-            report?.ready == true ->
-                "Открытая игра готова к сохранению. " +
-                    "Уровни, которые игра ещё не загрузила, могут потребовать подключения."
-
-            else -> "Запусти игру в каталоге и дождись её загрузки. Затем её можно сохранить здесь."
+        val report = OfflineCaptureReport.parse(data, origin, view.title) ?: return
+        captures[view] = report
+        val key = requireNotNull(
+            OfflineResourcePolicy.normalize(report.entryUrl)
+        ).substringBefore('?')
+        val visit =
+            visits[view]?.takeIf { it.entry == key }
+                ?: CaptureVisit(key, UUID.randomUUID().toString()).also { visits[view] = it }
+        if (foreground && isInternetAvailable &&
+            view === current && report.ready
+        ) {
+            val playedAt = System.currentTimeMillis()
+            autoCache.offer(report, visit.token, playedAt)
+            indexIO.execute { runCatching { offlineStore.touch(report.entryUrl, playedAt) } }
         }
     }
 
-    private fun saveCurrentGame() {
-        val report = captures[current]?.takeIf { it.ready } ?: return
-        if (saving || current in offlineWindows) return
-        saving = true
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(24), dp(16), dp(24), dp(8))
-        }
-        val status = TextView(this).apply { text = "Подготовка файлов…" }
-        val progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal)
-        panel.addView(status, LinearLayout.LayoutParams(-1, -2))
-        panel.addView(progress, LinearLayout.LayoutParams(-1, dp(16)).apply { topMargin = dp(12) })
-        val dialog = AlertDialog.Builder(this).setTitle("Сохранение игры").setView(panel)
-            .setNegativeButton("Отмена") { _, _ -> saveJob?.cancel(true) }.create()
-        dialog.setOnCancelListener { saveJob?.cancel(true) }
-        progressDialog = dialog
-        dialog.show()
-        saveJob = downloads.submit {
-            try {
-                val game = offlineStore.save(report) { completed, count, bytes ->
-                    runOnUiThread {
-                        if (!isDestroyed && dialog.isShowing) {
-                            progress.max = count
-                            progress.progress = completed
-                            status.text =
-                                "$completed из $count файлов · ${Formatter.formatShortFileSize(
-                                    this,
-                                    bytes
-                                )}"
-                        }
-                    }
-                }
-                runOnUiThread {
-                    if (!isDestroyed) {
-                        Toast.makeText(
-                            this,
-                            "«${game.title}» доступна в сохранённых играх",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-            } catch (error: Exception) {
-                val cancelled = Thread.currentThread().isInterrupted
-                runOnUiThread {
-                    if (!isDestroyed) {
-                        if (cancelled) {
-                            Toast.makeText(this, "Сохранение отменено", Toast.LENGTH_SHORT).show()
-                        } else {
-                            AlertDialog.Builder(this).setTitle("Игра не сохранена")
-                                .setMessage(
-                                    "${error.message ?: "Не удалось скачать файлы"}. Проверь подключение и свободное место, затем попробуй ещё раз."
-                                )
-                                .setPositiveButton("Понятно", null).show()
-                        }
-                    }
-                }
-            } finally {
-                runOnUiThread {
-                    saving = false
-                    if (!isDestroyed) dialog.dismiss()
-                    if (progressDialog === dialog) progressDialog = null
-                    updateMenuStatus()
+    /** Invoked only from the validated network monitor (and deterministic device tests). */
+    fun connectivityChanged(available: Boolean) {
+        if (isDestroyed || available == isInternetAvailable) return
+        isInternetAvailable = available
+        selectionGeneration++
+        autoCache.setEnabled(foreground && available)
+        if (available) {
+            val target =
+                offlineWindows[current]?.game?.entryUrl
+                    ?: if (current in offlineCatalogs) HOME else null
+            if (target != null) openOnline(target)
+        } else {
+            val entry = captures[current]?.entryUrl
+            val game = entry?.let { OfflineRoutingPolicy.cachedGame(it, false, cachedGames) }
+            openOfflineCatalog()
+            if (game != null) openOfflineGame(game)
+            val previous = current
+            val generation = selectionGeneration
+            refreshIndex {
+                if (!isInternetAvailable && selectionGeneration == generation &&
+                    current === previous && current in offlineCatalogs
+                ) {
+                    openOfflineCatalog()
                 }
             }
         }
     }
 
-    private fun showSavedGames() {
-        val waiting = AlertDialog.Builder(
-            this
-        ).setMessage("Открываем сохранённые игры…").setCancelable(false).create()
-        waiting.show()
-        downloads.execute {
-            val games = offlineStore.listGames()
+    fun openCachedUrl(view: WebView, url: String): Boolean {
+        if (view !in offlineCatalogs || isInternetAvailable) return false
+        OfflineRoutingPolicy.cachedGame(url, false, cachedGames)?.let(::openOfflineGame)
+        return true
+    }
+
+    private fun refreshIndex(completed: () -> Unit = {}) {
+        indexIO.execute {
+            val games = runCatching { offlineStore.listGames() }.getOrDefault(emptyList())
             runOnUiThread {
-                waiting.dismiss()
-                if (isDestroyed) return@runOnUiThread
-                val builder = AlertDialog.Builder(this).setTitle("Сохранённые игры")
-                    .setNegativeButton("Закрыть", null)
-                if (games.isEmpty()) {
-                    builder.setMessage(
-                        "Пока нет сохранённых игр. Запусти игру в каталоге и выбери «Сохранить для игры без сети» в меню UGames."
-                    )
-                        .setPositiveButton("В каталог") { _, _ -> openCatalog() }
-                } else {
-                    builder.setItems(
-                        games.map {
-                            "${it.title}\n${Formatter.formatShortFileSize(
-                                this,
-                                it.totalBytes
-                            )} · без сети"
-                        }.toTypedArray()
-                    ) { _, index ->
-                        showSavedGame(games[index])
-                    }
+                if (!isDestroyed) {
+                    cachedGames = games
+                    completed()
                 }
-                builder.show()
             }
         }
-    }
-
-    private fun showSavedGame(game: SavedOfflineGame) {
-        AlertDialog.Builder(this).setTitle(game.title)
-            .setItems(arrayOf("Играть без сети", "Удалить с устройства")) { _, index ->
-                if (index == 0) {
-                    openOfflineGame(game)
-                } else {
-                    if (offlineWindows[current]?.id == game.id) openCatalog()
-                    downloads.execute {
-                        try {
-                            offlineStore.delete(game.id)
-                            runOnUiThread { if (!isDestroyed) showSavedGames() }
-                        } catch (_: Exception) {
-                            runOnUiThread {
-                                if (!isDestroyed) {
-                                    Toast.makeText(
-                                        this,
-                                        "Не удалось удалить игру",
-                                        Toast.LENGTH_LONG
-                                    ).show()
-                                }
-                            }
-                        }
-                    }
-                }
-            }.setNegativeButton("Назад") { _, _ -> showSavedGames() }.show()
     }
 
     private fun closeAllWindows() {
         hideFullscreen()
         while (windows.isNotEmpty()) current?.let(::closeWindow)
+        CookieManager.getInstance().flush()
     }
 
     fun openOfflineGame(game: SavedOfflineGame) {
-        closeAllWindows()
-        lastOfflineId = game.id
-        lastUrl = game.entryUrl
-        try {
-            showWindow(ProtectedWebViewFactory.create(this, offlineGame = game))
-            load(game.entryUrl)
-        } catch (_: Exception) {
-            showError(
-                "Не удалось открыть сохранённую игру. Обнови Android System WebView и попробуй снова."
-            )
+        if (isInternetAvailable) {
+            openOnline(game.entryUrl)
+            return
+        }
+        val generation = ++selectionGeneration
+        val playedAt = System.currentTimeMillis()
+        indexIO.execute {
+            val lease = runCatching { offlineStore.acquire(game.id, playedAt) }.getOrNull()
+            runOnUiThread {
+                if (isDestroyed || isInternetAvailable || selectionGeneration != generation) {
+                    lease?.close()
+                    return@runOnUiThread
+                }
+                if (lease == null) {
+                    cachedGames = cachedGames.filterNot { it.id == game.id }
+                    openOfflineCatalog()
+                    return@runOnUiThread
+                }
+                closeAllWindows()
+                lastUrl = lease.game.entryUrl
+                try {
+                    val view = ProtectedWebViewFactory.create(this, offlineLease = lease)
+                    showWindow(view)
+                    ProtectedWebViewFactory.loadOfflineGame(view, lease.game)
+                } catch (_: Exception) {
+                    lease.close()
+                    showError("Не удалось открыть игру. Попробуй открыть её ещё раз из каталога.")
+                }
+            }
         }
     }
 
-    private fun openCatalog() {
+    private fun openOfflineCatalog() {
+        selectionGeneration++
+        if (isInternetAvailable) {
+            openOnline(HOME)
+            return
+        }
         closeAllWindows()
-        lastOfflineId = null
-        createAndLoad(HOME)
+        lastUrl = HOME
+        try {
+            val view = ProtectedWebViewFactory.create(this, cachedCatalog = cachedGames)
+            showWindow(view)
+            ProtectedWebViewFactory.loadOfflineCatalog(view)
+        } catch (_: Exception) {
+            showError("Не удалось открыть каталог. Попробуй ещё раз.")
+        }
     }
 
+    private fun openOnline(url: String) {
+        selectionGeneration++
+        closeAllWindows()
+        createAndLoad(url)
+    }
+
+    private fun openCatalog() {
+        if (isInternetAvailable) openOnline(HOME) else openOfflineCatalog()
+    }
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     companion object {
-        const val HOME = "https://yandex.ru/games/"
+        const val HOME = OfflineRoutingPolicy.HOME
     }
 }

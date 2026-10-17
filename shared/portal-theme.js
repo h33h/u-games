@@ -5,6 +5,7 @@
   if (
     !doc ||
     !branding ||
+    win.__UGamesCachedCatalog?.version === 1 ||
     !/^(?:www\.)?yandex\.(?:ru|com)$/.test(win.location.hostname) ||
     !/^\/games(?:\/|$)/.test(win.location.pathname) ||
     win.__UGamesPortalTheme

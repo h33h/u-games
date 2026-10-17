@@ -36,6 +36,8 @@ val sharedAssets by tasks.registering(Exec::class) {
     inputs.files(
         "../../shared/ad-adapter.js",
         "../../shared/offline-games.js",
+        "../../shared/offline-catalog.js",
+        "../../shared/offline-catalog.html",
         "../../shared/ad-countdowns.js",
         "../../shared/ad-provider-availability.js",
         "../../shared/construct-ad-guard.js",

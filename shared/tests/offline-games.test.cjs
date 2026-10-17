@@ -60,6 +60,99 @@ test('reports loaded game assets and storage without saving catalog or API traff
   assert.equal(catalog.reports.length, 0);
 });
 
+test('catalogue artwork and titles are remembered passively before a game is opened', (t) => {
+  const { win, reports } = page(t, {
+    url: 'https://yandex.ru/games/',
+    prepare(w) {
+      w.document.body.innerHTML =
+        '<a class="game-card" href="/games/app/toca-boca-302466?utm_source=home#play"><img src="https://avatars.mds.yandex.net/get-games/123/cover/default.jpg"><span class="game-card__title">Тока Бока</span></a>';
+    },
+  });
+  const link = win.document.querySelector('a');
+  const event = new win.Event('pointerdown', { bubbles: true, cancelable: true });
+  link.dispatchEvent(event);
+  assert.equal(event.defaultPrevented, false);
+  assert.deepEqual(reports, [
+    {
+      version: 1,
+      type: 'catalog',
+      gameId: '302466',
+      url: 'https://yandex.ru/games/app/302466',
+      title: 'Тока Бока',
+      cover: 'https://avatars.mds.yandex.net/get-games/123/cover/default.jpg',
+    },
+  ]);
+  link.dispatchEvent(new win.Event('pointerdown', { bubbles: true }));
+  assert.equal(reports.length, 1);
+});
+
+test('catalogue metadata never persists account avatars, external links or game API URLs', (t) => {
+  const { win, reports } = page(t, {
+    url: 'https://yandex.ru/games/',
+    prepare(w) {
+      w.document.body.innerHTML =
+        '<a href="/games/app/42"><img alt="Game" src="https://avatars.mds.yandex.net/get-yapic/private/avatar"></a><a href="https://evil.test/games/app/43">Other</a><a href="/games/api/player?token=private">Account</a>';
+    },
+  });
+  for (const link of win.document.querySelectorAll('a')) {
+    link.dispatchEvent(new win.Event('pointerdown', { bubbles: true }));
+  }
+  assert.equal(reports.length, 1);
+  assert.equal(reports[0].title, 'Game');
+  assert.equal(reports[0].cover, undefined);
+  assert.equal(reports[0].url, 'https://yandex.ru/games/app/42');
+});
+
+test('catalogue cover links find the existing caption beside the artwork', (t) => {
+  const { win, reports } = page(t, {
+    url: 'https://yandex.ru/games/',
+    prepare(w) {
+      w.document.body.innerHTML =
+        '<div class="game-card"><div class="game-card__graphic"><a href="/games/app/42"><img class="game-image" src="https://avatars.mds.yandex.net/get-games/42/cover.jpg"></a></div><div class="game-card__description">Playground</div></div>';
+    },
+  });
+  win.document.querySelector('img').dispatchEvent(new win.Event('pointerdown', { bubbles: true }));
+  assert.equal(reports[0]?.title, 'Playground');
+});
+
+test('a game portal page reports its own OpenGraph metadata without collecting portal resources', (t) => {
+  const { win, reports } = page(t, {
+    url: 'https://yandex.com/games/app/42?lang=ru',
+    prepare(w) {
+      w.document.head.innerHTML =
+        '<meta property="og:title" content="Playground"><meta property="og:image" content="https://avatars.mds.yandex.net/get-games/42/cover/default.webp">';
+    },
+  });
+  win.__UGamesOfflineCapture();
+  assert.deepEqual(reports, [
+    {
+      version: 1,
+      type: 'catalog',
+      gameId: '42',
+      url: 'https://yandex.com/games/app/42',
+      title: 'Playground',
+      cover: 'https://avatars.mds.yandex.net/get-games/42/cover/default.webp',
+    },
+  ]);
+  assert.equal(reports[0].resources, undefined);
+});
+
+test('catalogue capture installs at document start before html or head exists', (t) => {
+  const { win, reports } = page(t, {
+    url: 'https://yandex.ru/games/app/42',
+    prepare(w) {
+      w.document.documentElement.remove();
+      Object.defineProperty(w.document, 'readyState', { value: 'loading', configurable: true });
+    },
+  });
+  const html = win.document.createElement('html');
+  html.innerHTML = '<head><meta property="og:title" content="Loaded game"></head><body></body>';
+  win.document.appendChild(html);
+  win.document.dispatchEvent(new win.Event('DOMContentLoaded'));
+  assert.equal(reports.at(-1).title, 'Loaded game');
+  assert.equal(typeof win.__UGamesOfflineCapture, 'function');
+});
+
 test('includes assets loaded after the first report and does not claim a loading document is ready', (t) => {
   const { win, reports } = page(t, {
     prepare(w) {

@@ -94,7 +94,7 @@ final class ProtectedWebViewTests: WebViewTestCase {
         XCTAssertEqual(controller.view.backgroundColor, UGamesTheme.background)
     }
 
-    func testFullscreenShellKeepsAnUnobtrusiveMenuAccessible() throws {
+    func testFullscreenShellLeavesGameControlsUnobstructed() throws {
         let webView = try makeView()
         let controller = GameViewController(preparedView: webView)
         let navigation = UINavigationController(rootViewController: controller)
@@ -108,14 +108,11 @@ final class ProtectedWebViewTests: WebViewTestCase {
         XCTAssertTrue(navigation.isNavigationBarHidden)
         XCTAssertTrue(controller.prefersStatusBarHidden)
         XCTAssertEqual(webView.frame, controller.view.safeAreaLayoutGuide.layoutFrame)
-        let menu = try XCTUnwrap(controller.view.subviews.compactMap { $0 as? UIButton }.first)
-        XCTAssertEqual(menu.accessibilityIdentifier, "ugames.menu")
-        XCTAssertEqual(menu.bounds.size, CGSize(width: 44, height: 44))
-        XCTAssertEqual(menu.menu?.children.count, 3)
+        XCTAssertTrue(controller.view.subviews.compactMap { $0 as? UIButton }.isEmpty)
         controller.showProtectionError()
-        XCTAssertFalse(menu.isHidden)
-        XCTAssertTrue(controller.view.hitTest(menu.center, with: nil)?
-            .isDescendant(of: menu) == true)
+        let panel = try XCTUnwrap(controller.view.subviews.compactMap { $0 as? UIStackView }.first)
+        XCTAssertEqual(panel.arrangedSubviews.compactMap { $0 as? UIButton }.count, 2)
+        panel.isHidden = true
         webView.isHidden = false
         XCTAssertTrue(controller.view.hitTest(CGPoint(x: 100, y: 400), with: nil)?
             .isDescendant(of: webView) == true)

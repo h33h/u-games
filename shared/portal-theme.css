@@ -28,6 +28,100 @@
   accent-color: var(--ugames-accent);
   scrollbar-color: var(--ugames-border-strong) var(--ugames-background);
 }
+/* Offline uses the catalogue's existing artwork, palette and card anatomy. */
+[data-ugames-cached-catalog] body {
+  margin: 0;
+  min-width: 240px;
+  font-family: var(--ugames-font);
+}
+[data-ugames-cached-catalog] .ugames-cached-header,
+[data-ugames-cached-catalog] .ugames-cached-main {
+  max-width: 1400px;
+  margin-inline: auto;
+  padding: 20px 16px;
+}
+[data-ugames-cached-catalog] .ugames-cached-header {
+  border-bottom: 1px solid var(--ugames-border);
+}
+[data-ugames-cached-catalog] .ugames-cached-home {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+[data-ugames-cached-catalog] .ugames-cached-home img {
+  display: block;
+}
+[data-ugames-cached-catalog] h1 {
+  margin: 8px 0 20px;
+  font-size: 24px;
+}
+[data-ugames-cached-catalog] .ugames-cached-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+[data-ugames-cached-catalog] .game-card {
+  background: transparent;
+}
+[data-ugames-cached-catalog] .game-card__link {
+  display: block;
+  height: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+[data-ugames-cached-catalog] .game-card__graphic {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 13px;
+}
+[data-ugames-cached-catalog] .game-card__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+[data-ugames-cached-catalog] .ugames-cached-caption {
+  padding-top: 10px;
+}
+[data-ugames-cached-catalog] .game-card__title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-height: 2.8em;
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+[data-ugames-cached-catalog] a:focus-visible {
+  outline: 3px solid var(--ugames-mint);
+  outline-offset: -3px;
+}
+[data-ugames-cached-catalog] .ugames-cached-empty {
+  max-width: 50ch;
+  color: var(--ugames-secondary);
+  line-height: 1.6;
+}
+@media (min-width: 600px) {
+  [data-ugames-cached-catalog] .ugames-cached-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 900px) {
+  [data-ugames-cached-catalog] .ugames-cached-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1200px) {
+  [data-ugames-cached-catalog] .ugames-cached-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
 /* Bridge every portal design system, including lazy-loaded profile and legacy controls.
    Keep these on local theme roots too: their own declarations otherwise beat inheritance. */
 [data-ugames-theme],

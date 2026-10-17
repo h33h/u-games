@@ -148,7 +148,7 @@ final class OfflineGameTests: OfflineGameTestCase {
 
     func testIncompleteOrOversizeReplacementKeepsTheExistingGame() throws {
         respond(entry, mime: "text/html", Data("<p>Original</p>".utf8))
-        let storage = try store(maximumBytes: 32)
+        let storage = try store(maximumBytes: 8192)
         let original = try save(report(), to: storage)
         XCTAssertThrowsError(try save(
             report(
@@ -157,7 +157,7 @@ final class OfflineGameTests: OfflineGameTestCase {
             ),
             to: storage
         ))
-        respond(entry, mime: "text/html", Data(repeating: 65, count: 33))
+        respond(entry, mime: "text/html", Data(repeating: 65, count: 8193))
         XCTAssertThrowsError(try save(report(title: "Too big"), to: storage))
         let existing = try XCTUnwrap(storage.games().first)
         XCTAssertEqual(existing.title, "Тестовая игра")
@@ -201,14 +201,12 @@ final class OfflineGameTests: OfflineGameTestCase {
             .contains("Updated version"))
     }
 
-    func testSavingFailureStillLeavesTheLibraryAvailable() throws {
+    func testSavingFailureLeavesAnEmptyCacheAndDoesNotPresentNativeUI() throws {
         try Data("A file prevents creating the storage directory".utf8).write(to: directory)
         let storage = try store()
-        let library = OfflineLibraryViewController(store: storage) { _ in
-            XCTFail("An empty library cannot launch a game")
-        }
-        library.loadViewIfNeeded()
-        XCTAssertEqual(library.tableView(library.tableView, numberOfRowsInSection: 0), 0)
+        let controller = GameViewController(preparedView: WKWebView(), offlineStore: storage)
+        controller.loadViewIfNeeded()
+        XCTAssertNil(controller.presentedViewController)
         XCTAssertThrowsError(try save(report(), to: storage))
     }
 
@@ -218,7 +216,11 @@ final class OfflineGameTests: OfflineGameTestCase {
         respond(sound, mime: "audio/ogg", Data([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]))
         let storage = try store()
         let game = try save(report(resources: [sound]), to: storage)
-        let handler = OfflineGameSchemeHandler(game: game, store: storage)
+        let handler = try OfflineGameSchemeHandler(
+            game: game,
+            store: storage,
+            connectivity: OfflineConnectivity(status: .offline, monitoring: false)
+        )
         let view = WKWebView()
         let soundURL =
             try XCTUnwrap(

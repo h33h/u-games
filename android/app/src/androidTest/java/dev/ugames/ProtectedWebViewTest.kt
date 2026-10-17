@@ -172,19 +172,25 @@ class ProtectedWebViewTest {
         }
     }
 
-    @Test fun offlineMenuSurvivesLoadErrorsAndKeepsPopupNavigation() {
+    @Test fun loadErrorsKeepRetryAndCatalogWhilePopupNavigationStillWorks() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { activity ->
                 val root = activity.findViewById<android.view.ViewGroup>(android.R.id.content)
-                val menu = allViews(root).single { it.contentDescription == "Меню UGames" }
-                assertTrue(menu.isShown)
+                val parent = allViews(root).filterIsInstance<WebView>().single()
+                assertTrue(allViews(root).filterIsInstance<android.widget.ImageButton>().isEmpty())
                 val popup = ProtectedWebViewFactory.create(activity)
                 activity.showWindow(popup)
                 assertTrue(popup.isAttachedToWindow)
                 activity.closeWindow(popup)
                 assertFalse(popup.isAttachedToWindow)
+                assertTrue(parent.isAttachedToWindow)
                 activity.showError("Нет подключения")
-                assertTrue(menu.isShown)
+                assertEquals(
+                    listOf("Попробовать снова", "В каталог"),
+                    allViews(root).filterIsInstance<android.widget.Button>().map {
+                        it.text.toString()
+                    }
+                )
             }
         }
     }

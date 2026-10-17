@@ -90,19 +90,24 @@ class OfflineWebPlayback(private val game: SavedOfflineGame, private val filter:
             ByteArrayInputStream(ByteArray(0))
         )
 
-        fun configureServiceWorkers(playback: OfflineWebPlayback?, filter: AdResourceFilter) {
+        fun configureServiceWorkers(
+            playback: OfflineWebPlayback?,
+            filter: AdResourceFilter,
+            catalog: OfflineCatalogPlayback? = null
+        ) {
             // Service-worker fetches have a separate network switch from WebView settings.
             ServiceWorkerController.getInstance().apply {
-                serviceWorkerWebSettings.blockNetworkLoads = playback != null
+                serviceWorkerWebSettings.blockNetworkLoads = playback != null || catalog != null
                 setServiceWorkerClient(object : ServiceWorkerClient() {
                     override fun shouldInterceptRequest(
                         request: WebResourceRequest
-                    ): WebResourceResponse? = playback?.response(request)
-                        ?: if (filter.shouldBlock(request.url.toString())) {
-                            denied(403, "Blocked advertising")
-                        } else {
-                            null
-                        }
+                    ): WebResourceResponse? =
+                        playback?.response(request) ?: catalog?.response(request)
+                            ?: if (filter.shouldBlock(request.url.toString())) {
+                                denied(403, "Blocked advertising")
+                            } else {
+                                null
+                            }
                 })
             }
         }

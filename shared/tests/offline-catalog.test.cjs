@@ -29,6 +29,7 @@ function page(t, config, prepare = () => {}) {
   }
   Object.defineProperty(win.document, 'readyState', { value: 'complete', configurable: true });
   prepare(win);
+  win.eval(fs.readFileSync(path.join(__dirname, '../offline-games.js'), 'utf8'));
   win.eval(source());
   return win;
 }
@@ -50,6 +51,31 @@ test('offline catalogue uses the normal game cards and opens original game URLs'
   assert.equal(win.document.querySelectorAll('button,iframe,script[src],link[href]').length, 0);
   assert.equal(win.document.querySelector('h1').textContent, 'Игры');
   assert.equal(win.document.querySelector('header img').alt, 'UGames');
+});
+
+test('previously saved catalogue names drop portal SEO suffixes without changing game names', (t) => {
+  const titles = [
+    ["Gamer's Mod - играть онлайн бесплатно на сервисе Яндекс Игры", "Gamer's Mod"],
+    ['Тока Бока — играть бесплатно..', 'Тока Бока'],
+    ['Sprunki – играть бесплатно онлайн на сервисе UGames', 'Sprunki'],
+    ['Game - play online for free on Yandex Games', 'Game'],
+    ['Мир - песочница', 'Мир - песочница'],
+    ['Играть бесплатно', 'Играть бесплатно'],
+  ];
+  const win = page(t, {
+    version: 1,
+    games: titles.map(([title], index) => ({
+      url: `https://app-${index + 1}.games.yandex.net/index.html`,
+      title,
+    })),
+  });
+  assert.deepEqual(
+    Array.from(win.document.querySelectorAll('.game-card__link')).map((link) => [
+      link.textContent.trim(),
+      link.title,
+    ]),
+    titles.map(([, clean]) => [clean, clean]),
+  );
 });
 
 test('a normal online game or catalogue receives no extra offline interface', (t) => {
@@ -146,12 +172,17 @@ test('the complete native script keeps one catalogue theme and permits its cache
     t.after(() => dom.window.close());
     const win = dom.window;
     Object.defineProperty(win.document, 'readyState', { value: 'complete' });
-    win.__UGamesCachedCatalog = { version: 1, games: [{ url, title: 'Игра' }] };
+    win.__UGamesCachedCatalog = {
+      version: 1,
+      games: [{ url, title: 'Игра — играть онлайн бесплатно на сервисе Яндекс Игры' }],
+    };
     win.navigation = new win.EventTarget();
     win.eval(bundle);
     assert.equal(win.document.querySelectorAll('style').length, 1);
     const card = win.document.querySelector('.game-card__link');
     assert.equal(card.href, url);
+    assert.equal(card.textContent, 'Игра');
+    assert.equal(card.title, 'Игра');
     const event = new win.Event('navigate', { cancelable: true });
     event.destination = { url: card.href };
     assert.equal(win.navigation.dispatchEvent(event), true);

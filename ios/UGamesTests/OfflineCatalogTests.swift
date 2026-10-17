@@ -104,7 +104,10 @@ final class OfflineCatalogTests: OfflineGameTestCase {
     func testOfflineStartupShowsTheCatalogBeforeOpeningACachedGame() throws {
         let storage = try store()
         respond(entry, mime: "text/html", Data("<p>Cached game</p>".utf8))
-        _ = try save(report(), to: storage)
+        _ = try save(
+            report(title: "Космос - играть онлайн бесплатно на сервисе Яндекс Игры"),
+            to: storage
+        )
         let network = OfflineConnectivity(status: .offline, monitoring: false)
         let controller = GameViewController(offlineStore: storage, connectivity: network)
         let navigation = UINavigationController(rootViewController: controller)
@@ -122,6 +125,20 @@ final class OfflineCatalogTests: OfflineGameTestCase {
         try waitForJavaScript(
             "Array.from(document.links).some(link=>link.href===" + js(entry) + ")",
             in: catalog
+        )
+        XCTAssertEqual(
+            try evaluateJavaScript(
+                "document.querySelector('.game-card__title').textContent",
+                in: catalog
+            ) as? String,
+            "Космос"
+        )
+        XCTAssertEqual(
+            try evaluateJavaScript(
+                "document.querySelector('.game-card__link').title",
+                in: catalog
+            ) as? String,
+            "Космос"
         )
         XCTAssertEqual(
             try evaluateJavaScript(

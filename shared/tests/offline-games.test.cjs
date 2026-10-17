@@ -30,6 +30,16 @@ function page(t, { url = gameURL, config, prepare = () => {} } = {}) {
   return { win, reports };
 }
 
+test('new game captures omit the portal promotional title suffix', (t) => {
+  const { win, reports } = page(t, {
+    prepare(w) {
+      w.document.title = 'Тока Бока - играть онлайн бесплатно на сервисе UGames';
+    },
+  });
+  win.__UGamesOfflineCapture();
+  assert.equal(reports.at(-1).title, 'Тока Бока');
+});
+
 test('reports loaded game assets and storage without saving catalog or API traffic', (t) => {
   const { win, reports } = page(t, {
     prepare(w) {

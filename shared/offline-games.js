@@ -6,6 +6,10 @@
   const doc = win.document;
   const config = win.__UGamesOfflineConfig;
   const gameHost = /\.(?:games\.yandex\.net|games\.s3\.yandex\.net)$/;
+  const staticAsset =
+    /\.(?:js|mjs|cjs|css|json|wasm|png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|mp3|wav|ogg|m4a|mp4|webm|bin|data|pck|bundle|unityweb|gz|br|txt|xml|atlas|ktx2?|basis|mem|dat|fnt|glb|gltf|hash)$/i;
+  const servicePath =
+    /\/(?:api|auth|oauth|login|logout|passport|account|payments?|billing|analytics|telemetry|metrics)(?:\/|$)/i;
   const entry = new win.URL(config?.url || win.location.href);
   const isGame = gameHost.test(entry.hostname);
   const prefix = 'ugames.offline.';
@@ -17,6 +21,24 @@
   let packageFiles = [];
   let packageOverflow = false;
   let packageURL;
+
+  function cleanTitle(value) {
+    if (typeof value !== 'string') {
+      return '';
+    }
+    return value
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(
+        /\s+[-–—]\s*играть(?:\s+онлайн)?\s+бесплатно(?:\s+онлайн)?(?:\s+без\s+регистрации)?(?:\s+на\s+(?:сервисе\s+)?(?:яндекс\s*игры|ugames))?[.!…]*$/iu,
+        '',
+      )
+      .replace(
+        /\s+[-–—]\s*play(?:\s+online)?\s+(?:for\s+)?free(?:\s+online)?(?:\s+(?:on|at)\s+(?:yandex\s+games|ugames))?[.!…]*$/iu,
+        '',
+      )
+      .trim();
+  }
 
   function memoryStorage() {
     const values = new Map();
@@ -174,7 +196,7 @@
       capture();
     });
   }
-  Object.defineProperty(win, '__UGamesOfflineRuntime', { value: { trackSDK } });
+  Object.defineProperty(win, '__UGamesOfflineRuntime', { value: { trackSDK, cleanTitle } });
 
   if (config && isGame) {
     const marker = prefix + 'restored.' + config.gameId;
@@ -220,6 +242,7 @@
         return Promise.resolve();
       },
       getMode: () => 'lite',
+      isAuthorized: () => false,
       getUniqueID: () => 'ugames-offline-' + config.gameId,
       getName: () => 'Игрок',
       getPhoto: () => '',
@@ -485,7 +508,7 @@
   }
   function rememberCatalogGame(raw, title, cover) {
     const game = catalogURL(raw);
-    title = typeof title === 'string' ? title.replace(/\s+/g, ' ').trim().slice(0, 200) : '';
+    title = cleanTitle(title).slice(0, 200);
     if (!game || !title) {
       return;
     }
@@ -503,8 +526,35 @@
     if (!catalogPage) {
       return;
     }
-    const title = doc.querySelector('meta[property="og:title"]')?.content || doc.title;
-    const cover = doc.querySelector('meta[property="og:image"]')?.content;
+    const current = catalogURL(win.location.href);
+    let details;
+    if (current) {
+      for (const script of doc.querySelectorAll('script[type="application/ld+json"]')) {
+        try {
+          const data = JSON.parse(script.textContent);
+          const game = (Array.isArray(data?.['@graph']) ? data['@graph'] : [data]).find(
+            (item) =>
+              item?.['@type'] === 'VideoGame' && catalogURL(item.url)?.gameId === current.gameId,
+          );
+          if (game) {
+            let cover = catalogCover(game.image);
+            if (cover) {
+              const image = new win.URL(cover);
+              // Use the same small raster rendition as real catalogue cards.
+              if (/^\/get-games\/[^/]+\/[^/]+\/orig$/.test(image.pathname)) {
+                image.pathname = image.pathname.replace(/\/orig$/, '/pjpg464x261');
+                cover = image.href;
+              }
+            }
+            details = { title: typeof game.name === 'string' ? game.name.trim() : '', cover };
+            break;
+          }
+        } catch (_) {}
+      }
+    }
+    const title =
+      details?.title || doc.querySelector('meta[property="og:title"]')?.content || doc.title;
+    const cover = details?.cover || doc.querySelector('meta[property="og:image"]')?.content;
     rememberCatalogGame(win.location.href, title, cover);
   }
   if (catalogPage) {
@@ -604,12 +654,23 @@
         if (config?.scheme && url.protocol === config.scheme) {
           url = new win.URL(url.href.replace(config.scheme, 'https:'));
         }
+        const externalAsset =
+          (url.hostname === 'storage.yandexcloud.net' ||
+            url.hostname === 'yastatic.net' ||
+            url.hostname.endsWith('.yastatic.net')) &&
+          staticAsset.test(url.pathname) &&
+          !servicePath.test(url.pathname) &&
+          !Array.from(url.searchParams.keys()).some((key) =>
+            /^(?:token|access_token|auth|authorization|session|sessionid|password|x-amz-credential|x-amz-signature|x-amz-security-token|awsaccesskeyid|signature)$/i.test(
+              key,
+            ),
+          );
         if (
           url.protocol !== 'https:' ||
           url.username ||
           url.password ||
           url.port ||
-          !gameHost.test(url.hostname) ||
+          (!gameHost.test(url.hostname) && !externalAsset) ||
           /\/(?:sdk(?:\.js|\/)|api\/)/i.test(url.pathname)
         ) {
           return;
@@ -649,7 +710,7 @@
     nativeReport({
       version: 1,
       url: entry.href,
-      title: doc.title,
+      title: cleanTitle(doc.title),
       resources: Array.from(urls),
       storage: saved,
       environment,

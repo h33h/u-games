@@ -568,13 +568,16 @@
 }
 [data-ugames-theme] [class*='mobile-tab-bar'][class*='__tab--'] {
   color: var(--ugames-secondary) !important;
+  /* Prevent sticky touch hover from highlighting inactive tabs. */
+  background: transparent !important;
 }
 [data-ugames-theme] [class*='mobile-tab-bar'][class*='__tabSelected--'] {
   color: var(--ugames-mint) !important;
-  background: transparent !important;
+  background: var(--ugames-selected) !important;
 }
 [data-ugames-theme] [class*='mobile-tab-bar'][class*='__pill--'] {
-  background: var(--ugames-selected) !important;
+  /* Portal offsets include the shop tab hidden by the shell. */
+  display: none !important;
 }
 [data-ugames-theme] [class*='mobile-tab-bar'][class*='__tabLabel--'],
 [data-ugames-theme] [class*='mobile-tab-bar'] svg {

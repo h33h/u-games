@@ -54,8 +54,6 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
-          cache: npm
-      - run: npm ci
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
           distribution: temurin
@@ -83,7 +81,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew --no-daemon testDebugUnitTest lintRelease assembleRelease
+        run: ./gradlew --no-daemon --build-cache testDebugUnitTest lintRelease assembleRelease
       - name: Verify and stage signed APK
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         run: |
@@ -100,8 +98,8 @@ jobs:
         if: always()
         run: rm -f "$RUNNER_TEMP/ugames-release.jks"
 
-  ios:
-    name: iOS
+  ios-tests:
+    name: iOS Tests
     runs-on: xcode-27
     timeout-minutes: 40
     env:
@@ -113,31 +111,85 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '24'
-          cache: npm
-      - run: npm ci
       - run: brew install xcodegen
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
       - run: npm run build:shared
       - run: xcodegen generate --spec ios/project.yml
-      - name: Test on iPhone simulator
+      - name: Start iPhone simulator
+        id: simulator
         run: |
           sdk_version=$(xcrun --sdk iphonesimulator --show-sdk-version)
           simulator=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; devices=json.load(sys.stdin)["devices"]["com.apple.CoreSimulator.SimRuntime.iOS-"+sys.argv[1].replace(".", "-")]; print(next(d["udid"] for d in devices if d["name"].startswith("iPhone")))' "$sdk_version")
-          xcrun simctl bootstatus "$simulator" -b
-          xcodebuild test -project ios/UGames.xcodeproj -scheme UGames \
-            -destination "platform=iOS Simulator,id=$simulator" \
+          echo "udid=$simulator" >> "$GITHUB_OUTPUT"
+          nohup xcrun simctl bootstatus "$simulator" -b > "$RUNNER_TEMP/simulator-boot.log" 2>&1 < /dev/null &
+      - name: Build iOS tests while simulator boots
+        run: |
+          xcodebuild build-for-testing -project ios/UGames.xcodeproj -scheme UGames \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/UGamesDerivedData" \
+            ARCHS="$(uname -m)" ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO
+      - name: Wait for iPhone simulator
+        env:
+          SIMULATOR: ${{ steps.simulator.outputs.udid }}
+        run: |
+          xcrun simctl bootstatus "$SIMULATOR" -b
+          cat "$RUNNER_TEMP/simulator-boot.log"
+      - name: Test on iPhone simulator
+        env:
+          SIMULATOR: ${{ steps.simulator.outputs.udid }}
+        run: |
+          xcodebuild test-without-building -project ios/UGames.xcodeproj -scheme UGames \
+            -destination "platform=iOS Simulator,id=$SIMULATOR" \
+            -derivedDataPath "$RUNNER_TEMP/UGamesDerivedData" \
             -collect-test-diagnostics never \
             -resultBundlePath "$RUNNER_TEMP/UGamesTests.xcresult" \
             CODE_SIGNING_ALLOWED=NO
       - name: Upload iOS test results
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ios-test-results
           path: ${{ runner.temp }}/UGamesTests.xcresult
           if-no-files-found: ignore
+
+  ios-release:
+    name: iOS Release
+    runs-on: xcode-27
+    timeout-minutes: 25
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+      - name: Identify Xcode cache
+        id: xcode
+        run: echo "version=$(xcodebuild -version | shasum -a 256 | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - name: Restore Xcode build cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ runner.temp }}/UGamesDerivedData
+          key: xcode-release-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-${{ hashFiles('ios/**', 'shared/**', 'scripts/build*') }}
+          restore-keys: |
+            xcode-release-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.xcode.outputs.version }}-
+      - run: brew install xcodegen
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+      - run: npm run build:shared
+      - run: xcodegen generate --spec ios/project.yml
+      - name: Build Release for iPhone without signing
+        if: github.event_name == 'pull_request' || github.ref != 'refs/heads/main'
+        run: |
+          xcodebuild build -project ios/UGames.xcodeproj -scheme UGames \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/UGamesDerivedData" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=''
       - name: Archive for iPhone without signing
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           BUILD_NUMBER: ${{ github.run_number }}
         run: |
@@ -145,19 +197,37 @@ jobs:
           xcodebuild archive -project ios/UGames.xcodeproj -scheme UGames \
             -configuration Release -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/UGames.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/UGamesDerivedData" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
             MARKETING_VERSION="$version" CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
       - name: Package unsigned IPA
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         run: |
           mkdir -p "$RUNNER_TEMP/ipa/Payload" dist
           ditto "$RUNNER_TEMP/UGames.xcarchive/Products/Applications/UGames.app" "$RUNNER_TEMP/ipa/Payload/UGames.app"
           (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/dist/UGames-unsigned.ipa" Payload)
           unzip -t dist/UGames-unsigned.ipa
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:
           name: ios-release
           path: dist/UGames-unsigned.ipa
           if-no-files-found: error
+
+  ios:
+    name: iOS
+    if: ${{ !cancelled() }}
+    needs: [ios-tests, ios-release]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require iOS tests and Release build
+        env:
+          TEST_RESULT: ${{ needs.ios-tests.result }}
+          RELEASE_RESULT: ${{ needs.ios-release.result }}
+        run: |
+          test "$TEST_RESULT" = success
+          test "$RELEASE_RESULT" = success
 
   release:
     name: Publish release

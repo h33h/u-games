@@ -11,6 +11,22 @@ import org.junit.Test
 class OfflineResourcePolicyTest {
     private val entry = "https://app-42.cdn.games.yandex.net/game/index.html?lang=ru"
 
+    @Test fun addressableCatalogHashesAreSavedAlongsideTheCatalogAndBundles() {
+        val root = "https://storage.yandexcloud.net/game-assets/Addressables/1.4/"
+        for (name in listOf("catalog.hash", "catalog.bin", "scene.bundle")) {
+            assertTrue(name, OfflineResourcePolicy.canSave(entry, root + name))
+        }
+    }
+
+    @Test fun portalSdkScriptsUseTheLocalOfflineRuntimeOnlyOnTrustedPortalHosts() {
+        for (host in listOf("yandex.ru", "yandex.com")) {
+            assertTrue(OfflineResourcePolicy.isSdk("https://$host/games/sdk/v2"))
+        }
+        assertFalse(OfflineResourcePolicy.isSdk("https://other.example/games/sdk/v2"))
+        assertFalse(OfflineResourcePolicy.isSdk("https://yandex.ru.evil.test/games/sdk/v2"))
+        assertFalse(OfflineResourcePolicy.isSdk("https://yandex.ru/games/sdk-other/v2"))
+    }
+
     @Test fun normalizationPreservesQueryAndRejectsInsecureOrCredentialedUrls() {
         assertEquals(
             "https://app-42.cdn.games.yandex.net/game/a.js?v=1",

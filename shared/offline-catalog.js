@@ -99,10 +99,10 @@
         continue;
       }
       seen.add(identity);
+      const rawTitle = typeof game.title === 'string' ? game.title : '';
       const title =
-        typeof game.title === 'string' && game.title.trim()
-          ? game.title.trim().slice(0, 200)
-          : 'Игра';
+        (win.__UGamesOfflineRuntime?.cleanTitle?.(rawTitle) ?? rawTitle.trim()).slice(0, 200) ||
+        'Игра';
       const card = element('li', 'game-card');
       const link = element('a', 'game-card__link');
       link.href = url.href;

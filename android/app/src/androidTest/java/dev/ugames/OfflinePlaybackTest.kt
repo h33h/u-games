@@ -73,11 +73,13 @@ class OfflinePlaybackTest {
         val nonce = System.nanoTime()
         val entry = this.entry.replace("offline-fixture", "offline-sdk-fixture-$nonce")
         val progressKey = "ugames-test-fixture-level-$nonce"
+        val externalCatalog = "https://storage.yandexcloud.net/ugames-fixture/catalog.hash"
         val context = instrumentation.targetContext
         val folder = File(context.cacheDir, "offline-fixture-${System.nanoTime()}")
         val resources = mapOf(
             entry to """
                 <!doctype html><title>Offline fixture</title><p id="game">Игра</p>
+                <script src="https://yandex.ru/games/sdk/v2" onload="window.portalSdkLoaded=true"></script>
                 <script src="/sdk.js"></script><script type="module" src="module.js"></script>
                 <script src="main.js?v=7"></script>
             """.trimIndent(),
@@ -86,12 +88,16 @@ class OfflinePlaybackTest {
                   const sdk = await YaGames.init();
                   const progress = localStorage.getItem(${JSONObject.quote(progressKey)});
                   const data = await fetch('levels.json').then(r => r.json());
+                  const catalog = await fetch(${JSONObject.quote(
+                externalCatalog
+            )}, {credentials:'include'}).then(r => r.text());
                   const missing = await fetch('missing.json').then(r => r.status);
                   const external = await fetch('https://external.example/never-saved.json').then(r => r.status);
                   const module = await import('./module.js');
                   const late = document.createElement('script'); late.src = 'late.js';
                   late.onload = () => {
-                    window.offlineResult = {progress, level:data.level, missing, external,
+                    window.offlineResult = {progress, level:data.level, catalog, missing, external,
+                      portalSDK:window.portalSdkLoaded===true,
                       dynamic:window.dynamicResource, sdk:!!sdk.adv,
                       origin:location.origin, secure:isSecureContext, module:module.answer};
                   };
@@ -102,7 +108,8 @@ class OfflinePlaybackTest {
             entry.substringBeforeLast('/') + "/module.js" to
                 "import {level} from './relative-module.js'; export const answer=level+1;",
             entry.substringBeforeLast('/') + "/relative-module.js" to "export const level=8;",
-            entry.substringBeforeLast('/') + "/late.js" to "window.dynamicResource='loaded';"
+            entry.substringBeforeLast('/') + "/late.js" to "window.dynamicResource='loaded';",
+            externalCatalog to "catalogue-revision"
         )
         val filter = AdResourceFilter(emptyList(), emptyList())
         val store = OfflineGameStore(
@@ -192,11 +199,16 @@ class OfflinePlaybackTest {
                 assertTrue("Saved scripts run with blocked network; error=$error", result != null)
                 assertEquals("6", result!!.getString("progress"))
                 assertEquals(8, result.getInt("level"))
+                assertEquals("catalogue-revision", result.getString("catalog"))
                 assertEquals(9, result.getInt("module"))
                 assertEquals(404, result.getInt("missing"))
                 assertEquals(404, result.getInt("external"))
                 assertEquals("loaded", result.getString("dynamic"))
                 assertTrue(result.getBoolean("sdk"))
+                assertTrue(
+                    "The portal SDK script must finish loading locally",
+                    result.getBoolean("portalSDK")
+                )
                 assertTrue(result.getBoolean("secure"))
                 assertEquals("https://app-42.cdn.games.yandex.net", result.getString("origin"))
                 assertEquals("false", evaluate(view, "Boolean(window.oldWorkerRan)"))
@@ -337,7 +349,12 @@ class OfflinePlaybackTest {
                 }
             )
         store.rememberCatalog(
-            OfflineCatalogMetadata("42", "https://yandex.ru/games/app/42", "Космос", coverUrl)
+            OfflineCatalogMetadata(
+                "42",
+                "https://yandex.ru/games/app/42",
+                "Космос - играть онлайн бесплатно на сервисе Яндекс Игры",
+                coverUrl
+            )
         )
         val saved = store.save(
             OfflineCaptureReport(entry, "New project", emptyList(), emptyMap(), "{}", true)

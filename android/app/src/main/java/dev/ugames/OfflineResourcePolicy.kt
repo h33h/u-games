@@ -12,7 +12,7 @@ object OfflineResourcePolicy {
         "js", "mjs", "cjs", "css", "json", "wasm", "png", "jpg", "jpeg", "gif", "webp",
         "avif", "svg", "ico", "woff", "woff2", "ttf", "otf", "mp3", "wav", "ogg", "m4a",
         "mp4", "webm", "bin", "data", "pck", "bundle", "unityweb", "gz", "br", "txt",
-        "xml", "atlas", "ktx", "ktx2", "basis", "mem", "dat", "fnt", "glb", "gltf"
+        "xml", "atlas", "ktx", "ktx2", "basis", "mem", "dat", "fnt", "glb", "gltf", "hash"
     )
     private val servicePath =
         Regex(
@@ -47,8 +47,10 @@ object OfflineResourcePolicy {
     } ?: false
 
     fun isSdk(value: String): Boolean = normalize(value)?.let {
-        val path = URI(it).path.lowercase(Locale.ROOT)
-        path == "/sdk.js" || path == "/sdk" || path.startsWith("/sdk/")
+        val uri = URI(it)
+        val path = uri.path.lowercase(Locale.ROOT)
+        path == "/sdk.js" || path == "/sdk" || path.startsWith("/sdk/") ||
+            (uri.host in setOf("yandex.ru", "yandex.com") && path.startsWith("/games/sdk/"))
     } ?: false
 
     fun canSave(entryUrl: String, value: String): Boolean {

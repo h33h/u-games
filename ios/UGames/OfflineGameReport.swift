@@ -107,6 +107,12 @@ struct OfflineGameReport: Decodable {
 }
 
 struct OfflineResourcePolicy {
+    private static let staticExtensions: Set<String> = [
+        "js", "mjs", "cjs", "css", "json", "wasm", "png", "jpg", "jpeg", "gif", "webp",
+        "avif", "svg", "ico", "woff", "woff2", "ttf", "otf", "mp3", "wav", "ogg", "m4a",
+        "mp4", "webm", "bin", "data", "pck", "bundle", "unityweb", "gz", "br", "txt",
+        "xml", "atlas", "ktx", "ktx2", "basis", "mem", "dat", "fnt", "glb", "gltf", "hash",
+    ]
     private let blockedPatterns: [NSRegularExpression]
 
     init(bundle: Bundle = .main) {
@@ -158,11 +164,12 @@ struct OfflineResourcePolicy {
 
     func allows(_ url: URL) -> Bool {
         guard Self.isHTTPS(url), !Self.isSDK(url), let host = url.host?.lowercased(),
-              Self.isGameURL(url) || host == "yastatic.net" || host.hasSuffix(".yastatic.net")
+              Self.isGameURL(url) || host == "yastatic.net" || host.hasSuffix(".yastatic.net") ||
+              (host == "storage.yandexcloud.net" && Self.staticExtensions
+                  .contains(url.pathExtension.lowercased()))
         else { return false }
         // Only static game files: no account, analytics, purchase, or server API snapshots.
-        let path = url.path.lowercased()
-        if path.range(
+        if url.path.lowercased().range(
             of: "(^|/)(api|auth|oauth|login|logout|passport|account|payments?|billing|analytics|telemetry|metrics)(/|$)",
             options: .regularExpression
         ) != nil {
@@ -170,13 +177,9 @@ struct OfflineResourcePolicy {
         }
         if let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
            query.contains(where: { [
-               "token",
-               "access_token",
-               "auth",
-               "authorization",
-               "session",
-               "sessionid",
-               "password",
+               "token", "access_token", "auth", "authorization", "session", "sessionid", "password",
+               "x-amz-credential", "x-amz-signature", "x-amz-security-token",
+               "awsaccesskeyid", "signature",
            ].contains($0.name.lowercased()) })
         {
             return false
